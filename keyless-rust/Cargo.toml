@@ -1,0 +1,29 @@
+[package]
+name = "trevo-keyless"
+version = "0.4.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses."
+homepage = "https://trevo.finance"
+repository = "https://github.com/trevo-finance/trevo-keyless/"
+readme = "README.md"
+keywords = ["trevo"]
+categories = ["encoding", "wasm"]
+
+[features]
+default = ["std"]
+std = [
+    "hex/std",
+    "blake2b_simd/std",
+    "parity-scale-codec/std",
+    "scale-info/std",
+]
+
+[dependencies]
+hex = { version = "0.4.3", default-features = false }
+blake2b_simd = { version = "1.0.1", default-features = false }
+parity-scale-codec = { version = "3.6.12", default-features = false, features = ["max-encoded-len"] }
+scale-info = { version = "2.11.1", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+array-bytes = { version = "6.2.3", default-features = true }

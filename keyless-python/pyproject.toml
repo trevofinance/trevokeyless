@@ -1,0 +1,73 @@
+[project]
+name = "trevokeyless"
+version = "0.1.4"
+requires-python = ">=3.12"
+
+license = "Apache-2.0"
+authors = [
+  { name="Trevo Ltd", email="support@trevo.finance" },
+]
+description = "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses."
+readme = "README.md"
+keywords = ["trevo"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+dependencies = [
+  "base58>=1.0.3,<3"
+]
+
+[project.optional-dependencies]
+test = [
+    "mypy>=1.11.1",
+    "ruff>=0.6.7",
+]
+
+
+[project.urls]
+Homepage = "https://trevo.finance"
+Repository = "https://github.com/trevo-finance/trevo-keyless.git"
+Issues = "https://github.com/trevo-finance/trevo-keyless/issues"
+
+
+[build-system]
+requires = ["setuptools>=75.6.0"]
+build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools]
+packages = ["trevokeyless"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["py.typed", "*.pyi"]
+
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+fix = false
+exclude = [
+    ".venv",
+    "venv",
+    ".env",
+    "env",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "C90", "I", "N", "UP", "ANN", "S", "B", "A", "COM", "DTZ", "EM", "FA", "ISC", "PIE", "T20", "PYI", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "INT", "ARG", "PTH", "TD", "FIX", "PL", "TRY", "RUF"]
+ignore = ["COM812", "ANN102", "UP040"]
+fixable = ["ALL"]
+
+[tool.ruff.format]
+exclude = ["ss58.py"]
+
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["setup.py", "build"]

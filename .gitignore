@@ -1,0 +1,16 @@
+keyless-python/.eggs/*
+keyless-python/.venv
+keyless-python/env
+keyless-python/.mypy_cache/
+keyless-python/.pytest_cache/
+keyless-python/.ruff_cache/
+keyless-python/*/__pycache__/
+keyless-python/build/
+keyless-python/dist/
+keyless-python/trevokeyless.egg-info/
+
+keyless-rust/target
+
+keyless-ts/dist
+keyless-ts/bundle
+*/node_modules

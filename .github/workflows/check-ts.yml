@@ -1,0 +1,36 @@
+name: check-js
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  
+  workflow_dispatch:
+
+jobs:
+  js-checks:
+    concurrency:
+      group: js-checks-${{ github.ref }}
+      cancel-in-progress: true
+    
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node_version: [18]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v1
+      - name: Use Node.js ${{ matrix.node_version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node_version }}
+      - run: |
+          cd keyless-ts
+          npm install
+          npm run format-check
+          npm run lint-check
+          npm run test
+        

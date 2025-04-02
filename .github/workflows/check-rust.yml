@@ -1,0 +1,34 @@
+name: check-rust
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+  
+  workflow_dispatch:
+
+jobs:
+  rust-checks:
+    concurrency:
+      group: rust-checks-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install latest stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      - name: Rustfmt check
+        working-directory: ./keyless-rust
+        run: cargo fmt --all -- --check
+
+      - name: Run test suite
+        working-directory: ./keyless-rust
+        run: cargo test --release --workspace
