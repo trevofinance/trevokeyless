@@ -22,20 +22,25 @@ jobs:
         with:
           python-version: 3.12.3
 
-      - name: Check code with Ruff
-        uses: chartboost/ruff-action@v1
-        with:
-          args: 'check'
-          src: './keyless-python'
-
-      - name: Check code formatting with Ruff
-        uses: chartboost/ruff-action@v1
-        with:
-          args: 'format --check'
-          src: './keyless-python'
-
       - name: Install deps
-        run: cd keyless-python && pip install .[test]
+        run: |
+            cd keyless-python
+            pip install .[test]
+
+      - name: Check code formatting with ruff
+        run: |
+            cd keyless-python
+            ruff format --check
+
+      - name: Check code with ruff
+        run: |
+            cd keyless-python
+            ruff check
+
+      - name: Check code with mypy
+        run: |
+            cd keyless-python
+            mypy trevokeyless
 
       - name: Run tests
         run: |

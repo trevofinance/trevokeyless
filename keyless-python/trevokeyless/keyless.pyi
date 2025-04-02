@@ -15,10 +15,10 @@ AddressName: TypeAlias = str
 SS58Format: TypeAlias = int
 
 class AddressType(Enum):
-    Regular: int
-    AppAgent: int
-    Transactional: int
-    Named: int
+    Regular = 0
+    AppAgent = 1
+    Transactional = 2
+    Named = 3
 
 @dataclass
 class BlockchainAddressInfo:
@@ -28,8 +28,8 @@ class BlockchainAddressInfo:
     app_agent_id: AppAgentId | None
     ta_id: TransactionalAddressId | None
     address_name: AddressName | None
-    def __init__(  # noqa: PLR0913
-        self,  # noqa: ANN101
+    def __init__(
+        self,
         address: BlockchainAddress,
         account_id: BlockchainAccountId,
         address_type: AddressType,

@@ -23,8 +23,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "mypy>=1.11.1",
-    "ruff>=0.6.7",
+    "mypy>=1.15.0",
+    "ruff>=0.11.2",
 ]
 
 
@@ -60,7 +60,7 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "C90", "I", "N", "UP", "ANN", "S", "B", "A", "COM", "DTZ", "EM", "FA", "ISC", "PIE", "T20", "PYI", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "INT", "ARG", "PTH", "TD", "FIX", "PL", "TRY", "RUF"]
-ignore = ["COM812", "ANN102", "UP040"]
+ignore = ["COM812", "UP040"]
 fixable = ["ALL"]
 
 [tool.ruff.format]
