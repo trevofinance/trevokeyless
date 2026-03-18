@@ -38,7 +38,7 @@ mod tests {
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::AppAgent {
-                account_id: account_id.clone(),
+                account_id,
                 app_agent_id
             },
             "Couldn't decode AppAgent account to account info."
@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::Transactional {
-                account_id: account_id.clone(),
+                account_id,
                 app_agent_id,
                 ta_id: transactional_account_id
             },
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::Named {
-                account_id: account_id.clone(),
+                account_id,
                 app_agent_id,
                 account_name
             },
@@ -127,6 +127,28 @@ mod tests {
 
         // TODO enable feature = "serde" to make it work
         // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
+    }
+
+    #[test]
+    fn test_boundary_values() {
+        // AppAgentId = 0
+        let account = encode_app_agent_account(&0);
+        assert_eq!(decode_app_agent_account(&account).unwrap(), 0);
+
+        // AppAgentId = u32::MAX
+        let account = encode_app_agent_account(&u32::MAX);
+        assert_eq!(decode_app_agent_account(&account).unwrap(), u32::MAX);
+
+        // TransactionalId = 0
+        let account = encode_transactional_account(&0, &0);
+        assert_eq!(decode_transactional_account(&account).unwrap(), (0, 0));
+
+        // TransactionalId = u32::MAX, AppAgentId = u32::MAX
+        let account = encode_transactional_account(&u32::MAX, &u32::MAX);
+        assert_eq!(
+            decode_transactional_account(&account).unwrap(),
+            (u32::MAX, u32::MAX)
+        );
     }
 
     #[test]

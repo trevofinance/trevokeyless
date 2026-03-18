@@ -21,7 +21,9 @@ pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
 ///
 /// For keyless accounts the bytes follow the layout described in the crate documentation.
 /// For regular accounts the bytes are an opaque public key or hash with no special structure.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Debug, TypeInfo, MaxEncodedLen)]
+#[derive(
+    Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Debug, TypeInfo, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Hash))]
 pub struct AccountId32([u8; 32]);
 
@@ -161,6 +163,9 @@ pub enum KeylessDecodeError {
     NotANamedAccount,
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for KeylessDecodeError {}
+
 impl core::fmt::Display for KeylessDecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -176,7 +181,7 @@ impl core::fmt::Display for KeylessDecodeError {
 /// Returned by [`decode_account_info`](crate::decode_account_info). The caller can
 /// pattern-match on this enum to determine whether an account is a regular (non-keyless)
 /// account or one of the three Trevo keyless variants, and to extract the embedded identifiers.
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub enum BlockchainAccountInfo {
     /// A regular account whose bytes do not match any valid keyless encoding. Its private
     /// key may or may not exist — the point is that no keyless identifiers are embedded.
