@@ -1,4 +1,4 @@
-use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use parity_scale_codec::{Decode, Encode, Error as CodecError, Input, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 /// Numeric identifier of an App Agent (u32, little-endian in keyless account bytes [0..=3]).
@@ -62,20 +62,7 @@ impl From<AccountId32> for [u8; 32] {
 ///
 /// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
 /// The name is stored verbatim in bytes [5..=14] of the Named account's open part.
-#[derive(
-    Clone,
-    Encode,
-    Decode,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Default,
-    Copy,
-    TypeInfo,
-    MaxEncodedLen,
-)]
+#[derive(Clone, Encode, Debug, Eq, PartialEq, Ord, PartialOrd, Copy, TypeInfo, MaxEncodedLen)]
 pub struct AccountName([u8; 10]);
 
 impl AccountName {
@@ -118,6 +105,14 @@ impl TryFrom<&[u8]> for AccountName {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         AccountName::new(value)
+    }
+}
+
+impl Decode for AccountName {
+    fn decode<I: Input>(input: &mut I) -> Result<Self, CodecError> {
+        let mut buf = [0u8; 10];
+        input.read(&mut buf)?;
+        AccountName::new(&buf).map_err(CodecError::from)
     }
 }
 

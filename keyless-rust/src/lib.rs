@@ -54,7 +54,8 @@
 //!   App Agent account).
 //! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
 //! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
-//! - [`is_keyless_account`] — quick check for whether an account follows keyless encoding.
+//! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
+//!   (performs a full Blake2-256 hash internally).
 //!
 //! # Examples
 //!

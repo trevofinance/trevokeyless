@@ -1,6 +1,6 @@
 use crate::types::*;
-use parity_scale_codec::alloc::string::ToString;
-use scale_info::prelude::string::String;
+extern crate alloc;
+use alloc::string::{String, ToString};
 
 // Original implementation of "blake2" and "blake2_256":
 // https://github.com/paritytech/polkadot-sdk/blob/polkadot-stable2407-2/substrate/primitives/crypto/hashing/src/lib.rs
@@ -28,12 +28,9 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
 ///
 /// The result is: `open_part || hash[open_part.len()..]`
 /// where `hash[open_part.len()..]` is the trailing portion of the hash, used as the checksum.
-fn _encode_account(open_part: &[u8]) -> AccountId32
-where
-    AccountId32: From<[u8; 32]>,
-{
+fn encode_account(open_part: &[u8]) -> AccountId32 {
     let mut checksum = blake2_256(open_part);
-    checksum[0..open_part.len()].clone_from_slice(open_part);
+    checksum[0..open_part.len()].copy_from_slice(open_part);
     AccountId32::from(checksum)
 }
 
@@ -45,15 +42,12 @@ where
 /// [4]      Account type identifier = APP_AGENT_ACCOUNT_IDENTIFIER (1)
 /// [5..=31] blake2_256(open_part)[5..=31]  — checksum
 /// ```
-pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32
-where
-    AccountId32: From<[u8; 32]>,
-{
+pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32 {
     let mut open_part: [u8; 5] = [0u8; 5];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = APP_AGENT_ACCOUNT_IDENTIFIER;
 
-    _encode_account(&open_part)
+    encode_account(&open_part)
 }
 
 /// Derives the transactional keyless account for the given App Agent and transactional ID.
@@ -68,18 +62,13 @@ where
 pub fn encode_transactional_account(
     app_agent_id: &AppAgentId,
     ta_id: &TransactionalId,
-) -> AccountId32
-where
-    AppAgentId: Into<u32>,
-    TransactionalId: Into<u32>,
-    AccountId32: From<[u8; 32]>,
-{
+) -> AccountId32 {
     let mut open_part: [u8; 9] = [0u8; 9];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = TRANSACTIONAL_ACCOUNT_IDENTIFIER;
     open_part[5..9].copy_from_slice(&ta_id.to_le_bytes());
 
-    _encode_account(&open_part)
+    encode_account(&open_part)
 }
 
 /// Derives the named keyless account for the given App Agent and account name.
@@ -91,17 +80,13 @@ where
 /// [5..=14]  AccountName (10 bytes, restricted charset: 0-9 a-z A-Z - #)
 /// [15..=31] blake2_256(open_part)[15..=31]  — checksum
 /// ```
-pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32
-where
-    AppAgentId: Into<u32>,
-    AccountId32: From<[u8; 32]>,
-{
+pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32 {
     let mut open_part: [u8; 15] = [0u8; 15];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = NAMED_ACCOUNT_IDENTIFIER;
     open_part[5..15].copy_from_slice(name.as_bytes());
 
-    _encode_account(&open_part)
+    encode_account(&open_part)
 }
 
 /// Classifies an `AccountId32` and extracts any embedded keyless identifiers.
@@ -111,10 +96,7 @@ where
 /// matches, the account is decoded into the appropriate [`BlockchainAccountInfo`] variant.
 /// Any account whose byte [4] is not a known discriminant, or whose checksum does not match,
 /// is returned as [`BlockchainAccountInfo::Regular`].
-pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo
-where
-    AccountId32: From<[u8; 32]>,
-{
+pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
     let account_bytes: &[u8; 32] = account.as_ref();
 
     let type_identifier: AccountIdentifierType = account_bytes[4];
@@ -254,9 +236,9 @@ pub fn decode_named_account(account: AccountId32) -> Result<(AppAgentId, Account
     }
 }
 
-/// Returns `true` if the account follows a valid keyless encoding (App Agent, Transactional, or
-/// Named). Returns `false` for accounts that don't match any keyless format, which are treated as
-/// regular accounts.
+/// Returns `true` if the account passes the keyless checksum verification (App Agent,
+/// Transactional, or Named). Returns `false` for accounts whose checksum does not match or whose
+/// type discriminant is unknown. Internally performs a full Blake2-256 hash computation.
 pub fn is_keyless_account(account: AccountId32) -> bool {
     match decode_account_info(account) {
         BlockchainAccountInfo::Regular { .. } => false,

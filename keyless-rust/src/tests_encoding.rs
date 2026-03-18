@@ -6,8 +6,8 @@ mod tests_encoding {
     fn account_id_from_str(account_id_str: &str) -> AccountId32 {
         let account_id_vec = array_bytes::hex2bytes(account_id_str).unwrap();
         let account_id_array: [u8; 32] = account_id_vec[..].try_into().unwrap();
-        let account_id = AccountId32::from(account_id_array);
-        account_id
+
+        AccountId32::from(account_id_array)
     }
 
     #[test]
@@ -39,7 +39,7 @@ mod tests_encoding {
             decoded_account_info,
             BlockchainAccountInfo::AppAgent {
                 account_id: account_id.clone(),
-                app_agent_id: app_agent_id
+                app_agent_id
             },
             "Couldn't decode AppAgent account to account info."
         );
@@ -79,7 +79,7 @@ mod tests_encoding {
             decoded_account_info,
             BlockchainAccountInfo::Transactional {
                 account_id: account_id.clone(),
-                app_agent_id: app_agent_id,
+                app_agent_id,
                 ta_id: transactional_account_id
             },
             "Couldn't decode Transactional account to account info."
@@ -119,8 +119,8 @@ mod tests_encoding {
             decoded_account_info,
             BlockchainAccountInfo::Named {
                 account_id: account_id.clone(),
-                app_agent_id: app_agent_id,
-                account_name: account_name
+                app_agent_id,
+                account_name
             },
             "Couldn't decode Named account to account info."
         );
