@@ -8,7 +8,7 @@ pub type AppAgentId = u32;
 pub type TransactionalId = u32;
 
 /// Raw type for the one-byte account type discriminant stored at byte [4] of a keyless account.
-pub type AccountIdentifierType = u8;
+pub(crate) type AccountIdentifierType = u8;
 
 /// Byte [4] discriminant for an App Agent root keyless account.
 pub const APP_AGENT_ACCOUNT_IDENTIFIER: AccountIdentifierType = 1;
@@ -63,7 +63,6 @@ pub struct AccountName([u8; 10]);
 impl AccountName {
     /// Lookup table: `VALID_CHARS[b]` is `true` iff byte `b` is in the allowed set
     /// (`0-9 a-z A-Z - #`). Built at compile time with zero heap allocation.
-    /// b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#"
     const VALID_CHARS: [bool; 256] = {
         let mut t = [false; 256];
         let mut i = b'0';
@@ -111,6 +110,18 @@ impl AccountName {
     /// Returns `true` if the name begins with `prefix`.
     pub fn starts_with(&self, prefix: &[u8]) -> bool {
         self.0.starts_with(prefix)
+    }
+}
+
+impl AsRef<[u8; 10]> for AccountName {
+    fn as_ref(&self) -> &[u8; 10] {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for AccountName {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -191,6 +202,33 @@ pub enum BlockchainAccountInfo {
         app_agent_id: AppAgentId,
         account_name: AccountName,
     },
+}
+
+impl BlockchainAccountInfo {
+    /// Returns a reference to the underlying `AccountId32` for any variant.
+    pub fn account_id(&self) -> &AccountId32 {
+        match self {
+            Self::Regular { account_id }
+            | Self::AppAgent { account_id, .. }
+            | Self::Transactional { account_id, .. }
+            | Self::Named { account_id, .. } => account_id,
+        }
+    }
+
+    /// Returns the `AppAgentId` if this is a keyless account, or `None` for `Regular`.
+    pub fn app_agent_id(&self) -> Option<AppAgentId> {
+        match self {
+            Self::Regular { .. } => None,
+            Self::AppAgent { app_agent_id, .. }
+            | Self::Transactional { app_agent_id, .. }
+            | Self::Named { app_agent_id, .. } => Some(*app_agent_id),
+        }
+    }
+
+    /// Returns `true` if this is a `Regular` (non-keyless) account.
+    pub fn is_regular(&self) -> bool {
+        matches!(self, Self::Regular { .. })
+    }
 }
 
 #[cfg(test)]

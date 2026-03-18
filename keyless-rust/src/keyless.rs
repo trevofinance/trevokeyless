@@ -41,6 +41,7 @@ fn encode_account(open_part: &[u8]) -> AccountId32 {
 /// [4]      Account type identifier = APP_AGENT_ACCOUNT_IDENTIFIER (1)
 /// [5..=31] blake2_256(open_part)[5..=31]  — checksum
 /// ```
+#[must_use]
 pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32 {
     let mut open_part: [u8; 5] = [0u8; 5];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
@@ -58,6 +59,7 @@ pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32 {
 /// [5..=8]  TransactionalId (little-endian u32)
 /// [9..=31] blake2_256(open_part)[9..=31]  — checksum
 /// ```
+#[must_use]
 pub fn encode_transactional_account(
     app_agent_id: &AppAgentId,
     ta_id: &TransactionalId,
@@ -79,6 +81,7 @@ pub fn encode_transactional_account(
 /// [5..=14]  AccountName (10 bytes, restricted charset: 0-9 a-z A-Z - #)
 /// [15..=31] blake2_256(open_part)[15..=31]  — checksum
 /// ```
+#[must_use]
 pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32 {
     let mut open_part: [u8; 15] = [0u8; 15];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
@@ -95,7 +98,8 @@ pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> Ac
 /// matches, the account is decoded into the appropriate [`BlockchainAccountInfo`] variant.
 /// Any account whose byte [4] is not a known discriminant, or whose checksum does not match,
 /// is returned as [`BlockchainAccountInfo::Regular`].
-pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
+#[must_use]
+pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
     let account_bytes: &[u8; 32] = account.as_ref();
 
     let type_identifier: AccountIdentifierType = account_bytes[4];
@@ -114,7 +118,7 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
 
                 return BlockchainAccountInfo::AppAgent {
-                    account_id: account,
+                    account_id: account.clone(),
                     app_agent_id,
                 };
             }
@@ -131,13 +135,11 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
                 // Extract and decode IDs
                 let app_agent_id_bytes = account_bytes[0..4].try_into().unwrap();
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
-                // 5 = appagent_id_size + account_identifier_size
-                // 9 = appagent_id_size + account_identifier_size + ta_id_size
                 let ta_id_bytes = account_bytes[5..9].try_into().unwrap();
                 let ta_id: TransactionalId = u32::from_le_bytes(ta_id_bytes);
 
                 return BlockchainAccountInfo::Transactional {
-                    account_id: account,
+                    account_id: account.clone(),
                     app_agent_id,
                     ta_id,
                 };
@@ -155,20 +157,23 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
                 // Extract and decode IDs
                 let app_agent_id_bytes = account_bytes[0..4].try_into().unwrap();
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
-                let account_name = account_bytes[5..15].try_into().unwrap();
-
-                return BlockchainAccountInfo::Named {
-                    account_id: account,
-                    app_agent_id,
-                    account_name,
-                };
+                // The name bytes must pass charset validation. If they don't (e.g. a crafted
+                // account whose checksum collides but contains invalid characters), fall
+                // through and return Regular rather than panic.
+                if let Ok(account_name) = AccountName::try_from(&account_bytes[5..15]) {
+                    return BlockchainAccountInfo::Named {
+                        account_id: account.clone(),
+                        app_agent_id,
+                        account_name,
+                    };
+                }
             }
         }
         _ => {}
     }
 
     BlockchainAccountInfo::Regular {
-        account_id: account,
+        account_id: account.clone(),
     }
 }
 
@@ -182,7 +187,8 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
 ///
 /// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
 /// `Err(KeylessDecodeError::NotAnAppAgentAccount)` otherwise.
-pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
+#[must_use]
+pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
         _ => Err(KeylessDecodeError::NotAnAppAgentAccount),
@@ -199,8 +205,9 @@ pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, Keyl
 ///
 /// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
 /// verification, or `Err(KeylessDecodeError::NotATransactionalAccount)` otherwise.
+#[must_use]
 pub fn decode_transactional_account(
-    account: AccountId32,
+    account: &AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
@@ -222,8 +229,9 @@ pub fn decode_transactional_account(
 ///
 /// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
 /// or `Err(KeylessDecodeError::NotANamedAccount)` otherwise.
+#[must_use]
 pub fn decode_named_account(
-    account: AccountId32,
+    account: &AccountId32,
 ) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Named {
@@ -238,7 +246,8 @@ pub fn decode_named_account(
 /// Returns `true` if the account passes the keyless checksum verification (App Agent,
 /// Transactional, or Named). Returns `false` for accounts whose checksum does not match or whose
 /// type discriminant is unknown. Internally performs a full Blake2-256 hash computation.
-pub fn is_keyless_account(account: AccountId32) -> bool {
+#[must_use]
+pub fn is_keyless_account(account: &AccountId32) -> bool {
     match decode_account_info(account) {
         BlockchainAccountInfo::Regular { .. } => false,
         BlockchainAccountInfo::AppAgent { .. }

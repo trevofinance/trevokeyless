@@ -67,7 +67,7 @@
 //! let account = encode_app_agent_account(&app_agent_id);
 //!
 //! // Decode it back
-//! let decoded_id = decode_app_agent_account(account).unwrap();
+//! let decoded_id = decode_app_agent_account(&account).unwrap();
 //! assert_eq!(decoded_id, app_agent_id);
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]

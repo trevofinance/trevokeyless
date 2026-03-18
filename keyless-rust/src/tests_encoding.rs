@@ -27,14 +27,14 @@ mod tests {
             "Couldn't encode AppAgent ID to AppAgent account."
         );
 
-        let decoded_app_agent_id = decode_app_agent_account(account_id.clone());
+        let decoded_app_agent_id = decode_app_agent_account(&account_id);
         assert_eq!(
             decoded_app_agent_id.unwrap(),
             app_agent_id,
             "Couldn't decode AppAgent account to AppAgent ID."
         );
 
-        let decoded_account_info = decode_account_info(account_id.clone());
+        let decoded_account_info = decode_account_info(&account_id);
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::AppAgent {
@@ -67,14 +67,14 @@ mod tests {
             "Couldn't encode Transactional account ID to Transactional account."
         );
 
-        let decoded_ids = decode_transactional_account(account_id.clone());
+        let decoded_ids = decode_transactional_account(&account_id);
         assert_eq!(
             decoded_ids.unwrap(),
             (app_agent_id, transactional_account_id),
             "Couldn't decode Transactional account to Transactional ID."
         );
 
-        let decoded_account_info = decode_account_info(account_id.clone());
+        let decoded_account_info = decode_account_info(&account_id);
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::Transactional {
@@ -107,14 +107,14 @@ mod tests {
             "Couldn't encode Named account ID to Named account."
         );
 
-        let decoded_ids = decode_named_account(account_id.clone());
+        let decoded_ids = decode_named_account(&account_id);
         assert_eq!(
             decoded_ids.unwrap(),
             (app_agent_id, account_name),
             "Couldn't decode Named account to Named ID."
         );
 
-        let decoded_account_info = decode_account_info(account_id.clone());
+        let decoded_account_info = decode_account_info(&account_id);
         assert_eq!(
             decoded_account_info,
             BlockchainAccountInfo::Named {
@@ -133,31 +133,31 @@ mod tests {
     fn test_mismatch_of_account_type() {
         let account_aa = encode_app_agent_account(&1);
         assert!(
-            decode_transactional_account(account_aa.clone()).is_err(),
+            decode_transactional_account(&account_aa).is_err(),
             "AppAgent account can not be considered as a Transactional account"
         );
         assert!(
-            decode_named_account(account_aa.clone()).is_err(),
+            decode_named_account(&account_aa).is_err(),
             "AppAgent account can not be considered as a Named account"
         );
 
         let account_ta = encode_transactional_account(&1, &0);
         assert!(
-            decode_app_agent_account(account_ta.clone()).is_err(),
+            decode_app_agent_account(&account_ta).is_err(),
             "Transactional account can not be considered as an AppAgent account"
         );
         assert!(
-            decode_named_account(account_ta.clone()).is_err(),
+            decode_named_account(&account_ta).is_err(),
             "Transactional account can not be considered as a Named account"
         );
 
         let account_named = encode_named_account(&1, &AccountName::new(b"test123456").unwrap());
         assert!(
-            decode_app_agent_account(account_named.clone()).is_err(),
+            decode_app_agent_account(&account_named).is_err(),
             "Named account can not be considered as an AppAgent account"
         );
         assert!(
-            decode_transactional_account(account_named.clone()).is_err(),
+            decode_transactional_account(&account_named).is_err(),
             "Named account can not be considered as a Transactional account"
         );
     }
@@ -165,15 +165,15 @@ mod tests {
     #[test]
     fn test_is_keyless_account() {
         assert!(
-            is_keyless_account(encode_app_agent_account(&1)),
+            is_keyless_account(&encode_app_agent_account(&1)),
             "AppAgent account must be keyless"
         );
         assert!(
-            is_keyless_account(encode_transactional_account(&1, &2)),
+            is_keyless_account(&encode_transactional_account(&1, &2)),
             "Transactional account must be keyless"
         );
         assert!(
-            is_keyless_account(encode_named_account(
+            is_keyless_account(&encode_named_account(
                 &1,
                 &AccountName::new(b"test123456").unwrap()
             )),
@@ -182,7 +182,7 @@ mod tests {
 
         // A zeroed account has no valid keyless discriminant → Regular
         assert!(
-            !is_keyless_account(AccountId32::from([0u8; 32])),
+            !is_keyless_account(&AccountId32::from([0u8; 32])),
             "Zeroed account must not be keyless"
         );
 
@@ -190,7 +190,7 @@ mod tests {
         let mut bytes: [u8; 32] = encode_app_agent_account(&1).into();
         bytes[10] ^= 0xFF;
         assert!(
-            !is_keyless_account(AccountId32::from(bytes)),
+            !is_keyless_account(&AccountId32::from(bytes)),
             "Tampered account must not be keyless"
         );
     }
@@ -203,7 +203,7 @@ mod tests {
         let mut bytes: [u8; 32] = encode_app_agent_account(&42).into();
         bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5])
         assert_eq!(
-            decode_account_info(AccountId32::from(bytes)),
+            decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
                 account_id: AccountId32::from(bytes)
             },
@@ -213,7 +213,7 @@ mod tests {
         let mut bytes: [u8; 32] = encode_transactional_account(&42, &7).into();
         bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9])
         assert_eq!(
-            decode_account_info(AccountId32::from(bytes)),
+            decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
                 account_id: AccountId32::from(bytes)
             },
@@ -224,7 +224,7 @@ mod tests {
             encode_named_account(&42, &AccountName::new(b"test123456").unwrap()).into();
         bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15])
         assert_eq!(
-            decode_account_info(AccountId32::from(bytes)),
+            decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
                 account_id: AccountId32::from(bytes)
             },
