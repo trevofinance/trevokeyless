@@ -21,7 +21,7 @@ mod tests {
 
         // ******************************** //
 
-        let encoded_account_id = encode_app_agent_account(&app_agent_id);
+        let encoded_account_id = encode_app_agent_account(app_agent_id);
         assert_eq!(
             encoded_account_id, account_id,
             "Couldn't encode AppAgent ID to AppAgent account."
@@ -61,7 +61,7 @@ mod tests {
         // ******************************** //
 
         let encoded_account_id =
-            encode_transactional_account(&app_agent_id, &transactional_account_id);
+            encode_transactional_account(app_agent_id, transactional_account_id);
         assert_eq!(
             encoded_account_id, account_id,
             "Couldn't encode Transactional account ID to Transactional account."
@@ -101,7 +101,7 @@ mod tests {
 
         // ******************************** //
 
-        let encoded_account_id = encode_named_account(&app_agent_id, &account_name);
+        let encoded_account_id = encode_named_account(app_agent_id, &account_name);
         assert_eq!(
             encoded_account_id, account_id,
             "Couldn't encode Named account ID to Named account."
@@ -132,19 +132,19 @@ mod tests {
     #[test]
     fn test_boundary_values() {
         // AppAgentId = 0
-        let account = encode_app_agent_account(&0);
+        let account = encode_app_agent_account(0);
         assert_eq!(decode_app_agent_account(&account).unwrap(), 0);
 
         // AppAgentId = u32::MAX
-        let account = encode_app_agent_account(&u32::MAX);
+        let account = encode_app_agent_account(u32::MAX);
         assert_eq!(decode_app_agent_account(&account).unwrap(), u32::MAX);
 
         // TransactionalId = 0
-        let account = encode_transactional_account(&0, &0);
+        let account = encode_transactional_account(0, 0);
         assert_eq!(decode_transactional_account(&account).unwrap(), (0, 0));
 
         // TransactionalId = u32::MAX, AppAgentId = u32::MAX
-        let account = encode_transactional_account(&u32::MAX, &u32::MAX);
+        let account = encode_transactional_account(u32::MAX, u32::MAX);
         assert_eq!(
             decode_transactional_account(&account).unwrap(),
             (u32::MAX, u32::MAX)
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_mismatch_of_account_type() {
-        let account_aa = encode_app_agent_account(&1);
+        let account_aa = encode_app_agent_account(1);
         assert!(
             decode_transactional_account(&account_aa).is_err(),
             "AppAgent account can not be considered as a Transactional account"
@@ -163,7 +163,7 @@ mod tests {
             "AppAgent account can not be considered as a Named account"
         );
 
-        let account_ta = encode_transactional_account(&1, &0);
+        let account_ta = encode_transactional_account(1, 0);
         assert!(
             decode_app_agent_account(&account_ta).is_err(),
             "Transactional account can not be considered as an AppAgent account"
@@ -173,7 +173,7 @@ mod tests {
             "Transactional account can not be considered as a Named account"
         );
 
-        let account_named = encode_named_account(&1, &AccountName::new(b"test123456").unwrap());
+        let account_named = encode_named_account(1, &AccountName::new(b"test123456").unwrap());
         assert!(
             decode_app_agent_account(&account_named).is_err(),
             "Named account can not be considered as an AppAgent account"
@@ -187,16 +187,16 @@ mod tests {
     #[test]
     fn test_is_keyless_account() {
         assert!(
-            is_keyless_account(&encode_app_agent_account(&1)),
+            is_keyless_account(&encode_app_agent_account(1)),
             "AppAgent account must be keyless"
         );
         assert!(
-            is_keyless_account(&encode_transactional_account(&1, &2)),
+            is_keyless_account(&encode_transactional_account(1, 2)),
             "Transactional account must be keyless"
         );
         assert!(
             is_keyless_account(&encode_named_account(
-                &1,
+                1,
                 &AccountName::new(b"test123456").unwrap()
             )),
             "Named account must be keyless"
@@ -209,7 +209,7 @@ mod tests {
         );
 
         // Tampered checksum → Regular
-        let mut bytes: [u8; 32] = encode_app_agent_account(&1).into();
+        let mut bytes: [u8; 32] = encode_app_agent_account(1).into();
         bytes[10] ^= 0xFF;
         assert!(
             !is_keyless_account(&AccountId32::from(bytes)),
@@ -222,7 +222,7 @@ mod tests {
         // Flip one bit in the checksum region of each account type and verify that
         // decode_account_info returns Regular (i.e. the integrity check rejects the account).
 
-        let mut bytes: [u8; 32] = encode_app_agent_account(&42).into();
+        let mut bytes: [u8; 32] = encode_app_agent_account(42).into();
         bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
@@ -232,7 +232,7 @@ mod tests {
             "Tampered AppAgent checksum must decode as Regular"
         );
 
-        let mut bytes: [u8; 32] = encode_transactional_account(&42, &7).into();
+        let mut bytes: [u8; 32] = encode_transactional_account(42, 7).into();
         bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
@@ -243,7 +243,7 @@ mod tests {
         );
 
         let mut bytes: [u8; 32] =
-            encode_named_account(&42, &AccountName::new(b"test123456").unwrap()).into();
+            encode_named_account(42, &AccountName::new(b"test123456").unwrap()).into();
         bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),

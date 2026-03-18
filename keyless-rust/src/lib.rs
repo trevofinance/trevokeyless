@@ -64,7 +64,7 @@
 //!
 //! // Encode an AppAgent root account
 //! let app_agent_id: AppAgentId = 123;
-//! let account = encode_app_agent_account(&app_agent_id);
+//! let account = encode_app_agent_account(app_agent_id);
 //!
 //! // Decode it back
 //! let decoded_id = decode_app_agent_account(&account).unwrap();

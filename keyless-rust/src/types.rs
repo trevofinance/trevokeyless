@@ -55,11 +55,18 @@ impl From<AccountId32> for [u8; 32] {
     }
 }
 
+impl AsRef<[u8]> for AccountId32 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// A fixed 10-byte account name used to identify Named keyless accounts.
 ///
 /// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
 /// The name is stored verbatim in bytes [5..=14] of the Named account's open part.
 #[derive(Clone, Encode, Debug, Eq, PartialEq, Ord, PartialOrd, Copy, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Hash))]
 pub struct AccountName([u8; 10]);
 
 impl AccountName {
@@ -182,6 +189,7 @@ impl core::fmt::Display for KeylessDecodeError {
 /// pattern-match on this enum to determine whether an account is a regular (non-keyless)
 /// account or one of the three Trevo keyless variants, and to extract the embedded identifiers.
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[cfg_attr(feature = "std", derive(Hash))]
 pub enum BlockchainAccountInfo {
     /// A regular account whose bytes do not match any valid keyless encoding. Its private
     /// key may or may not exist — the point is that no keyless identifiers are embedded.
@@ -210,13 +218,13 @@ pub enum BlockchainAccountInfo {
 }
 
 impl BlockchainAccountInfo {
-    /// Returns a reference to the underlying `AccountId32` for any variant.
-    pub fn account_id(&self) -> &AccountId32 {
+    /// Returns the underlying `AccountId32` for any variant.
+    pub fn account_id(&self) -> AccountId32 {
         match self {
             Self::Regular { account_id }
             | Self::AppAgent { account_id, .. }
             | Self::Transactional { account_id, .. }
-            | Self::Named { account_id, .. } => account_id,
+            | Self::Named { account_id, .. } => *account_id,
         }
     }
 

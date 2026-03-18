@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn test_app_agent_structure() {
-        let account = encode_app_agent_account(&123456789);
+        let account = encode_app_agent_account(123456789);
         let account: [u8; 32] = account.into();
 
         // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn test_transactional_structure() {
-        let account = encode_transactional_account(&123456789, &987654321);
+        let account = encode_transactional_account(123456789, 987654321);
         let account: [u8; 32] = account.into();
 
         // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_named_structure() {
-        let account = encode_named_account(&123456789, &AccountName::new(b"test123456").unwrap());
+        let account = encode_named_account(123456789, &AccountName::new(b"test123456").unwrap());
         let account: [u8; 32] = account.into();
 
         // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07

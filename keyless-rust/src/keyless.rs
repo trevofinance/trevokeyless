@@ -42,7 +42,7 @@ fn encode_account(open_part: &[u8]) -> AccountId32 {
 /// [5..=31] blake2_256(open_part)[5..=31]  — checksum
 /// ```
 #[must_use]
-pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32 {
+pub fn encode_app_agent_account(app_agent_id: AppAgentId) -> AccountId32 {
     let mut open_part: [u8; 5] = [0u8; 5];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = APP_AGENT_ACCOUNT_IDENTIFIER;
@@ -61,8 +61,8 @@ pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32 {
 /// ```
 #[must_use]
 pub fn encode_transactional_account(
-    app_agent_id: &AppAgentId,
-    ta_id: &TransactionalId,
+    app_agent_id: AppAgentId,
+    ta_id: TransactionalId,
 ) -> AccountId32 {
     let mut open_part: [u8; 9] = [0u8; 9];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
@@ -82,7 +82,7 @@ pub fn encode_transactional_account(
 /// [15..=31] blake2_256(open_part)[15..=31]  — checksum
 /// ```
 #[must_use]
-pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32 {
+pub fn encode_named_account(app_agent_id: AppAgentId, name: &AccountName) -> AccountId32 {
     let mut open_part: [u8; 15] = [0u8; 15];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = NAMED_ACCOUNT_IDENTIFIER;
