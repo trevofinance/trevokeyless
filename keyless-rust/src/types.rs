@@ -101,107 +101,38 @@ impl TryFrom<&[u8]> for AccountName {
     }
 }
 
-/// Represents the type of a blockchain account.
+/// Contains information related to a blockchain account.
 ///
 /// Variants:
 /// - `Regular`: A standard blockchain account.
 /// - `AppAgent`: An account associated with an application agent.
 /// - `Transactional`: An account used for transactional purposes.
 /// - `Named`: An account that has a specific name associated with it.
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
-pub enum AccountType {
-    Regular,
-    AppAgent,
-    Transactional,
-    Named,
-}
-
-/// Contains information related to a blockchain account.
 ///
 /// Fields:
 /// - `account_id`: The account ID associated with the blockchain account, represented as a vector of bytes.
-/// - `account_type`: The type of the blockchain account.
 /// - `app_agent_id`: The application agent ID associated with the account, if applicable.
 /// - `ta_id`: The transactional account ID, if applicable.
 /// - `account_name`: The name of the account, if applicable.
-#[derive(Eq, PartialEq, Debug)]
-pub struct BlockchainAccountInfo {
-    pub account_id: AccountId32,
-    pub account_type: AccountType,
-    pub app_agent_id: Option<AppAgentId>,
-    pub ta_id: Option<TransactionalId>,
-    pub account_name: Option<AccountName>,
-}
-
-impl BlockchainAccountInfo {
-    /// Helper function to create a new `BlockchainAccountInfo` with the given account_id.
-    /// The `account_type` will be set to `AccountType::Regular`, and other optional fields will be set to `None`.
-    pub fn from_regular_account(account_id: AccountId32) -> Self {
-        Self {
-            account_id,
-            account_type: AccountType::Regular,
-            app_agent_id: None,
-            ta_id: None,
-            account_name: None,
-        }
-    }
-
-    /// Helper function to create a new `BlockchainAccountInfo` with the given account_id, and app_agent_id.
-    /// The `account_type` will be set to `AccountType::AppAgent`, and other optional fields will be set to `None`.
-    pub fn from_app_agent_account(account_id: AccountId32, app_agent_id: AppAgentId) -> Self {
-        Self {
-            account_id,
-            account_type: AccountType::AppAgent,
-            app_agent_id: Some(app_agent_id),
-            ta_id: None,
-            account_name: None,
-        }
-    }
-
-    /// Helper function to create a new `BlockchainAccountInfo` with the given account_id, ta_id and app_agent_id.
-    /// The `account_type` will be set to `AccountType::Transactional`, and other optional fields will be set to `None`.
-    pub fn from_ta_account(
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub enum BlockchainAccountInfo {
+    Regular {
+        account_id: AccountId32,
+    },
+    AppAgent {
+        account_id: AccountId32,
+        app_agent_id: AppAgentId,
+    },
+    Transactional {
         account_id: AccountId32,
         app_agent_id: AppAgentId,
         ta_id: TransactionalId,
-    ) -> Self {
-        Self {
-            account_id,
-            account_type: AccountType::Transactional,
-            app_agent_id: Some(app_agent_id),
-            ta_id: Some(ta_id),
-            account_name: None,
-        }
-    }
-
-    /// Helper function to create a new `BlockchainAccountInfo` with the given account_id, name and app_agent_id.
-    /// The `account_type` will be set to `AccountType::Named`, and other optional fields will be set to `None`.
-    pub fn from_named_account(
+    },
+    Named {
         account_id: AccountId32,
         app_agent_id: AppAgentId,
-        name: AccountName,
-    ) -> Self {
-        Self {
-            account_id,
-            account_type: AccountType::Named,
-            app_agent_id: Some(app_agent_id),
-            ta_id: None,
-            account_name: Some(name),
-        }
-    }
-
-    /// Returns true if the account is a keyless account, false otherwise.
-    pub fn is_keyless(&self) -> bool {
-        self.account_type != AccountType::Regular
-    }
-}
-
-/// Internal enum to carry the type and IDs of account
-pub(super) enum BlockchainAccountIds {
-    Regular,
-    AppAgent(AppAgentId),
-    Transactional((AppAgentId, TransactionalId)),
-    Named((AppAgentId, AccountName)),
+        account_name: AccountName,
+    },
 }
 
 #[cfg(test)]

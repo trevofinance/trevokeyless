@@ -134,7 +134,7 @@ where
 
 /// Decodes and verifies the correctness of a keyless account.
 /// Provides type of account and keyless IDs.
-fn decode_account_ids(account: &AccountId32) -> BlockchainAccountIds
+pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo
 where
     AccountId32: From<[u8; 32]>,
 {
@@ -155,7 +155,10 @@ where
                 let app_agent_id_bytes = account_bytes[0..4].try_into().unwrap();
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
 
-                return BlockchainAccountIds::AppAgent(app_agent_id);
+                return BlockchainAccountInfo::AppAgent {
+                    account_id: account,
+                    app_agent_id: app_agent_id,
+                };
             };
         }
         TRANSACTIONAL_ACCOUNT_IDENTIFIER => {
@@ -175,7 +178,11 @@ where
                 let ta_id_bytes = account_bytes[5..9].try_into().unwrap();
                 let ta_id: TransactionalId = u32::from_le_bytes(ta_id_bytes);
 
-                return BlockchainAccountIds::Transactional((app_agent_id, ta_id));
+                return BlockchainAccountInfo::Transactional {
+                    account_id: account,
+                    app_agent_id: app_agent_id,
+                    ta_id: ta_id,
+                };
             };
         }
         NAMED_ACCOUNT_IDENTIFIER => {
@@ -192,40 +199,19 @@ where
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
                 let account_name = account_bytes[5..15].try_into().unwrap();
 
-                return BlockchainAccountIds::Named((app_agent_id, account_name));
+                return BlockchainAccountInfo::Named {
+                    account_id: account,
+                    app_agent_id: app_agent_id,
+                    account_name: account_name,
+                };
             };
         }
         _ => {}
     }
 
-    return BlockchainAccountIds::Regular;
-}
-
-/// Decodes and verifies the correctness of a keyless account.
-///
-/// # Arguments
-///
-/// * `account` - The keyless account to be decoded and verified.
-///
-/// # Returns
-///
-/// Returns a `Result` containing the decoded open part of the keyless account as a tuple of
-/// `(AccountType, AppAgentId, Option<TransactionalId>, Option<AccountName>)`
-/// if the decoding and verification are successful,
-/// or a `String` if an error occurs during decoding or verification.
-pub fn decode_account(account: AccountId32) -> BlockchainAccountInfo {
-    match decode_account_ids(&account) {
-        BlockchainAccountIds::Regular => BlockchainAccountInfo::from_regular_account(account),
-        BlockchainAccountIds::AppAgent(app_agent_id) => {
-            BlockchainAccountInfo::from_app_agent_account(account, app_agent_id)
-        }
-        BlockchainAccountIds::Transactional((app_agent_id, ta_id)) => {
-            BlockchainAccountInfo::from_ta_account(account, app_agent_id, ta_id)
-        }
-        BlockchainAccountIds::Named((app_agent_id, account_name)) => {
-            BlockchainAccountInfo::from_named_account(account, app_agent_id, account_name)
-        }
-    }
+    return BlockchainAccountInfo::Regular {
+        account_id: account,
+    };
 }
 
 /// Decodes the provided keyless account and retrieves the corresponding `AppAgentId`.
@@ -239,8 +225,8 @@ pub fn decode_account(account: AccountId32) -> BlockchainAccountInfo {
 /// Returns a `Result` containing the `AppAgentId` decoded from the keyless account if successful,
 /// or a `String` if an error occurs during the decoding process.
 pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, String> {
-    match decode_account_ids(account) {
-        BlockchainAccountIds::AppAgent(app_agent_id) => Ok(app_agent_id),
+    match decode_account_info(account.clone()) {
+        BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
         _ => Err("Provided account is not an AppAgent keyless account".to_string()),
     }
 }
@@ -259,8 +245,12 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Str
 pub fn decode_transactional_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), String> {
-    match decode_account_ids(account) {
-        BlockchainAccountIds::Transactional((app_agent_id, ta_id)) => Ok((app_agent_id, ta_id)),
+    match decode_account_info(account.clone()) {
+        BlockchainAccountInfo::Transactional {
+            app_agent_id,
+            ta_id,
+            ..
+        } => Ok((app_agent_id, ta_id)),
         _ => Err("Provided account is not a Transactional keyless account".to_string()),
     }
 }
@@ -277,10 +267,12 @@ pub fn decode_transactional_account(
 /// Returns a `Result` containing the decoded `(AppAgentId, AccountName)` if successful,
 /// or a `String` if an error occurs during the decoding process.
 pub fn decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), String> {
-    match decode_account_ids(account) {
-        BlockchainAccountIds::Named((app_agent_id, account_name)) => {
-            Ok((app_agent_id, account_name))
-        }
+    match decode_account_info(account.clone()) {
+        BlockchainAccountInfo::Named {
+            app_agent_id,
+            account_name,
+            ..
+        } => Ok((app_agent_id, account_name)),
         _ => Err("Provided account is not a Named keyless account".to_string()),
     }
 }
@@ -295,10 +287,10 @@ pub fn decode_named_account(account: &AccountId32) -> Result<(AppAgentId, Accoun
 ///
 /// Returns a `true` if provided accouont is a keyless one, otherwise `false`.
 pub fn is_keyless_account(account: &AccountId32) -> bool {
-    match decode_account_ids(account) {
-        BlockchainAccountIds::Regular => false,
-        BlockchainAccountIds::AppAgent(_)
-        | BlockchainAccountIds::Transactional(_)
-        | BlockchainAccountIds::Named(_) => true,
+    match decode_account_info(account.clone()) {
+        BlockchainAccountInfo::Regular { .. } => false,
+        BlockchainAccountInfo::AppAgent { .. }
+        | BlockchainAccountInfo::Transactional { .. }
+        | BlockchainAccountInfo::Named { .. } => true,
     }
 }

@@ -33,18 +33,15 @@ mod tests_encoding {
             "Couldn't decode AppAgent account to AppAgent ID."
         );
 
-        let decoded_account_info = decode_account(account_id.clone());
-        let expected_account_info = BlockchainAccountInfo {
-            account_id: account_id.clone(),
-            account_type: AccountType::AppAgent,
-            app_agent_id: Some(app_agent_id.clone()),
-            ta_id: None,
-            account_name: None,
-        };
+        let decoded_account_info = decode_account_info(account_id.clone());
         assert!(
-            decoded_account_info == expected_account_info,
+            decoded_account_info
+                == BlockchainAccountInfo::AppAgent {
+                    account_id: account_id.clone(),
+                    app_agent_id: app_agent_id.clone()
+                },
             "Couldn't decode AppAgent account to account info."
-        )
+        );
 
         // TODO enable feature = "serde" to make it work
         // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
@@ -75,18 +72,16 @@ mod tests_encoding {
             "Couldn't decode Transactional account to Transactional ID."
         );
 
-        let decoded_account_info = decode_account(account_id.clone());
-        let expected_account_info = BlockchainAccountInfo {
-            account_id: account_id.clone(),
-            account_type: AccountType::Transactional,
-            app_agent_id: Some(app_agent_id.clone()),
-            ta_id: Some(transactional_account_id),
-            account_name: None,
-        };
+        let decoded_account_info = decode_account_info(account_id.clone());
         assert!(
-            decoded_account_info == expected_account_info,
+            decoded_account_info
+                == BlockchainAccountInfo::Transactional {
+                    account_id: account_id.clone(),
+                    app_agent_id: app_agent_id.clone(),
+                    ta_id: transactional_account_id
+                },
             "Couldn't decode Transactional account to account info."
-        )
+        );
 
         // TODO enable feature = "serde" to make it work
         // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
@@ -116,16 +111,14 @@ mod tests_encoding {
             "Couldn't decode Named account to Named ID."
         );
 
-        let decoded_account_info = decode_account(account_id.clone());
-        let expected_account_info = BlockchainAccountInfo {
-            account_id: account_id.clone(),
-            account_type: AccountType::Named,
-            app_agent_id: Some(app_agent_id.clone()),
-            ta_id: None,
-            account_name: Some(account_name),
-        };
+        let decoded_account_info = decode_account_info(account_id.clone());
         assert!(
-            decoded_account_info == expected_account_info,
+            decoded_account_info
+                == BlockchainAccountInfo::Named {
+                    account_id: account_id.clone(),
+                    app_agent_id: app_agent_id.clone(),
+                    account_name: account_name.clone()
+                },
             "Couldn't decode Named account to account info."
         );
 
