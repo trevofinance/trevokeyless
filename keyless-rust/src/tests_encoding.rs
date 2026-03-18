@@ -161,4 +161,41 @@ mod tests_encoding {
             "Named account can not be considered as a Transactional account"
         );
     }
+
+    #[test]
+    fn test_tampered_checksum_falls_back_to_regular() {
+        // Flip one bit in the checksum region of each account type and verify that
+        // decode_account_info returns Regular (i.e. the integrity check rejects the account).
+
+        let mut bytes: [u8; 32] = encode_app_agent_account(&42).into();
+        bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5])
+        assert_eq!(
+            decode_account_info(AccountId32::from(bytes)),
+            BlockchainAccountInfo::Regular {
+                account_id: AccountId32::from(bytes)
+            },
+            "Tampered AppAgent checksum must decode as Regular"
+        );
+
+        let mut bytes: [u8; 32] = encode_transactional_account(&42, &7).into();
+        bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9])
+        assert_eq!(
+            decode_account_info(AccountId32::from(bytes)),
+            BlockchainAccountInfo::Regular {
+                account_id: AccountId32::from(bytes)
+            },
+            "Tampered Transactional checksum must decode as Regular"
+        );
+
+        let mut bytes: [u8; 32] =
+            encode_named_account(&42, &AccountName::new(b"test123456").unwrap()).into();
+        bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15])
+        assert_eq!(
+            decode_account_info(AccountId32::from(bytes)),
+            BlockchainAccountInfo::Regular {
+                account_id: AccountId32::from(bytes)
+            },
+            "Tampered Named checksum must decode as Regular"
+        );
+    }
 }
