@@ -73,7 +73,9 @@
 mod keyless;
 mod types;
 
+#[cfg(test)]
 mod tests_binary;
+#[cfg(test)]
 mod tests_encoding;
 
 pub use keyless::*;

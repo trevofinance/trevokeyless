@@ -3,6 +3,8 @@ mod tests_binary {
     use crate::keyless::*;
     use crate::types::*;
 
+    // Do not delete it - helpful for debugging
+    //
     // use sp_runtime::AccountId32;
     // use std::fmt;
     //

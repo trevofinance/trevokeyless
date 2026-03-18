@@ -22,24 +22,25 @@ mod tests_encoding {
         // ******************************** //
 
         let encoded_account_id = encode_app_agent_account(&app_agent_id);
-        assert!(
-            encoded_account_id == account_id,
+        assert_eq!(
+            encoded_account_id, account_id,
             "Couldn't encode AppAgent ID to AppAgent account."
         );
 
         let decoded_app_agent_id = decode_app_agent_account(account_id.clone());
-        assert!(
-            decoded_app_agent_id.unwrap() == app_agent_id,
+        assert_eq!(
+            decoded_app_agent_id.unwrap(),
+            app_agent_id,
             "Couldn't decode AppAgent account to AppAgent ID."
         );
 
         let decoded_account_info = decode_account_info(account_id.clone());
-        assert!(
-            decoded_account_info
-                == BlockchainAccountInfo::AppAgent {
-                    account_id: account_id.clone(),
-                    app_agent_id: app_agent_id
-                },
+        assert_eq!(
+            decoded_account_info,
+            BlockchainAccountInfo::AppAgent {
+                account_id: account_id.clone(),
+                app_agent_id: app_agent_id
+            },
             "Couldn't decode AppAgent account to account info."
         );
 
@@ -61,25 +62,26 @@ mod tests_encoding {
 
         let encoded_account_id =
             encode_transactional_account(&app_agent_id, &transactional_account_id);
-        assert!(
-            encoded_account_id == account_id,
+        assert_eq!(
+            encoded_account_id, account_id,
             "Couldn't encode Transactional account ID to Transactional account."
         );
 
         let decoded_ids = decode_transactional_account(account_id.clone());
-        assert!(
-            decoded_ids.unwrap() == (app_agent_id, transactional_account_id),
+        assert_eq!(
+            decoded_ids.unwrap(),
+            (app_agent_id, transactional_account_id),
             "Couldn't decode Transactional account to Transactional ID."
         );
 
         let decoded_account_info = decode_account_info(account_id.clone());
-        assert!(
-            decoded_account_info
-                == BlockchainAccountInfo::Transactional {
-                    account_id: account_id.clone(),
-                    app_agent_id: app_agent_id,
-                    ta_id: transactional_account_id
-                },
+        assert_eq!(
+            decoded_account_info,
+            BlockchainAccountInfo::Transactional {
+                account_id: account_id.clone(),
+                app_agent_id: app_agent_id,
+                ta_id: transactional_account_id
+            },
             "Couldn't decode Transactional account to account info."
         );
 
@@ -100,25 +102,26 @@ mod tests_encoding {
         // ******************************** //
 
         let encoded_account_id = encode_named_account(&app_agent_id, &account_name);
-        assert!(
-            encoded_account_id == account_id,
+        assert_eq!(
+            encoded_account_id, account_id,
             "Couldn't encode Named account ID to Named account."
         );
 
         let decoded_ids = decode_named_account(account_id.clone());
-        assert!(
-            decoded_ids.unwrap() == (app_agent_id, account_name),
+        assert_eq!(
+            decoded_ids.unwrap(),
+            (app_agent_id, account_name),
             "Couldn't decode Named account to Named ID."
         );
 
         let decoded_account_info = decode_account_info(account_id.clone());
-        assert!(
-            decoded_account_info
-                == BlockchainAccountInfo::Named {
-                    account_id: account_id.clone(),
-                    app_agent_id: app_agent_id,
-                    account_name: account_name
-                },
+        assert_eq!(
+            decoded_account_info,
+            BlockchainAccountInfo::Named {
+                account_id: account_id.clone(),
+                app_agent_id: app_agent_id,
+                account_name: account_name
+            },
             "Couldn't decode Named account to account info."
         );
 

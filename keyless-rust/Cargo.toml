@@ -13,14 +13,12 @@ categories = ["encoding", "wasm"]
 [features]
 default = ["std"]
 std = [
-    "hex/std",
     "blake2b_simd/std",
     "parity-scale-codec/std",
     "scale-info/std",
 ]
 
 [dependencies]
-hex = { version = "0.4.3", default-features = false }
 blake2b_simd = { version = "1.0.1", default-features = false }
 parity-scale-codec = { version = "3.6.12", default-features = false, features = ["max-encoded-len"] }
 scale-info = { version = "2.11.1", default-features = false, features = ["derive"] }

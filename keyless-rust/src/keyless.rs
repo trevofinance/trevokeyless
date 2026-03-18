@@ -136,7 +136,7 @@ where
                     account_id: account,
                     app_agent_id,
                 };
-            };
+            }
         }
         TRANSACTIONAL_ACCOUNT_IDENTIFIER => {
             // Verify checksum
@@ -160,7 +160,7 @@ where
                     app_agent_id,
                     ta_id,
                 };
-            };
+            }
         }
         NAMED_ACCOUNT_IDENTIFIER => {
             // Verify checksum
@@ -181,7 +181,7 @@ where
                     app_agent_id,
                     account_name,
                 };
-            };
+            }
         }
         _ => {}
     }
