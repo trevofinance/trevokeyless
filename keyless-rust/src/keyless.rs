@@ -224,8 +224,8 @@ where
 ///
 /// Returns a `Result` containing the `AppAgentId` decoded from the keyless account if successful,
 /// or a `String` if an error occurs during the decoding process.
-pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, String> {
-    match decode_account_info(account.clone()) {
+pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, String> {
+    match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
         _ => Err("Provided account is not an AppAgent keyless account".to_string()),
     }
@@ -243,9 +243,9 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Str
 /// Returns a `Result` containing the decoded `(AppAgentId, TransactionalId)` if successful,
 /// or a `String` if an error occurs during the decoding process.
 pub fn decode_transactional_account(
-    account: &AccountId32,
+    account: AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), String> {
-    match decode_account_info(account.clone()) {
+    match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
             app_agent_id,
             ta_id,
@@ -266,8 +266,8 @@ pub fn decode_transactional_account(
 ///
 /// Returns a `Result` containing the decoded `(AppAgentId, AccountName)` if successful,
 /// or a `String` if an error occurs during the decoding process.
-pub fn decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), String> {
-    match decode_account_info(account.clone()) {
+pub fn decode_named_account(account: AccountId32) -> Result<(AppAgentId, AccountName), String> {
+    match decode_account_info(account) {
         BlockchainAccountInfo::Named {
             app_agent_id,
             account_name,
@@ -286,8 +286,8 @@ pub fn decode_named_account(account: &AccountId32) -> Result<(AppAgentId, Accoun
 /// # Returns
 ///
 /// Returns a `true` if provided accouont is a keyless one, otherwise `false`.
-pub fn is_keyless_account(account: &AccountId32) -> bool {
-    match decode_account_info(account.clone()) {
+pub fn is_keyless_account(account: AccountId32) -> bool {
+    match decode_account_info(account) {
         BlockchainAccountInfo::Regular { .. } => false,
         BlockchainAccountInfo::AppAgent { .. }
         | BlockchainAccountInfo::Transactional { .. }

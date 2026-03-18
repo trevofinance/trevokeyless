@@ -14,7 +14,7 @@
 //! let app_agent_account = encode_app_agent_account(&app_agent_id);
 //!
 //! // Decode the keyless account
-//! let decoded_app_agent_id = decode_app_agent_account(&app_agent_account).unwrap();
+//! let decoded_app_agent_id = decode_app_agent_account(app_agent_account).unwrap();
 //! assert_eq!(decoded_app_agent_id, app_agent_id);
 //! ```
 //!

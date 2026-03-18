@@ -27,7 +27,7 @@ mod tests_encoding {
             "Couldn't encode AppAgent ID to AppAgent account."
         );
 
-        let decoded_app_agent_id = decode_app_agent_account(&account_id);
+        let decoded_app_agent_id = decode_app_agent_account(account_id.clone());
         assert!(
             decoded_app_agent_id.unwrap() == app_agent_id,
             "Couldn't decode AppAgent account to AppAgent ID."
@@ -66,7 +66,7 @@ mod tests_encoding {
             "Couldn't encode Transactional account ID to Transactional account."
         );
 
-        let decoded_ids = decode_transactional_account(&account_id);
+        let decoded_ids = decode_transactional_account(account_id.clone());
         assert!(
             decoded_ids.unwrap() == (app_agent_id, transactional_account_id),
             "Couldn't decode Transactional account to Transactional ID."
@@ -105,7 +105,7 @@ mod tests_encoding {
             "Couldn't encode Named account ID to Named account."
         );
 
-        let decoded_ids = decode_named_account(&account_id);
+        let decoded_ids = decode_named_account(account_id.clone());
         assert!(
             decoded_ids.unwrap() == (app_agent_id, account_name),
             "Couldn't decode Named account to Named ID."
@@ -130,31 +130,31 @@ mod tests_encoding {
     fn test_mismatch_of_account_type() {
         let account_aa = encode_app_agent_account(&1);
         assert!(
-            decode_transactional_account(&account_aa).is_err(),
+            decode_transactional_account(account_aa.clone()).is_err(),
             "AppAgent account can not be considered as a Transactional account"
         );
         assert!(
-            decode_named_account(&account_aa).is_err(),
+            decode_named_account(account_aa.clone()).is_err(),
             "AppAgent account can not be considered as a Named account"
         );
 
         let account_ta = encode_transactional_account(&1, &0);
         assert!(
-            decode_app_agent_account(&account_ta).is_err(),
+            decode_app_agent_account(account_ta.clone()).is_err(),
             "Transactional account can not be considered as an AppAgent account"
         );
         assert!(
-            decode_named_account(&account_ta).is_err(),
+            decode_named_account(account_ta.clone()).is_err(),
             "Transactional account can not be considered as a Named account"
         );
 
         let account_named = encode_named_account(&1, &AccountName::new(b"test123456").unwrap());
         assert!(
-            decode_app_agent_account(&account_named).is_err(),
+            decode_app_agent_account(account_named.clone()).is_err(),
             "Named account can not be considered as an AppAgent account"
         );
         assert!(
-            decode_transactional_account(&account_named).is_err(),
+            decode_transactional_account(account_named.clone()).is_err(),
             "Named account can not be considered as a Transactional account"
         );
     }
