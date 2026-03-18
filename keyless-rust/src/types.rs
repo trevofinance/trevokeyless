@@ -1,30 +1,40 @@
 use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-// Types of identifiers
+/// Numeric identifier of an App Agent (u32, little-endian in keyless account bytes [0..=3]).
 pub type AppAgentId = u32;
+
+/// Numeric identifier of a Transactional sub-account (u32, little-endian in bytes [5..=8]).
 pub type TransactionalId = u32;
 
-// identifiers for account type
+/// Raw type for the one-byte account type discriminant stored at byte [4] of a keyless account.
 pub type AccountIdentifierType = u8;
+
+/// Byte [4] discriminant for an App Agent root keyless account.
 pub const APP_AGENT_ACCOUNT_IDENTIFIER: AccountIdentifierType = 1;
+/// Byte [4] discriminant for a Transactional keyless account.
 pub const TRANSACTIONAL_ACCOUNT_IDENTIFIER: AccountIdentifierType = 2;
+/// Byte [4] discriminant for a Named keyless account.
 pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
 
-/// An opaque 32-byte cryptographic identifier.
+/// A 32-byte on-chain account identifier.
+///
+/// For keyless accounts the bytes follow the layout described in the crate documentation.
+/// For regular accounts the bytes are an opaque public key or hash with no special structure.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Debug, TypeInfo, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Hash))]
 pub struct AccountId32([u8; 32]);
 
 impl AccountId32 {
-    /// Create a new instance from its raw inner byte value.
+    /// Creates a new `AccountId32` from its raw 32-byte representation.
     ///
-    /// Equivalent to this types `From<[u8; 32]>` implementation. For the lack of const
-    /// support in traits we have this constructor.
+    /// Equivalent to the `From<[u8; 32]>` implementation; provided as a `const fn` because
+    /// trait implementations cannot be `const`.
     pub const fn new(inner: [u8; 32]) -> Self {
         Self(inner)
     }
 
+    /// Returns a reference to the raw 32-byte representation.
     pub fn inner(&self) -> &[u8; 32] {
         &self.0
     }
@@ -48,6 +58,10 @@ impl From<AccountId32> for [u8; 32] {
     }
 }
 
+/// A fixed 10-byte account name used to identify Named keyless accounts.
+///
+/// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
+/// The name is stored verbatim in bytes [5..=14] of the Named account's open part.
 #[derive(
     Clone,
     Encode,
@@ -68,6 +82,10 @@ impl AccountName {
     const ALLOWED_CHARS: &'static [u8] =
         b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#";
 
+    /// Creates an `AccountName` from a byte slice.
+    ///
+    /// Returns an error if `input` is not exactly 10 bytes or contains characters outside the
+    /// allowed set (`0-9 a-z A-Z - #`).
     pub fn new(input: &[u8]) -> Result<Self, &'static str> {
         if input.len() != 10 {
             return Err("Input must be exactly 10 bytes long");
@@ -84,10 +102,12 @@ impl AccountName {
         }
     }
 
+    /// Returns the raw 10-byte representation of the name.
     pub fn as_bytes(&self) -> &[u8; 10] {
         &self.0
     }
 
+    /// Returns `true` if the name begins with `prefix`.
     pub fn starts_with(&self, prefix: &[u8]) -> bool {
         self.0.starts_with(prefix)
     }
@@ -101,33 +121,32 @@ impl TryFrom<&[u8]> for AccountName {
     }
 }
 
-/// Contains information related to a blockchain account.
+/// Decoded identity of a blockchain account.
 ///
-/// Variants:
-/// - `Regular`: A standard blockchain account.
-/// - `AppAgent`: An account associated with an application agent.
-/// - `Transactional`: An account used for transactional purposes.
-/// - `Named`: An account that has a specific name associated with it.
-///
-/// Fields:
-/// - `account_id`: The account ID associated with the blockchain account, represented as a vector of bytes.
-/// - `app_agent_id`: The application agent ID associated with the account, if applicable.
-/// - `ta_id`: The transactional account ID, if applicable.
-/// - `account_name`: The name of the account, if applicable.
+/// Returned by [`decode_account_info`](crate::decode_account_info). The caller can
+/// pattern-match on this enum to determine whether an account is a regular (non-keyless)
+/// account or one of the three Trevo keyless variants, and to extract the embedded identifiers.
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum BlockchainAccountInfo {
-    Regular {
-        account_id: AccountId32,
-    },
+    /// A regular account whose bytes do not match any valid keyless encoding. Its private
+    /// key may or may not exist — the point is that no keyless identifiers are embedded.
+    Regular { account_id: AccountId32 },
+    /// The root keyless account of an App Agent. No private key is known; the App Agent
+    /// acts on its behalf via Clearing Transactions.
     AppAgent {
         account_id: AccountId32,
         app_agent_id: AppAgentId,
     },
+    /// A transactional sub-account of an App Agent. Controlled exclusively by the App Agent
+    /// identified by `app_agent_id`.
     Transactional {
         account_id: AccountId32,
         app_agent_id: AppAgentId,
         ta_id: TransactionalId,
     },
+    /// A named sub-account of an App Agent. The `account_name` is embedded verbatim in the
+    /// account bytes and can be used to distinguish well-known sub-accounts (e.g. a hot
+    /// wallet with name `"hot-wallet"` or a cold wallet whose name starts with `"cold"`).
     Named {
         account_id: AccountId32,
         app_agent_id: AppAgentId,

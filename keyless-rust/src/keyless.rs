@@ -20,15 +20,14 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
     blake2(data)
 }
 
-/// Builds a keyless account by concatenating open part of the account with the checksum.
+/// Builds a keyless `AccountId32` from its open part.
 ///
-/// # Arguments
+/// The 32-byte account is constructed as follows:
+/// 1. Compute `hash = blake2_256(open_part)` (32 bytes).
+/// 2. Overwrite `hash[0..open_part.len()]` with `open_part`.
 ///
-/// `open_part` - The open part of the account.
-///
-/// # Returns
-///
-/// Returns the built keyless account as an `AccountId32`
+/// The result is: `open_part || hash[open_part.len()..]`
+/// where `hash[open_part.len()..]` is the trailing portion of the hash, used as the checksum.
 fn _encode_account(open_part: &[u8]) -> AccountId32
 where
     AccountId32: From<[u8; 32]>,
@@ -38,22 +37,14 @@ where
     AccountId32::from(checksum)
 }
 
-/// Builds a keyless account for the specified `AppAgentId`.
+/// Derives the root keyless account for the given App Agent.
 ///
-/// ********************************
-/// The structure of an AppAgent account:
-/// [0..=3] -> AppAgentId
-/// [4..4] -> Account type identifier (1)
-/// [5..=31] -> Checksum
-/// ********************************
-///
-/// # Arguments
-///
-/// * `app_agent_id` - The `AppAgentId` used to build the keyless account.
-///
-/// # Returns
-///
-/// Returns the built keyless account as an `AccountId32`
+/// Byte layout of the 32-byte result:
+/// ```text
+/// [0..=3]  AppAgentId (little-endian u32)
+/// [4]      Account type identifier = APP_AGENT_ACCOUNT_IDENTIFIER (1)
+/// [5..=31] blake2_256(open_part)[5..=31]  — checksum
+/// ```
 pub fn encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32
 where
     AccountId32: From<[u8; 32]>,
@@ -65,24 +56,15 @@ where
     _encode_account(&open_part)
 }
 
-/// Builds a keyless account for the specified `AppAgentId` and `TransactionalId`.
+/// Derives the transactional keyless account for the given App Agent and transactional ID.
 ///
-/// ********************************
-/// The structure of a Transactional account:
-/// [0..=3] -> AppAgentId
-/// [4..4] -> Account type identifier (2)
-/// [5..=8] -> TransactionalId
-/// [9..=31] -> Checksum
-/// ********************************
-///
-/// # Arguments
-///
-/// * `app_agent_id` - The `AppAgentId` used to build the keyless account.
-/// * `ta_id` - The `TransactionalId` used to build the keyless account.
-///
-/// # Returns
-///
-/// Returns the built keyless account as an `AccountId32`
+/// Byte layout of the 32-byte result:
+/// ```text
+/// [0..=3]  AppAgentId (little-endian u32)
+/// [4]      Account type identifier = TRANSACTIONAL_ACCOUNT_IDENTIFIER (2)
+/// [5..=8]  TransactionalId (little-endian u32)
+/// [9..=31] blake2_256(open_part)[9..=31]  — checksum
+/// ```
 pub fn encode_transactional_account(
     app_agent_id: &AppAgentId,
     ta_id: &TransactionalId,
@@ -100,25 +82,15 @@ where
     _encode_account(&open_part)
 }
 
-/// Builds a keyless account for the specified `AppAgentId` and `Name`.
+/// Derives the named keyless account for the given App Agent and account name.
 ///
-/// ********************************
-/// The structure of a Named account:
-/// [0..=3] -> AppAgentId
-/// [4..4] -> Account type identifier (3)
-/// [5..=14] -> Account name
-/// [15..=31] -> Checksum
-/// ********************************
-///
-/// # Arguments
-///
-/// * `app_agent_id` - The `AppAgentId` used to build the keyless account.
-/// * `name` - The `AccountId32` used to build the keyless account.
-///
-/// # Returns
-///
-/// Returns a `Result` containing the built keyless account as an `AccountId32` if successful,
-/// or a `String` if an error occurs during the building process.
+/// Byte layout of the 32-byte result:
+/// ```text
+/// [0..=3]   AppAgentId (little-endian u32)
+/// [4]       Account type identifier = NAMED_ACCOUNT_IDENTIFIER (3)
+/// [5..=14]  AccountName (10 bytes, restricted charset: 0-9 a-z A-Z - #)
+/// [15..=31] blake2_256(open_part)[15..=31]  — checksum
+/// ```
 pub fn encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32
 where
     AppAgentId: Into<u32>,
@@ -132,8 +104,13 @@ where
     _encode_account(&open_part)
 }
 
-/// Decodes and verifies the correctness of a keyless account.
-/// Provides type of account and keyless IDs.
+/// Classifies an `AccountId32` and extracts any embedded keyless identifiers.
+///
+/// Reads the type discriminant at byte [4], re-derives the expected checksum for the
+/// corresponding open-part length, and compares it to the stored bytes. If the checksum
+/// matches, the account is decoded into the appropriate [`BlockchainAccountInfo`] variant.
+/// Any account whose byte [4] is not a known discriminant, or whose checksum does not match,
+/// is returned as [`BlockchainAccountInfo::Regular`].
 pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo
 where
     AccountId32: From<[u8; 32]>,
@@ -277,15 +254,9 @@ pub fn decode_named_account(account: AccountId32) -> Result<(AppAgentId, Account
     }
 }
 
-/// Checks if provided account is a keyless account.
-///
-/// # Arguments
-///
-/// * `account` - The keyless account to be checked.
-///
-/// # Returns
-///
-/// Returns a `true` if provided accouont is a keyless one, otherwise `false`.
+/// Returns `true` if the account follows a valid keyless encoding (App Agent, Transactional, or
+/// Named). Returns `false` for accounts that don't match any keyless format, which are treated as
+/// regular accounts.
 pub fn is_keyless_account(account: AccountId32) -> bool {
     match decode_account_info(account) {
         BlockchainAccountInfo::Regular { .. } => false,
