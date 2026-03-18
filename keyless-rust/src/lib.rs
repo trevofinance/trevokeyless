@@ -1,6 +1,6 @@
-//! This module provides functionality for encoding and decoding keyless addresses.
+//! This module provides functionality for encoding and decoding keyless accounts.
 //!
-//! A keyless address is a type of address that doesn't rely on cryptographic key pairs for identification.
+//! A keyless account is a type of account that doesn't rely on cryptographic key pairs for identification.
 //! Instead, it is derived from a combination of identifiers and checksums, making it suitable and
 //! convenient for off-chain applications to use.
 //!
@@ -9,58 +9,58 @@
 //! ```rust
 //! use trevo_keyless::*;
 //!
-//! // Encode an AppAgent keyless address
+//! // Encode an AppAgent keyless account
 //! let app_agent_id = 123;
-//! let app_agent_address = encode_app_agent_account(&app_agent_id);
+//! let app_agent_account = encode_app_agent_account(&app_agent_id);
 //!
-//! // Decode the keyless address
-//! let decoded_app_agent_id = decode_app_agent_account(&app_agent_address).unwrap();
+//! // Decode the keyless account
+//! let decoded_app_agent_id = decode_app_agent_account(&app_agent_account).unwrap();
 //! assert_eq!(decoded_app_agent_id, app_agent_id);
 //! ```
 //!
-//! # Keyless Address Structure
+//! # Keyless Account Structure
 //!
-//! A keyless address consists of two parts:
+//! A keyless account consists of two parts:
 //!
-//! - Open Part: Contains specific identifiers or data relevant to the address type.
+//! - Open Part: Contains specific identifiers or data relevant to the account type.
 //!
-//! - Checksum: A hash-based checksum to ensure address integrity.
+//! - Checksum: A hash-based checksum to ensure account integrity.
 //!
-//! Each keyless address belongs to one of the address types. It can be one of the following:
+//! Each keyless account belongs to one of the account types. It can be one of the following:
 //!
-//!   - `APP_AGENT_ADDRESS_IDENTIFIER`: Identifies an AppAgent keyless address.
-//!   - `TRANSACTIONAL_ADDRESS_IDENTIFIER`: Identifies a Transactional keyless address.
-//!   - `NAMED_ADDRESS_IDENTIFIER`: Identifies a Named keyless address.
+//!   - `APP_AGENT_ACCOUNT_IDENTIFIER`: Identifies an AppAgent keyless account.
+//!   - `TRANSACTIONAL_ACCOUNT_IDENTIFIER`: Identifies a Transactional keyless account.
+//!   - `NAMED_ACCOUNT_IDENTIFIER`: Identifies a Named keyless account.
 //!
-//! Each address type has a different structure for the open part, as described below:
+//! Each account type has a different structure for the open part, as described below:
 //!
-//! - **AppAgent Address**:
+//! - **AppAgent Account**:
 //!   - [0..=3] -> AppAgentId
-//!   - [4..4] -> Address type identifier `APP_AGENT_ADDRESS_IDENTIFIER`
+//!   - [4..4] -> Account type identifier `APP_AGENT_ACCOUNT_IDENTIFIER`
 //!   - [5..=31] -> Checksum
 //!
-//! - **Transactional Address**:
+//! - **Transactional Account**:
 //!   - [0..=3] -> AppAgentId
-//!   - [4..4] -> Address type identifier `TRANSACTIONAL_ADDRESS_IDENTIFIER`
+//!   - [4..4] -> Account type identifier `TRANSACTIONAL_ACCOUNT_IDENTIFIER`
 //!   - [5..=8] -> TransactionalId
 //!   - [9..=31] -> Checksum
 //!
-//! - **Named Address**:
+//! - **Named Account**:
 //!   - [0..=3] -> AppAgentId
-//!   - [4..4] -> Address type identifier `NAMED_ADDRESS_IDENTIFIER`
-//!   - [5..=14] -> Address name
+//!   - [4..4] -> Account type identifier `NAMED_ACCOUNT_IDENTIFIER`
+//!   - [5..=14] -> Account name
 //!   - [15..=31] -> Checksum
 //!
 //! # Public Interface
 //!
-//! This module exposes functions to encode, decode, and manipulate keyless addresses:
+//! This module exposes functions to encode, decode, and manipulate keyless accounts:
 //!
-//! - `encode_app_agent_account`: Builds a keyless address for the specified `AppAgentId`.
-//! - `decode_app_agent_account`: Decodes the provided keyless address and retrieves the corresponding `AppAgentId`.
-//! - `encode_transactional_account`: Builds a keyless address for the specified `AppAgentId` and `TransactionalId`.
-//! - `decode_transactional_account`: Decodes the provided keyless address and retrieves the `AppAgentId` and `TransactionalId`.
-//! - `encode_named_account`: Builds a keyless address for the specified `AppAgentId` and `Name`.
-//! - `decode_named_account`: Decodes the provided keyless address and retrieves the `AppAgentId` and `AddressName`.
+//! - `encode_app_agent_account`: Builds a keyless account for the specified `AppAgentId`.
+//! - `decode_app_agent_account`: Decodes the provided keyless account and retrieves the corresponding `AppAgentId`.
+//! - `encode_transactional_account`: Builds a keyless account for the specified `AppAgentId` and `TransactionalId`.
+//! - `decode_transactional_account`: Decodes the provided keyless account and retrieves the `AppAgentId` and `TransactionalId`.
+//! - `encode_named_account`: Builds a keyless account for the specified `AppAgentId` and `Name`.
+//! - `decode_named_account`: Decodes the provided keyless account and retrieves the `AppAgentId` and `AccountName`.
 //! - `decode_account`: Decodes any type of account, including regular accounts, and provides full information about the account.
 //!
 //! # Errors

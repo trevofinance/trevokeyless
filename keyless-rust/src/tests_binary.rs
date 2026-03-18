@@ -37,14 +37,14 @@ mod tests_binary {
             "Bytes [0..=3] must contain AppAgent ID in little-endian format"
         );
         assert_eq!(
-            account[4], APP_AGENT_ADDRESS_IDENTIFIER,
+            account[4], APP_AGENT_ACCOUNT_IDENTIFIER,
             "5th byte must be account type"
         );
 
         let checksum_account: [u8; 27] = account[5..].try_into().unwrap();
 
         let checksum_calculated: [u8; 27] =
-            blake2_256(&[21, 205, 91, 7, APP_AGENT_ADDRESS_IDENTIFIER])[5..]
+            blake2_256(&[21, 205, 91, 7, APP_AGENT_ACCOUNT_IDENTIFIER])[5..]
                 .try_into()
                 .unwrap();
         assert_eq!(
@@ -84,14 +84,14 @@ mod tests_binary {
             "Bytes [0..=3] must contain AppAgent ID in little-endian format"
         );
         assert_eq!(
-            account[4], TRANSACTIONAL_ADDRESS_IDENTIFIER,
+            account[4], TRANSACTIONAL_ACCOUNT_IDENTIFIER,
             "5th byte must be account type"
         );
         // Decimal 987654321 == little-endian bytes int 177, 104, 222, 58 == little-endian bytes HEX B1 68 DE 3A
         assert_eq!(
             account[5..=8],
             [177, 104, 222, 58],
-            "Bytes [5..=8] must contain Transactional address ID in little-endian format"
+            "Bytes [5..=8] must contain Transactional account ID in little-endian format"
         );
 
         let checksum_account: [u8; 23] = account[9..].try_into().unwrap();
@@ -101,7 +101,7 @@ mod tests_binary {
             205,
             91,
             7,
-            TRANSACTIONAL_ADDRESS_IDENTIFIER,
+            TRANSACTIONAL_ACCOUNT_IDENTIFIER,
             177,
             104,
             222,
@@ -136,7 +136,7 @@ mod tests_binary {
 
     #[test]
     fn test_named_structure() {
-        let account = encode_named_account(&123456789, &AddressName::new(b"test123456").unwrap());
+        let account = encode_named_account(&123456789, &AccountName::new(b"test123456").unwrap());
         let account: [u8; 32] = account.into();
 
         // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -146,18 +146,18 @@ mod tests_binary {
             "Bytes [0..=3] must contain AppAgent ID in little-endian format"
         );
         assert_eq!(
-            account[4], NAMED_ADDRESS_IDENTIFIER,
+            account[4], NAMED_ACCOUNT_IDENTIFIER,
             "5th byte must be account type"
         );
         assert_eq!(
             account[5..=14],
             [116, 101, 115, 116, 49, 50, 51, 52, 53, 54],
-            "Bytes [5..=14] must contain Address name"
+            "Bytes [5..=14] must contain Account name"
         );
         assert_eq!(
             &account[5..=14],
             b"test123456",
-            "Bytes [5..=14] must contain Address name"
+            "Bytes [5..=14] must contain Account name"
         );
 
         let checksum_account: [u8; 17] = account[15..].try_into().unwrap();
@@ -167,7 +167,7 @@ mod tests_binary {
             205,
             91,
             7,
-            NAMED_ADDRESS_IDENTIFIER,
+            NAMED_ACCOUNT_IDENTIFIER,
             116,
             101,
             115,
