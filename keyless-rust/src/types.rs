@@ -33,11 +33,6 @@ impl AccountId32 {
     pub const fn new(inner: [u8; 32]) -> Self {
         Self(inner)
     }
-
-    /// Returns a reference to the raw 32-byte representation.
-    pub fn inner(&self) -> &[u8; 32] {
-        &self.0
-    }
 }
 
 impl AsRef<[u8; 32]> for AccountId32 {
@@ -66,8 +61,30 @@ impl From<AccountId32> for [u8; 32] {
 pub struct AccountName([u8; 10]);
 
 impl AccountName {
-    const ALLOWED_CHARS: &'static [u8] =
-        b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#";
+    /// Lookup table: `VALID_CHARS[b]` is `true` iff byte `b` is in the allowed set
+    /// (`0-9 a-z A-Z - #`). Built at compile time with zero heap allocation.
+    /// b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#"
+    const VALID_CHARS: [bool; 256] = {
+        let mut t = [false; 256];
+        let mut i = b'0';
+        while i <= b'9' {
+            t[i as usize] = true;
+            i += 1;
+        }
+        let mut i = b'a';
+        while i <= b'z' {
+            t[i as usize] = true;
+            i += 1;
+        }
+        let mut i = b'A';
+        while i <= b'Z' {
+            t[i as usize] = true;
+            i += 1;
+        }
+        t[b'-' as usize] = true;
+        t[b'#' as usize] = true;
+        t
+    };
 
     /// Creates an `AccountName` from a byte slice.
     ///
@@ -77,10 +94,7 @@ impl AccountName {
         if input.len() != 10 {
             return Err("Input must be exactly 10 bytes long");
         }
-        if input
-            .iter()
-            .all(|&b| AccountName::ALLOWED_CHARS.contains(&b))
-        {
+        if input.iter().all(|&b| AccountName::VALID_CHARS[b as usize]) {
             let mut array = [0u8; 10];
             array.copy_from_slice(input);
             Ok(AccountName(array))
@@ -108,11 +122,19 @@ impl TryFrom<&[u8]> for AccountName {
     }
 }
 
+impl TryFrom<[u8; 10]> for AccountName {
+    type Error = &'static str;
+
+    fn try_from(value: [u8; 10]) -> Result<Self, Self::Error> {
+        AccountName::new(&value)
+    }
+}
+
 impl Decode for AccountName {
     fn decode<I: Input>(input: &mut I) -> Result<Self, CodecError> {
         let mut buf = [0u8; 10];
         input.read(&mut buf)?;
-        AccountName::new(&buf).map_err(CodecError::from)
+        AccountName::try_from(buf).map_err(CodecError::from)
     }
 }
 
@@ -126,6 +148,16 @@ pub enum KeylessDecodeError {
     NotATransactionalAccount,
     /// The account does not decode as a Named account.
     NotANamedAccount,
+}
+
+impl core::fmt::Display for KeylessDecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::NotAnAppAgentAccount => f.write_str("Account is not an App Agent root account"),
+            Self::NotATransactionalAccount => f.write_str("Account is not a Transactional account"),
+            Self::NotANamedAccount => f.write_str("Account is not a Named account"),
+        }
+    }
 }
 
 /// Decoded identity of a blockchain account.

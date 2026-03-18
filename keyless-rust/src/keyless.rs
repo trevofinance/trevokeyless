@@ -21,15 +21,16 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
 /// Builds a keyless `AccountId32` from its open part.
 ///
 /// The 32-byte account is constructed as follows:
-/// 1. Compute `hash = blake2_256(open_part)` (32 bytes).
-/// 2. Overwrite `hash[0..open_part.len()]` with `open_part`.
+/// 1. Compute `account_bytes = blake2_256(open_part)` (32 bytes).
+/// 2. Overwrite `account_bytes[0..open_part.len()]` with `open_part`.
 ///
-/// The result is: `open_part || hash[open_part.len()..]`
-/// where `hash[open_part.len()..]` is the trailing portion of the hash, used as the checksum.
+/// The result is: `open_part || account_bytes[open_part.len()..]`
+/// where `account_bytes[open_part.len()..]` is the trailing portion of the hash, used as the
+/// checksum.
 fn encode_account(open_part: &[u8]) -> AccountId32 {
-    let mut checksum = blake2_256(open_part);
-    checksum[0..open_part.len()].copy_from_slice(open_part);
-    AccountId32::from(checksum)
+    let mut account_bytes = blake2_256(open_part);
+    account_bytes[0..open_part.len()].copy_from_slice(open_part);
+    AccountId32::from(account_bytes)
 }
 
 /// Derives the root keyless account for the given App Agent.
@@ -152,7 +153,7 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
 
             if checksum == calculated_checksum_trimmed {
                 // Extract and decode IDs
-                let app_agent_id_bytes = account_bytes[..4].try_into().unwrap();
+                let app_agent_id_bytes = account_bytes[0..4].try_into().unwrap();
                 let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
                 let account_name = account_bytes[5..15].try_into().unwrap();
 
