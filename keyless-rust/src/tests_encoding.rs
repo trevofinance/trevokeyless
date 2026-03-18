@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests_encoding {
+mod tests {
     use crate::keyless::*;
     use crate::types::*;
 
