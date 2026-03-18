@@ -35,7 +35,7 @@ where
 {
     let mut checksum = blake2_256(open_part);
     checksum[0..open_part.len()].clone_from_slice(open_part);
-    return AccountId32::from(checksum);
+    AccountId32::from(checksum)
 }
 
 /// Builds a keyless account for the specified `AppAgentId`.
@@ -62,7 +62,7 @@ where
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = APP_AGENT_ACCOUNT_IDENTIFIER;
 
-    return _encode_account(&open_part);
+    _encode_account(&open_part)
 }
 
 /// Builds a keyless account for the specified `AppAgentId` and `TransactionalId`.
@@ -97,7 +97,7 @@ where
     open_part[4] = TRANSACTIONAL_ACCOUNT_IDENTIFIER;
     open_part[5..9].copy_from_slice(&ta_id.to_le_bytes());
 
-    return _encode_account(&open_part);
+    _encode_account(&open_part)
 }
 
 /// Builds a keyless account for the specified `AppAgentId` and `Name`.
@@ -129,7 +129,7 @@ where
     open_part[4] = NAMED_ACCOUNT_IDENTIFIER;
     open_part[5..15].copy_from_slice(name.as_bytes());
 
-    return _encode_account(&open_part);
+    _encode_account(&open_part)
 }
 
 /// Decodes and verifies the correctness of a keyless account.
@@ -157,7 +157,7 @@ where
 
                 return BlockchainAccountInfo::AppAgent {
                     account_id: account,
-                    app_agent_id: app_agent_id,
+                    app_agent_id,
                 };
             };
         }
@@ -180,8 +180,8 @@ where
 
                 return BlockchainAccountInfo::Transactional {
                     account_id: account,
-                    app_agent_id: app_agent_id,
-                    ta_id: ta_id,
+                    app_agent_id,
+                    ta_id,
                 };
             };
         }
@@ -201,17 +201,17 @@ where
 
                 return BlockchainAccountInfo::Named {
                     account_id: account,
-                    app_agent_id: app_agent_id,
-                    account_name: account_name,
+                    app_agent_id,
+                    account_name,
                 };
             };
         }
         _ => {}
     }
 
-    return BlockchainAccountInfo::Regular {
+    BlockchainAccountInfo::Regular {
         account_id: account,
-    };
+    }
 }
 
 /// Decodes the provided keyless account and retrieves the corresponding `AppAgentId`.
