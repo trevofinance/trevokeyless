@@ -187,7 +187,6 @@ pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
 ///
 /// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
 /// `Err(KeylessDecodeError::NotAnAppAgentAccount)` otherwise.
-#[must_use]
 pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
@@ -205,7 +204,6 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 ///
 /// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
 /// verification, or `Err(KeylessDecodeError::NotATransactionalAccount)` otherwise.
-#[must_use]
 pub fn decode_transactional_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
@@ -229,7 +227,6 @@ pub fn decode_transactional_account(
 ///
 /// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
 /// or `Err(KeylessDecodeError::NotANamedAccount)` otherwise.
-#[must_use]
 pub fn decode_named_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
