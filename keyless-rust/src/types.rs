@@ -116,6 +116,18 @@ impl Decode for AccountName {
     }
 }
 
+/// Error returned by the typed `decode_*` functions when the account is not of the expected
+/// keyless variant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum KeylessDecodeError {
+    /// The account does not decode as an App Agent root account.
+    NotAnAppAgentAccount,
+    /// The account does not decode as a Transactional account.
+    NotATransactionalAccount,
+    /// The account does not decode as a Named account.
+    NotANamedAccount,
+}
+
 /// Decoded identity of a blockchain account.
 ///
 /// Returned by [`decode_account_info`](crate::decode_account_info). The caller can

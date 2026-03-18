@@ -1,6 +1,4 @@
 use crate::types::*;
-extern crate alloc;
-use alloc::string::{String, ToString};
 
 // Original implementation of "blake2" and "blake2_256":
 // https://github.com/paritytech/polkadot-sdk/blob/polkadot-stable2407-2/substrate/primitives/crypto/hashing/src/lib.rs
@@ -181,17 +179,16 @@ pub fn decode_account_info(account: AccountId32) -> BlockchainAccountInfo {
 ///
 /// # Returns
 ///
-/// Returns a `Result` containing the `AppAgentId` decoded from the keyless account if successful,
-/// or a `String` if an error occurs during the decoding process.
-pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, String> {
+/// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
+/// `Err(KeylessDecodeError::NotAnAppAgentAccount)` otherwise.
+pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
-        _ => Err("Provided account is not an AppAgent keyless account".to_string()),
+        _ => Err(KeylessDecodeError::NotAnAppAgentAccount),
     }
 }
 
-/// Decodes the provided keyless account and retrieves the `AppAgentId` and
-/// `TransactionalId`.
+/// Decodes the provided keyless account and retrieves the `AppAgentId` and `TransactionalId`.
 ///
 /// # Arguments
 ///
@@ -199,23 +196,22 @@ pub fn decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, Stri
 ///
 /// # Returns
 ///
-/// Returns a `Result` containing the decoded `(AppAgentId, TransactionalId)` if successful,
-/// or a `String` if an error occurs during the decoding process.
+/// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
+/// verification, or `Err(KeylessDecodeError::NotATransactionalAccount)` otherwise.
 pub fn decode_transactional_account(
     account: AccountId32,
-) -> Result<(AppAgentId, TransactionalId), String> {
+) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
             app_agent_id,
             ta_id,
             ..
         } => Ok((app_agent_id, ta_id)),
-        _ => Err("Provided account is not a Transactional keyless account".to_string()),
+        _ => Err(KeylessDecodeError::NotATransactionalAccount),
     }
 }
 
-/// Decodes the provided keyless account and retrieves the `AppAgentId` and
-/// `AccountName`.
+/// Decodes the provided keyless account and retrieves the `AppAgentId` and `AccountName`.
 ///
 /// # Arguments
 ///
@@ -223,16 +219,18 @@ pub fn decode_transactional_account(
 ///
 /// # Returns
 ///
-/// Returns a `Result` containing the decoded `(AppAgentId, AccountName)` if successful,
-/// or a `String` if an error occurs during the decoding process.
-pub fn decode_named_account(account: AccountId32) -> Result<(AppAgentId, AccountName), String> {
+/// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
+/// or `Err(KeylessDecodeError::NotANamedAccount)` otherwise.
+pub fn decode_named_account(
+    account: AccountId32,
+) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Named {
             app_agent_id,
             account_name,
             ..
         } => Ok((app_agent_id, account_name)),
-        _ => Err("Provided account is not a Named keyless account".to_string()),
+        _ => Err(KeylessDecodeError::NotANamedAccount),
     }
 }
 
