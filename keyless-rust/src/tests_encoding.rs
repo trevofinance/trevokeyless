@@ -163,6 +163,39 @@ mod tests_encoding {
     }
 
     #[test]
+    fn test_is_keyless_account() {
+        assert!(
+            is_keyless_account(encode_app_agent_account(&1)),
+            "AppAgent account must be keyless"
+        );
+        assert!(
+            is_keyless_account(encode_transactional_account(&1, &2)),
+            "Transactional account must be keyless"
+        );
+        assert!(
+            is_keyless_account(encode_named_account(
+                &1,
+                &AccountName::new(b"test123456").unwrap()
+            )),
+            "Named account must be keyless"
+        );
+
+        // A zeroed account has no valid keyless discriminant → Regular
+        assert!(
+            !is_keyless_account(AccountId32::from([0u8; 32])),
+            "Zeroed account must not be keyless"
+        );
+
+        // Tampered checksum → Regular
+        let mut bytes: [u8; 32] = encode_app_agent_account(&1).into();
+        bytes[10] ^= 0xFF;
+        assert!(
+            !is_keyless_account(AccountId32::from(bytes)),
+            "Tampered account must not be keyless"
+        );
+    }
+
+    #[test]
     fn test_tampered_checksum_falls_back_to_regular() {
         // Flip one bit in the checksum region of each account type and verify that
         // decode_account_info returns Regular (i.e. the integrity check rejects the account).

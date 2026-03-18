@@ -205,6 +205,25 @@ mod tests_account_name {
     }
 
     #[test]
+    fn test_starts_with() {
+        let name = AccountName::new(b"hot-wallet").unwrap();
+        assert!(name.starts_with(b"hot"), "must match known prefix");
+        assert!(
+            name.starts_with(b"hot-wallet"),
+            "full name is its own prefix"
+        );
+        assert!(name.starts_with(b""), "empty prefix always matches");
+        assert!(
+            !name.starts_with(b"cold"),
+            "non-matching prefix must return false"
+        );
+        assert!(
+            !name.starts_with(b"hot-wallet1"),
+            "longer-than-name prefix must return false"
+        );
+    }
+
+    #[test]
     fn test_edge_cases() {
         let valid_account1 = b"0000000000";
         let valid_account2 = b"##########";
