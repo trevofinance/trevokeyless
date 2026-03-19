@@ -14,13 +14,7 @@ fn blake2<const N: usize>(data: &[u8]) -> [u8; N] {
 }
 
 /// Do a Blake2b 256-bit hash and return result.
-// pub(crate) only under cfg(test) so sibling test modules can verify hardcoded checksums.
-#[cfg(not(test))]
-fn blake2_256(data: &[u8]) -> [u8; 32] {
-    blake2(data)
-}
-
-#[cfg(test)]
+// pub(crate) so sibling test modules can verify hardcoded checksums.
 pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
     blake2(data)
 }
@@ -94,7 +88,7 @@ pub fn encode_transactional_account(
 /// [15..=31] blake2_256(open_part)[15..=31]  — checksum
 /// ```
 #[must_use]
-pub fn encode_named_account(app_agent_id: AppAgentId, name: &AccountName) -> AccountId32 {
+pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> AccountId32 {
     let mut open_part: [u8; 15] = [0u8; 15];
     open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
     open_part[4] = NAMED_ACCOUNT_IDENTIFIER;

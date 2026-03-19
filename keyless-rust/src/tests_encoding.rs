@@ -101,7 +101,7 @@ mod tests {
 
         // ******************************** //
 
-        let encoded_account_id = encode_named_account(app_agent_id, &account_name);
+        let encoded_account_id = encode_named_account(app_agent_id, account_name);
         assert_eq!(
             encoded_account_id, account_id,
             "Couldn't encode Named account ID to Named account."
@@ -156,11 +156,11 @@ mod tests {
         let name = AccountName::new(b"0000000000").unwrap();
 
         // AppAgentId = 0
-        let account = encode_named_account(0, &name);
+        let account = encode_named_account(0, name);
         assert_eq!(decode_named_account(&account).unwrap(), (0, name));
 
         // AppAgentId = u32::MAX
-        let account = encode_named_account(u32::MAX, &name);
+        let account = encode_named_account(u32::MAX, name);
         assert_eq!(decode_named_account(&account).unwrap(), (u32::MAX, name));
     }
 
@@ -186,7 +186,7 @@ mod tests {
             "Transactional account can not be considered as a Named account"
         );
 
-        let account_named = encode_named_account(1, &AccountName::new(b"test123456").unwrap());
+        let account_named = encode_named_account(1, AccountName::new(b"test123456").unwrap());
         assert!(
             decode_app_agent_account(&account_named).is_err(),
             "Named account can not be considered as an AppAgent account"
@@ -210,7 +210,7 @@ mod tests {
         assert!(
             is_keyless_account(&encode_named_account(
                 1,
-                &AccountName::new(b"test123456").unwrap()
+                AccountName::new(b"test123456").unwrap()
             )),
             "Named account must be keyless"
         );
@@ -257,7 +257,7 @@ mod tests {
         );
 
         let mut bytes: [u8; 32] =
-            encode_named_account(42, &AccountName::new(b"test123456").unwrap()).into();
+            encode_named_account(42, AccountName::new(b"test123456").unwrap()).into();
         bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15], checksum starts at [15])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
@@ -293,6 +293,36 @@ mod tests {
             "Named account with valid checksum but invalid charset must decode as Regular"
         );
         assert!(!is_keyless_account(&account));
+    }
+
+    #[test]
+    fn test_blockchain_account_info_methods() {
+        let app_agent_id: AppAgentId = 42;
+        let ta_id: TransactionalId = 7;
+        let name = AccountName::new(b"hot-wallet").unwrap();
+
+        let aa_account = encode_app_agent_account(app_agent_id);
+        let ta_account = encode_transactional_account(app_agent_id, ta_id);
+        let named_account = encode_named_account(app_agent_id, name);
+        let regular_account = AccountId32::from([0u8; 32]);
+
+        // account_id()
+        assert_eq!(decode_account_info(&aa_account).account_id(), aa_account);
+        assert_eq!(decode_account_info(&ta_account).account_id(), ta_account);
+        assert_eq!(decode_account_info(&named_account).account_id(), named_account);
+        assert_eq!(decode_account_info(&regular_account).account_id(), regular_account);
+
+        // app_agent_id()
+        assert_eq!(decode_account_info(&aa_account).app_agent_id(), Some(app_agent_id));
+        assert_eq!(decode_account_info(&ta_account).app_agent_id(), Some(app_agent_id));
+        assert_eq!(decode_account_info(&named_account).app_agent_id(), Some(app_agent_id));
+        assert_eq!(decode_account_info(&regular_account).app_agent_id(), None);
+
+        // is_keyless_account()
+        assert!(decode_account_info(&aa_account).is_keyless_account());
+        assert!(decode_account_info(&ta_account).is_keyless_account());
+        assert!(decode_account_info(&named_account).is_keyless_account());
+        assert!(!decode_account_info(&regular_account).is_keyless_account());
     }
 
     #[test]

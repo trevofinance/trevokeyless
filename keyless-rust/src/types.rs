@@ -143,6 +143,12 @@ impl AsRef<[u8]> for AccountName {
     }
 }
 
+impl From<AccountName> for [u8; 10] {
+    fn from(name: AccountName) -> [u8; 10] {
+        name.0
+    }
+}
+
 impl TryFrom<&[u8]> for AccountName {
     type Error = &'static str;
 
@@ -272,9 +278,9 @@ impl BlockchainAccountInfo {
         }
     }
 
-    /// Returns `true` if this is a `Regular` (non-keyless) account.
-    pub fn is_regular(&self) -> bool {
-        matches!(self, Self::Regular { .. })
+    /// Returns `true` if this is a keyless account (App Agent, Transactional, or Named).
+    pub fn is_keyless_account(&self) -> bool {
+        !matches!(self, Self::Regular { .. })
     }
 }
 
@@ -351,5 +357,92 @@ mod tests_account_name {
         assert!(AccountName::new(valid_account2).is_ok());
         assert!(AccountName::new(valid_account3).is_ok());
         assert!(AccountName::new(valid_account4).is_ok());
+    }
+
+    #[test]
+    fn test_try_from_owned_array() {
+        let arr: [u8; 10] = *b"hot-wallet";
+        let name = AccountName::try_from(arr).unwrap();
+        assert_eq!(name.as_bytes(), b"hot-wallet");
+
+        let invalid: [u8; 10] = *b"invalid\x00xx";
+        assert!(AccountName::try_from(invalid).is_err());
+    }
+
+    #[test]
+    fn test_from_str() {
+        let name: AccountName = "hot-wallet".parse().unwrap();
+        assert_eq!(name.as_bytes(), b"hot-wallet");
+
+        assert!("too-short".parse::<AccountName>().is_err());
+        assert!("invalid@xxx".parse::<AccountName>().is_err());
+    }
+
+    #[test]
+    fn test_into_array() {
+        let name = AccountName::new(b"hot-wallet").unwrap();
+        let arr: [u8; 10] = name.into();
+        assert_eq!(&arr, b"hot-wallet");
+    }
+}
+
+#[cfg(test)]
+mod tests_display_and_codec {
+    use super::*;
+    use parity_scale_codec::{Decode, Encode};
+
+    #[test]
+    fn test_account_id32_display() {
+        let account = AccountId32::new([0u8; 32]);
+        assert_eq!(format!("{}", account), "0".repeat(64));
+
+        let mut bytes = [0u8; 32];
+        bytes[0] = 0xAB;
+        bytes[31] = 0xCD;
+        let s = format!("{}", AccountId32::new(bytes));
+        assert!(s.starts_with("ab"));
+        assert!(s.ends_with("cd"));
+        assert_eq!(s.len(), 64);
+    }
+
+    #[test]
+    fn test_account_name_display() {
+        let name = AccountName::new(b"hot-wallet").unwrap();
+        assert_eq!(format!("{}", name), "hot-wallet");
+    }
+
+    #[test]
+    fn test_keyless_decode_error_display() {
+        assert_eq!(
+            format!("{}", KeylessDecodeError::NotAnAppAgentAccount),
+            "Account is not an App Agent root account"
+        );
+        assert_eq!(
+            format!("{}", KeylessDecodeError::NotATransactionalAccount),
+            "Account is not a Transactional account"
+        );
+        assert_eq!(
+            format!("{}", KeylessDecodeError::NotANamedAccount),
+            "Account is not a Named account"
+        );
+    }
+
+    #[test]
+    fn test_account_name_scale_codec() {
+        let name = AccountName::new(b"hot-wallet").unwrap();
+        let encoded = name.encode();
+        assert_eq!(encoded.len(), 10);
+        let decoded = AccountName::decode(&mut &encoded[..]).unwrap();
+        assert_eq!(decoded, name);
+    }
+
+    #[test]
+    fn test_account_id32_scale_codec() {
+        let bytes: [u8; 32] = core::array::from_fn(|i| i as u8);
+        let account = AccountId32::new(bytes);
+        let encoded = account.encode();
+        assert_eq!(encoded.len(), 32);
+        let decoded = AccountId32::decode(&mut &encoded[..]).unwrap();
+        assert_eq!(decoded, account);
     }
 }

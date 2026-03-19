@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_named_structure() {
-        let account = encode_named_account(123456789, &AccountName::new(b"test123456").unwrap());
+        let account = encode_named_account(123456789, AccountName::new(b"test123456").unwrap());
         let account: [u8; 32] = account.into();
 
         // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
