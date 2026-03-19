@@ -61,6 +61,15 @@ impl AsRef<[u8]> for AccountId32 {
     }
 }
 
+impl core::fmt::Display for AccountId32 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for b in &self.0 {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
 /// A fixed 10-byte account name used to identify Named keyless accounts.
 ///
 /// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
@@ -147,6 +156,31 @@ impl TryFrom<[u8; 10]> for AccountName {
 
     fn try_from(value: [u8; 10]) -> Result<Self, Self::Error> {
         AccountName::new(&value)
+    }
+}
+
+impl TryFrom<&str> for AccountName {
+    type Error = &'static str;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        AccountName::new(s.as_bytes())
+    }
+}
+
+impl core::str::FromStr for AccountName {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AccountName::new(s.as_bytes())
+    }
+}
+
+impl core::fmt::Display for AccountName {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // All allowed characters are ASCII, so this conversion is always valid.
+        f.write_str(
+            core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII"),
+        )
     }
 }
 

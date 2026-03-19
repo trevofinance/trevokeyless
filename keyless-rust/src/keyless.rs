@@ -13,7 +13,14 @@ fn blake2<const N: usize>(data: &[u8]) -> [u8; N] {
         .expect("slice is always the necessary length")
 }
 
-/// Do a Blake2 256-bit hash and return result.
+/// Do a Blake2b 256-bit hash and return result.
+// pub(crate) only under cfg(test) so sibling test modules can verify hardcoded checksums.
+#[cfg(not(test))]
+fn blake2_256(data: &[u8]) -> [u8; 32] {
+    blake2(data)
+}
+
+#[cfg(test)]
 pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
     blake2(data)
 }
@@ -28,6 +35,11 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
 /// where `account_bytes[open_part.len()..]` is the trailing portion of the hash, used as the
 /// checksum.
 fn encode_account(open_part: &[u8]) -> AccountId32 {
+    debug_assert!(
+        open_part.len() <= 32,
+        "open_part length {} exceeds the 32-byte AccountId32 limit",
+        open_part.len()
+    );
     let mut account_bytes = blake2_256(open_part);
     account_bytes[0..open_part.len()].copy_from_slice(open_part);
     AccountId32::from(account_bytes)
@@ -265,7 +277,7 @@ pub fn decode_named_account(
 
 /// Returns `true` if the account passes the keyless checksum verification (App Agent,
 /// Transactional, or Named). Returns `false` for accounts whose checksum does not match or whose
-/// type discriminant is unknown. Internally performs a full Blake2-256 hash computation.
+/// type discriminant is unknown. Internally performs a full Blake2b-256 hash computation.
 #[must_use]
 pub fn is_keyless_account(account: &AccountId32) -> bool {
     match decode_account_info(account) {

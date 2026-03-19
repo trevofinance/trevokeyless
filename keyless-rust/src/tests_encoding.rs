@@ -152,6 +152,19 @@ mod tests {
     }
 
     #[test]
+    fn test_boundary_values_named() {
+        let name = AccountName::new(b"0000000000").unwrap();
+
+        // AppAgentId = 0
+        let account = encode_named_account(0, &name);
+        assert_eq!(decode_named_account(&account).unwrap(), (0, name));
+
+        // AppAgentId = u32::MAX
+        let account = encode_named_account(u32::MAX, &name);
+        assert_eq!(decode_named_account(&account).unwrap(), (u32::MAX, name));
+    }
+
+    #[test]
     fn test_mismatch_of_account_type() {
         let account_aa = encode_app_agent_account(1);
         assert!(
@@ -208,7 +221,8 @@ mod tests {
             "Zeroed account must not be keyless"
         );
 
-        // Tampered checksum → Regular
+        // Tampered checksum → Regular.
+        // Byte 10 is in the checksum region of an AppAgent account (open part is [0..5]).
         let mut bytes: [u8; 32] = encode_app_agent_account(1).into();
         bytes[10] ^= 0xFF;
         assert!(
@@ -219,11 +233,11 @@ mod tests {
 
     #[test]
     fn test_tampered_checksum_falls_back_to_regular() {
-        // Flip one bit in the checksum region of each account type and verify that
+        // Flip one byte in the checksum region of each account type and verify that
         // decode_account_info returns Regular (i.e. the integrity check rejects the account).
 
         let mut bytes: [u8; 32] = encode_app_agent_account(42).into();
-        bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5])
+        bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5], checksum starts at [5])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
@@ -233,7 +247,7 @@ mod tests {
         );
 
         let mut bytes: [u8; 32] = encode_transactional_account(42, 7).into();
-        bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9])
+        bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9], checksum starts at [9])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
@@ -244,13 +258,65 @@ mod tests {
 
         let mut bytes: [u8; 32] =
             encode_named_account(42, &AccountName::new(b"test123456").unwrap()).into();
-        bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15])
+        bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15], checksum starts at [15])
         assert_eq!(
             decode_account_info(&AccountId32::from(bytes)),
             BlockchainAccountInfo::Regular {
                 account_id: AccountId32::from(bytes)
             },
             "Tampered Named checksum must decode as Regular"
+        );
+    }
+
+    #[test]
+    fn test_named_decode_invalid_charset_falls_back_to_regular() {
+        // Construct a Named account with a valid checksum but name bytes that contain a character
+        // outside VALID_CHARS (0x00 = null byte). This exercises the fall-through in
+        // decode_account_info that returns Regular when AccountName::try_from fails.
+        let mut open_part = [0u8; 15];
+        open_part[0..4].copy_from_slice(&1u32.to_le_bytes()); // AppAgentId = 1
+        open_part[4] = NAMED_ACCOUNT_IDENTIFIER;
+        // Place a null byte at position 5 — not in the allowed charset.
+        open_part[5..15].copy_from_slice(b"\x00nvalid123");
+
+        let hash = blake2_256(&open_part);
+        let mut account_bytes = [0u8; 32];
+        account_bytes[0..15].copy_from_slice(&open_part);
+        account_bytes[15..32].copy_from_slice(&hash[15..32]);
+
+        let account = AccountId32::from(account_bytes);
+        assert_eq!(
+            decode_account_info(&account),
+            BlockchainAccountInfo::Regular {
+                account_id: account
+            },
+            "Named account with valid checksum but invalid charset must decode as Regular"
+        );
+        assert!(!is_keyless_account(&account));
+    }
+
+    #[test]
+    fn test_decode_regular_account() {
+        // Zeroed account: byte [4] = 0, which is not a known discriminant.
+        let account = AccountId32::from([0u8; 32]);
+        assert_eq!(
+            decode_account_info(&account),
+            BlockchainAccountInfo::Regular {
+                account_id: account
+            },
+            "Zeroed account must decode as Regular"
+        );
+
+        // Account with an unknown discriminant (4) at byte [4].
+        let mut bytes = [0u8; 32];
+        bytes[4] = 4;
+        let account = AccountId32::from(bytes);
+        assert_eq!(
+            decode_account_info(&account),
+            BlockchainAccountInfo::Regular {
+                account_id: account
+            },
+            "Unknown discriminant must decode as Regular"
         );
     }
 }

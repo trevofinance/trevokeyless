@@ -21,7 +21,7 @@
 //! ## Byte layout
 //!
 //! Every keyless account is 32 bytes. The first N bytes form the **open part** (plain-text
-//! identifiers); the remaining bytes are a truncated Blake2-256 checksum of the open part.
+//! identifiers); the remaining bytes are a truncated Blake2b-256 checksum of the open part.
 //! Decoding reads the open part, recomputes the checksum, and compares it — an account that
 //! fails this check is treated as a regular (non-keyless) account.
 //!
@@ -55,7 +55,7 @@
 //! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
 //! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
-//!   (performs a full Blake2-256 hash internally).
+//!   (performs a full Blake2b-256 hash internally).
 //!
 //! # Examples
 //!
