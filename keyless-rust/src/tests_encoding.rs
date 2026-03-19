@@ -309,13 +309,28 @@ mod tests {
         // account_id()
         assert_eq!(decode_account_info(&aa_account).account_id(), aa_account);
         assert_eq!(decode_account_info(&ta_account).account_id(), ta_account);
-        assert_eq!(decode_account_info(&named_account).account_id(), named_account);
-        assert_eq!(decode_account_info(&regular_account).account_id(), regular_account);
+        assert_eq!(
+            decode_account_info(&named_account).account_id(),
+            named_account
+        );
+        assert_eq!(
+            decode_account_info(&regular_account).account_id(),
+            regular_account
+        );
 
         // app_agent_id()
-        assert_eq!(decode_account_info(&aa_account).app_agent_id(), Some(app_agent_id));
-        assert_eq!(decode_account_info(&ta_account).app_agent_id(), Some(app_agent_id));
-        assert_eq!(decode_account_info(&named_account).app_agent_id(), Some(app_agent_id));
+        assert_eq!(
+            decode_account_info(&aa_account).app_agent_id(),
+            Some(app_agent_id)
+        );
+        assert_eq!(
+            decode_account_info(&ta_account).app_agent_id(),
+            Some(app_agent_id)
+        );
+        assert_eq!(
+            decode_account_info(&named_account).app_agent_id(),
+            Some(app_agent_id)
+        );
         assert_eq!(decode_account_info(&regular_account).app_agent_id(), None);
 
         // is_keyless_account()
