@@ -21,7 +21,7 @@
 //! ## Byte layout
 //!
 //! Every keyless account is 32 bytes. The first N bytes form the **open part** (plain-text
-//! identifiers); the remaining bytes are a truncated Blake2-256 checksum of the open part.
+//! identifiers); the remaining bytes are a truncated Blake2b-256 checksum of the open part.
 //! Decoding reads the open part, recomputes the checksum, and compares it — an account that
 //! fails this check is treated as a regular (non-keyless) account.
 //!
@@ -54,7 +54,8 @@
 //!   App Agent account).
 //! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
 //! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
-//! - [`is_keyless_account`] — quick check for whether an account follows keyless encoding.
+//! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
+//!   (performs a full Blake2b-256 hash internally).
 //!
 //! # Examples
 //!
@@ -63,17 +64,19 @@
 //!
 //! // Encode an AppAgent root account
 //! let app_agent_id: AppAgentId = 123;
-//! let account = encode_app_agent_account(&app_agent_id);
+//! let account = encode_app_agent_account(app_agent_id);
 //!
 //! // Decode it back
-//! let decoded_id = decode_app_agent_account(account).unwrap();
+//! let decoded_id = decode_app_agent_account(&account).unwrap();
 //! assert_eq!(decoded_id, app_agent_id);
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]
 mod keyless;
 mod types;
 
+#[cfg(test)]
 mod tests_binary;
+#[cfg(test)]
 mod tests_encoding;
 
 pub use keyless::*;

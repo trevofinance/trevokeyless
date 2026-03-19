@@ -1,7 +1,7 @@
 # CLAUDE.md — trevo-keyless
 
 Pure-Rust library for encoding and decoding Trevo keyless accounts. No Substrate/frame dependency;
-only `parity-scale-codec`, `scale-info`, `blake2b_simd`, and `hex`.
+only `parity-scale-codec`, `scale-info`, and `blake2b_simd`.
 
 ## What is a keyless account?
 
@@ -52,15 +52,15 @@ Named (N=15):
   [15..=31] blake2_256(open_part)[15..=31]
 ```
 
-Implementation: `_encode_account(open_part)` computes `hash = blake2_256(open_part)` (32 bytes)
+Implementation: `encode_account(open_part)` computes `hash = blake2_256(open_part)` (32 bytes)
 then overwrites `hash[0..N]` with the open part, leaving `hash[N..]` as the stored checksum.
 
 ## Decoding / validation
 
-`decode_account_info(account)` reads byte [4] as the type discriminant, reads the open part for
-that type, recomputes the expected checksum, and compares it to the stored bytes. If the checksum
-matches, the account is decoded into the appropriate `BlockchainAccountInfo` variant. Any mismatch
-or unknown discriminant → `BlockchainAccountInfo::Regular`.
+`decode_account_info(account: &AccountId32)` reads byte [4] as the type discriminant, reads the
+open part for that type, recomputes the expected checksum, and compares it to the stored bytes. If
+the checksum matches, the account is decoded into the appropriate `BlockchainAccountInfo` variant.
+Any mismatch or unknown discriminant → `BlockchainAccountInfo::Regular`.
 
 ## AccountName
 
@@ -77,7 +77,7 @@ Well-known names used by the Trevo chain:
 src/
   lib.rs           — crate-level docs, module declarations
   types.rs         — AppAgentId, TransactionalId, AccountId32, AccountName, BlockchainAccountInfo
-  keyless.rs       — _encode_account, encode_*, decode_*, is_keyless_account
+  keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
   tests_encoding.rs — encode→decode round-trip tests
 ```
@@ -85,17 +85,15 @@ src/
 ## Public API
 
 ```rust
-// Encoding
-encode_app_agent_account(app_agent_id: &AppAgentId) -> AccountId32
-encode_transactional_account(app_agent_id: &AppAgentId, ta_id: &TransactionalId) -> AccountId32
-encode_named_account(app_agent_id: &AppAgentId, name: &AccountName) -> AccountId32
+// Encoding (AppAgentId and TransactionalId taken by value; AccountName by reference)
+encode_app_agent_account(app_agent_id: AppAgentId) -> AccountId32
+encode_transactional_account(app_agent_id: AppAgentId, ta_id: TransactionalId) -> AccountId32
+encode_named_account(app_agent_id: AppAgentId, name: &AccountName) -> AccountId32
 
-// Decoding (takes ownership of AccountId32)
-decode_account_info(account: AccountId32) -> BlockchainAccountInfo  // classifies any account
-decode_app_agent_account(account: AccountId32) -> Result<AppAgentId, String>
-decode_transactional_account(account: AccountId32) -> Result<(AppAgentId, TransactionalId), String>
-decode_named_account(account: AccountId32) -> Result<(AppAgentId, AccountName), String>
-is_keyless_account(account: AccountId32) -> bool
+// Decoding (all take &AccountId32)
+decode_account_info(account: &AccountId32) -> BlockchainAccountInfo  // classifies any account
+decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError>
+decode_transactional_account(account: &AccountId32) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError>
+decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), KeylessDecodeError>
+is_keyless_account(account: &AccountId32) -> bool
 ```
-
-Note: all decode functions take `AccountId32` **by value** (ownership), not by reference.
