@@ -27,6 +27,16 @@ from .ss58 import ss58_decode, ss58_encode
 NAMED_ADDRESS_LENGTH = 10
 SS58_FORMAT__TREVO_ASSET_HUB = 5335
 
+# Length in bytes of a blockchain account id.
+ACCOUNT_ID_LENGTH = 32
+
+# Maximum length in characters of an SS58 address of a 32-byte account id: the payload is
+# at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
+# base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
+# ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
+# whose cost grows quadratically with the input length. Mirrors the Rust implementation.
+SS58_MAX_ADDRESS_LENGTH = 50
+
 
 # Types of address identifiers
 BlockchainAddress: TypeAlias = str
@@ -44,6 +54,25 @@ class AddressType(Enum):
     Named = 3
 
 
+class AddressTypeMismatchError(ValueError):
+    """Raised by the typed decode_* functions when the address is of a different type.
+
+    Carries the expected and the actual (found) classification of the address, mirroring
+    the ``KeylessDecodeError`` of the Rust implementation. Subclasses ``ValueError`` for
+    backwards compatibility with previous releases.
+
+    Attributes:
+        expected (AddressType): The address type required by the caller.
+        found (AddressType): The actual classification of the address.
+    """
+
+    def __init__(self, expected: AddressType, found: AddressType) -> None:
+        self.expected = expected
+        self.found = found
+        article = "an" if expected is AddressType.AppAgent else "a"
+        super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found}.")
+
+
 @dataclass
 class BlockchainAddressInfo:
     address: BlockchainAddress
@@ -56,15 +85,13 @@ class BlockchainAddressInfo:
 
 def _blake2_256(data: bytes) -> bytes:
     """
-    Helper function to calculate a 32 bytes Blake2b hash for provided data, used as key for Substrate storage items
+    Calculates the 32-byte Blake2b hash of the provided data.
 
-    Parameters
-    ----------
-    data
+    Args:
+        data (bytes): The data to hash.
 
-    Returns
-    -------
-
+    Returns:
+        bytes: The 32-byte Blake2b digest.
     """
     return blake2b(data, digest_size=32).digest()
 
@@ -74,13 +101,14 @@ __allowed_chars = set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTU
 
 def _validate_address_name(name: str) -> None:
     """
-    Validates that a name contains only allowed ASCII characters.
+    Validates that a name is exactly 10 characters long and contains only allowed ASCII
+    characters (`0-9 a-z A-Z - #`).
 
     Args:
         name (str): The name to validate.
 
-    Returns:
-        bool: True if the name is valid, otherwise False.
+    Raises:
+        ValueError: If the name has a wrong length or contains invalid characters.
     """
     if len(name) != NAMED_ADDRESS_LENGTH:
         msg = "Named keyless address must be of 10 chars length"
@@ -113,15 +141,17 @@ def _decode_address_name(name_bytes: bytes) -> AddressName | None:
 
 def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddress:
     """
-    Encode an address using the given open part, open part size, and checksum size.
+    Builds a keyless account id from its open part and wraps it in an SS58 address.
+
+    The 32-byte account id is `open_part + blake2_256(open_part)[len(open_part):]` —
+    the trailing bytes of the hash serve as the checksum.
 
     Args:
-        open_part (bytes): The open part of the address.
-        open_part_size (int): Size of the open part.
-        checksum_size (int): Size of the checksum.
+        open_part (bytes): The open (plain-text) part of the account id.
+        ss58_format (int): SS58 format (network prefix) to use for the address.
 
     Returns:
-        str: Encoded address.
+        str: Encoded SS58 address.
     """
     # Calculate checksum using blake2_256
     checksum = _blake2_256(open_part)
@@ -164,12 +194,15 @@ def decode_app_agent_address(
 
     Returns:
         int: Decoded AppAgent ID.
+
+    Raises:
+        AddressTypeMismatchError: If the address is not an AppAgent address.
+        ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
     if decoding_result.address_type is not AddressType.AppAgent:
-        msg = f"Provided address is not an AppAgent address but is instance of {decoding_result.address_type}."
-        raise ValueError(msg)
+        raise AddressTypeMismatchError(AddressType.AppAgent, decoding_result.address_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of AppAgent address is None"
         raise ValueError(msg)
@@ -213,12 +246,15 @@ def decode_transactional_address(
 
     Returns:
         Tuple[int, int]: Decoded AppAgent ID and Transactional address ID.
+
+    Raises:
+        AddressTypeMismatchError: If the address is not a Transactional address.
+        ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
     if decoding_result.address_type is not AddressType.Transactional:
-        msg = f"Provided address is not a Transactional address but is instance of {decoding_result.address_type}."
-        raise ValueError(msg)
+        raise AddressTypeMismatchError(AddressType.Transactional, decoding_result.address_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of Transactional address is None"
         raise ValueError(msg)
@@ -264,12 +300,15 @@ def decode_named_address(
 
     Returns:
         Tuple[int, str]: Decoded AppAgent ID and address name.
+
+    Raises:
+        AddressTypeMismatchError: If the address is not a Named address.
+        ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
     if decoding_result.address_type is not AddressType.Named:
-        msg = f"Provided address is not a Named address but is instance of {decoding_result.address_type}."
-        raise ValueError(msg)
+        raise AddressTypeMismatchError(AddressType.Named, decoding_result.address_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of Named address is None"
         raise ValueError(msg)
@@ -280,21 +319,68 @@ def decode_named_address(
     return decoding_result.app_agent_id, decoding_result.address_name
 
 
+def _decode_account_id_bytes(blockchain_address: BlockchainAddress, ss58_format: SS58Format) -> bytes:
+    """
+    Resolves an address string to its raw 32-byte account id.
+
+    Args:
+        blockchain_address (str): SS58 address (or `0x`-prefixed 32-byte account id hex).
+        ss58_format (int): SS58 format (network prefix) the address must use; not applied
+            to raw hex input, which carries no format.
+
+    Returns:
+        bytes: The 32-byte account id.
+
+    Raises:
+        ValueError: If the input is not a valid SS58 address of a 32-byte account id in
+            the expected format, or not a valid 32-byte hex account id.
+    """
+    if blockchain_address.startswith("0x"):
+        # Raw account id passthrough; the ss58_format argument does not apply.
+        try:
+            account_id_bytes = bytes.fromhex(blockchain_address[2:])
+        except ValueError as error:
+            msg = "Invalid hex account id"
+            raise ValueError(msg) from error
+    else:
+        if len(blockchain_address) > SS58_MAX_ADDRESS_LENGTH:
+            # No valid address of a 32-byte account id is longer; rejecting early keeps
+            # the cost of base58-decoding untrusted input bounded.
+            msg = "Invalid address length"
+            raise ValueError(msg)
+        account_id = ss58_decode(blockchain_address, ss58_format)
+        account_id_bytes = bytes.fromhex(account_id[2:])
+
+    if len(account_id_bytes) != ACCOUNT_ID_LENGTH:
+        msg = f"Invalid account id length: expected {ACCOUNT_ID_LENGTH} bytes, got {len(account_id_bytes)}"
+        raise ValueError(msg)
+    return account_id_bytes
+
+
 def decode_address(
     blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
 ) -> BlockchainAddressInfo:
     """
-    Decode an encoded blockchain address.
+    Decode a blockchain address and classify it.
+
+    Accepts an SS58 address string. For backwards compatibility a raw account id in hex
+    form (`0x` followed by exactly 64 hex characters) is also accepted; such input
+    bypasses SS58 decoding — including the `ss58_format` check, which does not apply to
+    raw account bytes.
 
     Args:
-        encoded_address (str): Encoded keyless address of any type.
+        blockchain_address (str): SS58 address (or `0x`-prefixed 32-byte account id hex).
+        ss58_format (int): SS58 format (network prefix) the address must use.
 
     Returns:
-        an object with info about the address
+        BlockchainAddressInfo: an object with info about the address.
+
+    Raises:
+        ValueError: If the address is not a valid SS58 string of a 32-byte account id in
+            the expected format, or not a valid 32-byte hex account id.
     """
-    # Decode the encoded address
-    account_id = ss58_decode(blockchain_address, ss58_format)
-    account_id_bytes = bytes.fromhex(account_id[2:])
+    account_id_bytes = _decode_account_id_bytes(blockchain_address, ss58_format)
+    account_id = "0x" + account_id_bytes.hex()
 
     # Read the byte that encodes type of the address
     address_type_byte = account_id_bytes[4]
@@ -375,3 +461,25 @@ def decode_address(
         ta_id=None,
         address_name=None,
     )
+
+
+def is_keyless_address(
+    blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+) -> bool:
+    """
+    Returns True if the address passes the keyless checksum verification (AppAgent,
+    Transactional, or Named), False for any other (Regular) address.
+
+    Mirrors `is_keyless_account` of the Rust implementation.
+
+    Args:
+        blockchain_address (str): SS58 address (or `0x`-prefixed 32-byte account id hex).
+        ss58_format (int): SS58 format (network prefix) the address must use.
+
+    Returns:
+        bool: True if the address is a keyless address.
+
+    Raises:
+        ValueError: If the address cannot be decoded at all.
+    """
+    return decode_address(blockchain_address, ss58_format).address_type is not AddressType.Regular

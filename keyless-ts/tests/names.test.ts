@@ -25,7 +25,7 @@ describe("Address name", () => {
     }
   });
 
-  it("Encodes valid names correctly", () => {
+  it("Rejects invalid names", () => {
     const invalid_names = [
       "example!23",
       "name@12345",

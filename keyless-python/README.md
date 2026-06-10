@@ -91,3 +91,28 @@ expected_data = trevokeyless.BlockchainAddressInfo(
 )
 assert decoded_data == expected_data
 ```
+
+### Check whether an address is keyless
+
+``` python3
+import trevokeyless
+
+assert trevokeyless.is_keyless_address(trevokeyless.encode_app_agent_address(123))
+
+# Alice's well-known development account is a regular address
+assert not trevokeyless.is_keyless_address("ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4")
+```
+
+## Accepted input and errors
+
+The decoding functions accept an SS58 address string of a 32-byte account id in the
+expected SS58 format (5335, the Trevo asset hub, by default). For backwards
+compatibility, a raw account id in hex form (`0x` followed by exactly 64 hex characters)
+is also accepted; raw account bytes carry no SS58 format, so the `ss58_format` argument
+does not apply to such input.
+
+Any other input — wrong SS58 format or checksum, account ids that are not exactly
+32 bytes, malformed base58 or hex — raises `ValueError`. The typed decoders
+(`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
+raise `AddressTypeMismatchError` (a `ValueError` subclass carrying the `expected` and
+`found` address types) when the address decodes to a different type.

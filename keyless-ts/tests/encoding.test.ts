@@ -1,5 +1,4 @@
-import { blake2AsU8a } from "@polkadot/util-crypto";
-import { encodeAddress } from "@polkadot/keyring";
+import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
 import {
   encodeAppAgent,
   encodeTransactional,

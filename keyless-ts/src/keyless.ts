@@ -1,9 +1,9 @@
-import { blake2AsU8a } from "@polkadot/util-crypto";
 import {
+  blake2AsU8a,
   decodeAddress as decodeAddressSs58,
   encodeAddress,
-} from "@polkadot/keyring";
-import { strict as assert } from "assert";
+} from "@polkadot/util-crypto";
+import { hexToU8a, u8aConcat, u8aEq, u8aToHex } from "@polkadot/util";
 
 const APP_AGENT_ADDRESS_IDENTIFIER = 1;
 const TRANSACTIONAL_ADDRESS_IDENTIFIER = 2;
@@ -12,11 +12,49 @@ const NAMED_ADDRESS_BYTES_LENGTH = 10;
 const ADDRESS_NAME_ALLOWED_CHARS = /^[0-9a-zA-Z\-#]+$/;
 const SS58_FORMAT__TREVO_ASSET_HUB = 5335;
 
+// Length in bytes of a blockchain account id.
+const ACCOUNT_ID_BYTES_LENGTH = 32;
+
+// Maximum length in characters of an SS58 address of a 32-byte account id: the payload
+// is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
+// base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
+// ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
+// whose cost grows quadratically with the input length. Mirrors the Rust implementation.
+const SS58_MAX_ADDRESS_LENGTH = 50;
+
+// A raw account id accepted by decodeAddress: 0x followed by exactly 64 hex characters.
+const HEX_ACCOUNT_ID = /^0x[0-9a-fA-F]{64}$/;
+
+const U32_MAX = 4294967295;
+
 enum AddressType {
   Regular = 0,
   AppAgent = 1,
   Transactional = 2,
   Named = 3,
+}
+
+/**
+ * Thrown by the typed decode functions when the address is of a different type.
+ *
+ * Carries the expected and the actual (found) classification of the address, mirroring
+ * the `KeylessDecodeError` of the Rust implementation. The message is unchanged from
+ * previous releases for backwards compatibility.
+ */
+class AddressTypeMismatchError extends Error {
+  readonly expected: AddressType;
+
+  readonly found: AddressType;
+
+  constructor(expected: AddressType, found: AddressType) {
+    const article = expected === AddressType.AppAgent ? "an" : "a";
+    super(
+      `Provided address is not ${article} ${AddressType[expected]} address but is instance of ${AddressType[found]}`,
+    );
+    this.name = "AddressTypeMismatchError";
+    this.expected = expected;
+    this.found = found;
+  }
 }
 
 // Represents the information related to a blockchain address.
@@ -30,17 +68,53 @@ interface BlockchainAddressInfo {
 }
 
 /**
- * Validates that a name contains only allowed ASCII characters.
+ * Encodes a u32 value to its 4-byte little-endian representation.
+ *
+ * @param {number} value - The value to encode.
+ * @param {string} label - Name of the value, used in the error message.
+ * @returns {Uint8Array} - The 4 little-endian bytes.
+ * @throws {RangeError} - Thrown if the value is not an integer in [0, 4294967295].
+ */
+function u32ToLeBytes(value: number, label: string): Uint8Array {
+  if (!Number.isInteger(value) || value < 0 || value > U32_MAX) {
+    throw new RangeError(
+      `${label} must be an integer in [0, ${U32_MAX}], got ${value}`,
+    );
+  }
+  const bytes = new Uint8Array(4);
+  new DataView(bytes.buffer).setUint32(0, value, true);
+  return bytes;
+}
+
+/**
+ * Reads a u32 from 4 little-endian bytes at the given offset of an account id.
+ *
+ * @param {Uint8Array} bytes - The bytes to read from.
+ * @param {number} offset - Offset of the little-endian u32.
+ * @returns {number} - The decoded value.
+ */
+function u32FromLeBytes(bytes: Uint8Array, offset: number): number {
+  return new DataView(
+    bytes.buffer,
+    bytes.byteOffset,
+    bytes.byteLength,
+  ).getUint32(offset, true);
+}
+
+/**
+ * Validates that a name is exactly 10 characters long and contains only allowed ASCII
+ * characters (`0-9 a-z A-Z - #`).
  *
  * @param {string} name - The name to validate.
- * @returns {boolean} - True if the name is valid
+ * @throws {Error} - Thrown if the name has a wrong length or contains invalid characters.
  */
 function validateAddressName(name: string): void {
-  assert(name.length === NAMED_ADDRESS_BYTES_LENGTH, "Name size not supported");
-  assert(
-    ADDRESS_NAME_ALLOWED_CHARS.test(name),
-    "Name contains invalid characters",
-  );
+  if (name.length !== NAMED_ADDRESS_BYTES_LENGTH) {
+    throw new Error("Name size not supported");
+  }
+  if (!ADDRESS_NAME_ALLOWED_CHARS.test(name)) {
+    throw new Error("Name contains invalid characters");
+  }
 }
 
 /**
@@ -56,10 +130,29 @@ function validateAddressName(name: string): void {
 function isValidAddressNameBytes(nameBytes: Uint8Array): boolean {
   return (
     nameBytes.length === NAMED_ADDRESS_BYTES_LENGTH &&
-    Array.from(nameBytes).every((byte) =>
+    nameBytes.every((byte) =>
       ADDRESS_NAME_ALLOWED_CHARS.test(String.fromCharCode(byte)),
     )
   );
+}
+
+/**
+ * Builds a keyless account id from its open part and wraps it in an SS58 address.
+ *
+ * The 32-byte account id is `openPart ++ blake2_256(openPart)[openPart.length..]` —
+ * the trailing bytes of the hash serve as the checksum.
+ *
+ * @param {Uint8Array} openPart - The open (plain-text) part of the account id.
+ * @param {number} ss58Format - SS58 format (network prefix) to use for the address.
+ * @returns {string} - The encoded SS58 address.
+ */
+function encodeKeylessAccount(
+  openPart: Uint8Array,
+  ss58Format: number,
+): string {
+  const checksum = blake2AsU8a(openPart);
+  const accountId = u8aConcat(openPart, checksum.slice(openPart.length));
+  return encodeAddress(accountId, ss58Format);
 }
 
 /**
@@ -72,41 +165,31 @@ function encodeAppAgent(
   appAgentId: number,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): string {
-  const appAgentIdBytes = Buffer.alloc(4);
-  appAgentIdBytes.writeUInt32LE(appAgentId, 0);
-
-  const appAgentIdBuffer = Buffer.from([APP_AGENT_ADDRESS_IDENTIFIER]);
-  const openPart = Buffer.concat([appAgentIdBytes, appAgentIdBuffer]);
-  const checksum = blake2AsU8a(openPart);
-  const address = Buffer.concat([openPart, checksum.slice(openPart.length)]);
-
-  return encodeAddress(address, ss58Format);
+  const openPart = u8aConcat(
+    u32ToLeBytes(appAgentId, "appAgentId"),
+    Uint8Array.of(APP_AGENT_ADDRESS_IDENTIFIER),
+  );
+  return encodeKeylessAccount(openPart, ss58Format);
 }
 
 /**
- * Encodes a transactional agent address and returns it.
+ * Encodes a transactional address and returns it.
  *
  * @param {number} appAgentId - The ID of the application agent.
- * @param {number} taId - The ID of the transactional agent.
- * @returns {string} - The encoded transactional agent address.
+ * @param {number} taId - The ID of the transactional address.
+ * @returns {string} - The encoded transactional address.
  */
 function encodeTransactional(
   appAgentId: number,
   taId: number,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): string {
-  const appAgentIdBytes = Buffer.alloc(4);
-  appAgentIdBytes.writeUInt32LE(appAgentId, 0);
-
-  const taIdBytes = Buffer.alloc(4);
-  taIdBytes.writeUInt32LE(taId, 0);
-
-  const taIdBuffer = Buffer.from([TRANSACTIONAL_ADDRESS_IDENTIFIER]);
-  const openPart = Buffer.concat([appAgentIdBytes, taIdBuffer, taIdBytes]);
-  const checksum = blake2AsU8a(openPart);
-  const address = Buffer.concat([openPart, checksum.slice(openPart.length)]);
-
-  return encodeAddress(address, ss58Format);
+  const openPart = u8aConcat(
+    u32ToLeBytes(appAgentId, "appAgentId"),
+    Uint8Array.of(TRANSACTIONAL_ADDRESS_IDENTIFIER),
+    u32ToLeBytes(taId, "taId"),
+  );
+  return encodeKeylessAccount(openPart, ss58Format);
 }
 
 /**
@@ -123,44 +206,70 @@ function encodeNamed(
 ): string {
   validateAddressName(name);
 
-  const appAgentIdBytes = Buffer.alloc(4);
-  appAgentIdBytes.writeUInt32LE(appAgentId, 0);
-
-  const nameBytes = Buffer.from(name);
-
-  const taIdBuffer = Buffer.from([NAMED_ADDRESS_IDENTIFIER]);
-  const openPart = Buffer.concat([appAgentIdBytes, taIdBuffer, nameBytes]);
-  const checksum = blake2AsU8a(openPart);
-  const address = Buffer.concat([openPart, checksum.slice(openPart.length)]);
-
-  return encodeAddress(address, ss58Format);
-}
-
-function isEqualArrays(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
+  // The name is validated ASCII, so the char codes are exactly the encoded bytes.
+  const nameBytes = Uint8Array.from(name, (c) => c.charCodeAt(0));
+  const openPart = u8aConcat(
+    u32ToLeBytes(appAgentId, "appAgentId"),
+    Uint8Array.of(NAMED_ADDRESS_IDENTIFIER),
+    nameBytes,
+  );
+  return encodeKeylessAccount(openPart, ss58Format);
 }
 
 /**
- * Decodes a keyless address and determines its type.
+ * Resolves an address string to its raw 32-byte account id.
+ *
+ * @param {string} address - SS58 address (or `0x`-prefixed 32-byte account id hex).
+ * @param {number} ss58Format - SS58 format (network prefix) the address must use; not
+ *   applied to raw hex input, which carries no format.
+ * @returns {Uint8Array} - The 32-byte account id.
+ * @throws {Error} - Thrown if the input is not a valid SS58 address of a 32-byte account
+ *   id in the expected format, or not a valid 32-byte hex account id.
+ */
+function decodeAccountId(address: string, ss58Format: number): Uint8Array {
+  if (address.startsWith("0x")) {
+    // Raw account id passthrough; the ss58Format argument does not apply.
+    if (!HEX_ACCOUNT_ID.test(address)) {
+      throw new Error(
+        "Invalid hex account id: expected 0x followed by 64 hex characters",
+      );
+    }
+    return hexToU8a(address);
+  }
+
+  if (address.length > SS58_MAX_ADDRESS_LENGTH) {
+    // No valid address of a 32-byte account id is longer; rejecting early keeps the
+    // cost of base58-decoding untrusted input bounded.
+    throw new Error("Invalid address length");
+  }
+  const accountId = decodeAddressSs58(address, false, ss58Format);
+  if (accountId.length !== ACCOUNT_ID_BYTES_LENGTH) {
+    throw new Error(
+      `Invalid account id length: expected ${ACCOUNT_ID_BYTES_LENGTH} bytes, got ${accountId.length}`,
+    );
+  }
+  return accountId;
+}
+
+/**
+ * Decodes a blockchain address and classifies it.
+ *
+ * Accepts an SS58 address string. For backwards compatibility a raw account id in hex
+ * form (`0x` followed by exactly 64 hex characters) is also accepted; such input
+ * bypasses SS58 decoding — including the ss58Format check, which does not apply to raw
+ * account bytes.
  *
  * @param {string} address - The blockchain address to decode.
  * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
- * @throws {Error} - Thrown if the address cannot be decoded or is of an unsupported type.
+ * @throws {Error} - Thrown if the address is not a valid SS58 string of a 32-byte
+ *   account id in the expected format, or not a valid 32-byte hex account id.
  */
 function decodeAddress(
   address: string,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): BlockchainAddressInfo {
-  const accountId = decodeAddressSs58(address, false, ss58Format);
-  const accountIdBuffer = Buffer.from(accountId);
+  const accountId = decodeAccountId(address, ss58Format);
+  const accountIdHex = u8aToHex(accountId);
 
   // Read the byte that encodes type of the address
   const addressTypeByte = accountId[4];
@@ -171,13 +280,13 @@ function decodeAddress(
     const openPart = accountId.slice(0, openPartSize);
     const checksum = accountId.slice(openPartSize);
     const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    if (isEqualArrays(checksum, checksumCalculated)) {
+    if (u8aEq(checksum, checksumCalculated)) {
       // Extract and decode appAgentId
-      const appAgentId = accountIdBuffer.subarray(0, 4).readUint32LE(0);
+      const appAgentId = u32FromLeBytes(accountId, 0);
 
       return {
         address,
-        accountId: `0x${accountIdBuffer.toString("hex")}`,
+        accountId: accountIdHex,
         addressType: AddressType.AppAgent,
         appAgentId,
         taId: null,
@@ -192,14 +301,14 @@ function decodeAddress(
     const openPart = accountId.slice(0, openPartSize);
     const checksum = accountId.slice(openPartSize);
     const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    if (isEqualArrays(checksum, checksumCalculated)) {
-      // Extract and decode appAgentId_bytes and taId_bytes
-      const appAgentId = accountIdBuffer.subarray(0, 4).readUint32LE(0);
-      const taId = accountIdBuffer.subarray(5, 9).readUint32LE(0);
+    if (u8aEq(checksum, checksumCalculated)) {
+      // Extract and decode appAgentId and taId
+      const appAgentId = u32FromLeBytes(accountId, 0);
+      const taId = u32FromLeBytes(accountId, 5);
 
       return {
         address,
-        accountId: `0x${accountIdBuffer.toString("hex")}`,
+        accountId: accountIdHex,
         addressType: AddressType.Transactional,
         appAgentId,
         taId,
@@ -219,16 +328,16 @@ function decodeAddress(
     // implementation.
     const nameBytes = accountId.slice(5, 15);
     if (
-      isEqualArrays(checksum, checksumCalculated) &&
+      u8aEq(checksum, checksumCalculated) &&
       isValidAddressNameBytes(nameBytes)
     ) {
-      // Extract and decode appAgentId and address_name
-      const appAgentId = accountIdBuffer.subarray(0, 4).readUint32LE(0);
-      const addressName = accountIdBuffer.subarray(5, 15).toString("ascii");
+      // Extract and decode appAgentId and addressName
+      const appAgentId = u32FromLeBytes(accountId, 0);
+      const addressName = String.fromCharCode(...nameBytes);
 
       return {
         address,
-        accountId: `0x${accountIdBuffer.toString("hex")}`,
+        accountId: accountIdHex,
         addressType: AddressType.Named,
         appAgentId,
         taId: null,
@@ -239,7 +348,7 @@ function decodeAddress(
 
   return {
     address,
-    accountId: `0x${accountIdBuffer.toString("hex")}`,
+    accountId: accountIdHex,
     addressType: AddressType.Regular,
     appAgentId: null,
     taId: null,
@@ -250,8 +359,9 @@ function decodeAddress(
 /**
  * Decodes an application agent address.
  *
- * @param {string} address
+ * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
  * @returns {number} - The ID of the application agent.
+ * @throws {AddressTypeMismatchError} - Thrown if the address is not an AppAgent address.
  */
 function decodeAppAgent(
   address: string,
@@ -260,8 +370,9 @@ function decodeAppAgent(
   const decodingResult = decodeAddress(address, ss58Format);
 
   if (decodingResult.addressType !== AddressType.AppAgent) {
-    throw new Error(
-      `Provided address is not an AppAgent address but is instance of ${AddressType[decodingResult.addressType]}`,
+    throw new AddressTypeMismatchError(
+      AddressType.AppAgent,
+      decodingResult.addressType,
     );
   }
   if (
@@ -284,8 +395,10 @@ interface TransactionalAddressId {
 /**
  * Decodes a transactional address.
  *
- * @param {string} address - The JSON representation of the encoded transactional address.
- * @returns {Object} - An object containing the IDs of the app agent and transactional agent.
+ * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
+ * @returns {TransactionalAddressId} - An object containing the IDs of the app agent and
+ *   transactional address.
+ * @throws {AddressTypeMismatchError} - Thrown if the address is not a Transactional address.
  */
 function decodeTransactional(
   address: string,
@@ -294,8 +407,9 @@ function decodeTransactional(
   const decodingResult = decodeAddress(address, ss58Format);
 
   if (decodingResult.addressType !== AddressType.Transactional) {
-    throw new Error(
-      `Provided address is not a Transactional address but is instance of ${AddressType[decodingResult.addressType]}`,
+    throw new AddressTypeMismatchError(
+      AddressType.Transactional,
+      decodingResult.addressType,
     );
   }
   if (
@@ -326,8 +440,10 @@ interface NamedAddressId {
 /**
  * Decodes a named address.
  *
- * @param {string} address - The JSON representation of the encoded named address.
- * @returns {BlockchainAddressInfo} - An object containing the IDs of the application agent and name.
+ * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
+ * @returns {NamedAddressId} - An object containing the ID of the application agent and
+ *   the address name.
+ * @throws {AddressTypeMismatchError} - Thrown if the address is not a Named address.
  */
 function decodeNamed(
   address: string,
@@ -336,8 +452,9 @@ function decodeNamed(
   const decodingResult = decodeAddress(address, ss58Format);
 
   if (decodingResult.addressType !== AddressType.Named) {
-    throw new Error(
-      `Provided address is not a Named address but is instance of ${AddressType[decodingResult.addressType]}`,
+    throw new AddressTypeMismatchError(
+      AddressType.Named,
+      decodingResult.addressType,
     );
   }
   if (
@@ -363,8 +480,26 @@ function decodeNamed(
   };
 }
 
+/**
+ * Returns true if the address passes the keyless checksum verification (AppAgent,
+ * Transactional, or Named), false for any other (Regular) address.
+ *
+ * Mirrors `is_keyless_account` of the Rust implementation.
+ *
+ * @param {string} address - The SS58 address (or 32-byte hex account id) to check.
+ * @returns {boolean} - True if the address is a keyless address.
+ * @throws {Error} - Thrown if the address cannot be decoded at all.
+ */
+function isKeylessAddress(
+  address: string,
+  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+): boolean {
+  return decodeAddress(address, ss58Format).addressType !== AddressType.Regular;
+}
+
 export {
   AddressType,
+  AddressTypeMismatchError,
   BlockchainAddressInfo,
   TransactionalAddressId,
   NamedAddressId,
@@ -375,5 +510,6 @@ export {
   decodeTransactional,
   decodeNamed,
   decodeAddress,
+  isKeylessAddress,
   SS58_FORMAT__TREVO_ASSET_HUB,
 };

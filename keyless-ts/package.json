@@ -24,13 +24,8 @@
     "prepublishOnly": "tsc && rollup -c"
   },
   "dependencies": {
-    "@polkadot/keyring": "^12.6.2",
-    "@polkadot/types": "^10.12.6",
     "@polkadot/util": "^12.6.2",
-    "@polkadot/util-crypto": "^12.6.2",
-    "assert": "^2.1.0",
-    "blake2b": "^2.1.4",
-    "blakejs": "^1.2.1"
+    "@polkadot/util-crypto": "^12.6.2"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

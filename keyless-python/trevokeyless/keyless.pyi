@@ -7,6 +7,8 @@ from .ss58 import ss58_encode as ss58_encode
 
 NAMED_ADDRESS_LENGTH: int
 SS58_FORMAT__TREVO_ASSET_HUB: int
+ACCOUNT_ID_LENGTH: int
+SS58_MAX_ADDRESS_LENGTH: int
 BlockchainAddress: TypeAlias = str
 BlockchainAccountId: TypeAlias = str
 AppAgentId: TypeAlias = int
@@ -19,6 +21,11 @@ class AddressType(Enum):
     AppAgent = 1
     Transactional = 2
     Named = 3
+
+class AddressTypeMismatchError(ValueError):
+    expected: AddressType
+    found: AddressType
+    def __init__(self, expected: AddressType, found: AddressType) -> None: ...
 
 @dataclass
 class BlockchainAddressInfo:
@@ -53,3 +60,4 @@ def decode_named_address(
     encoded_address: BlockchainAddress, ss58_format: SS58Format = ...
 ) -> tuple[AppAgentId, AddressName]: ...
 def decode_address(blockchain_address: BlockchainAddress, ss58_format: SS58Format = ...) -> BlockchainAddressInfo: ...
+def is_keyless_address(blockchain_address: BlockchainAddress, ss58_format: SS58Format = ...) -> bool: ...

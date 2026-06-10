@@ -53,6 +53,14 @@ def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
 
     address_decoded = base58.b58decode(address)
 
+    if len(address_decoded) < 2:
+        raise ValueError("Invalid address length")
+
+    if address_decoded[0] & 0b1000_0000:
+        # Per the SS58 specification the first byte must be in 0..=63 (single-byte format)
+        # or 64..=127 (two-byte format); first bytes 128..=255 are invalid.
+        raise ValueError("Invalid SS58 format prefix")
+
     if address_decoded[0] & 0b0100_0000:
         ss58_format_length = 2
         ss58_format = ((address_decoded[0] & 0b0011_1111) << 2) | (address_decoded[1] >> 6) | \
@@ -181,6 +189,14 @@ def get_ss58_format(ss58_address: str) -> int:
     int
     """
     address_decoded = base58.b58decode(ss58_address)
+
+    if len(address_decoded) < 2:
+        raise ValueError("Invalid address length")
+
+    if address_decoded[0] & 0b1000_0000:
+        # Per the SS58 specification the first byte must be in 0..=63 (single-byte format)
+        # or 64..=127 (two-byte format); first bytes 128..=255 are invalid.
+        raise ValueError("Invalid SS58 format prefix")
 
     if address_decoded[0] & 0b0100_0000:
         ss58_format = ((address_decoded[0] & 0b0011_1111) << 2) | (address_decoded[1] >> 6) | \

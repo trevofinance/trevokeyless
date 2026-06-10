@@ -1,11 +1,14 @@
 # ruff: noqa: I001
 
 from trevokeyless.keyless import (
+    ACCOUNT_ID_LENGTH,
     NAMED_ADDRESS_LENGTH,
     SS58_FORMAT__TREVO_ASSET_HUB,
+    SS58_MAX_ADDRESS_LENGTH,
     BlockchainAddress,
     BlockchainAccountId,
     AddressType,
+    AddressTypeMismatchError,
     AppAgentId,
     TransactionalAddressId,
     AddressName,
@@ -18,13 +21,17 @@ from trevokeyless.keyless import (
     encode_named_address,
     decode_named_address,
     decode_address,
+    is_keyless_address,
 )
 
 __all__ = [
+    "ACCOUNT_ID_LENGTH",
     "NAMED_ADDRESS_LENGTH",
     "SS58_FORMAT__TREVO_ASSET_HUB",
+    "SS58_MAX_ADDRESS_LENGTH",
     "AddressName",
     "AddressType",
+    "AddressTypeMismatchError",
     "AppAgentId",
     "BlockchainAccountId",
     "BlockchainAddress",
@@ -38,4 +45,5 @@ __all__ = [
     "encode_app_agent_address",
     "encode_named_address",
     "encode_transactional_address",
+    "is_keyless_address",
 ]
