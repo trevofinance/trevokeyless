@@ -53,19 +53,6 @@ class BlockchainAddressInfo:
     ta_id: TransactionalAddressId | None
     address_name: AddressName | None
 
-    def __eq__(self: "BlockchainAddressInfo", value: object) -> bool:
-        if not isinstance(value, BlockchainAddressInfo):
-            return False
-
-        return (
-            self.address == value.address
-            and self.account_id == value.account_id
-            and self.address_type == value.address_type
-            and self.app_agent_id == value.app_agent_id
-            and self.ta_id == value.ta_id
-            and self.address_name == value.address_name
-        )
-
 
 def _blake2_256(data: bytes) -> bytes:
     """
@@ -102,6 +89,26 @@ def _validate_address_name(name: str) -> None:
     if not all(c in __allowed_chars for c in name):
         msg = "Address name contains invalid characters"
         raise ValueError(msg)
+
+
+def _decode_address_name(name_bytes: bytes) -> AddressName | None:
+    """
+    Decodes the raw name bytes of a Named address, validating the character set.
+
+    Anyone can construct an account id that carries a valid checksum over arbitrary name
+    bytes (no private key is needed), so the name bytes must be validated during decoding.
+
+    Args:
+        name_bytes (bytes): The raw 10 name bytes of the Named address.
+
+    Returns:
+        str | None: The decoded name, or None if the bytes are not a valid address name.
+    """
+    if len(name_bytes) != NAMED_ADDRESS_LENGTH:
+        return None
+    if not all(chr(b) in __allowed_chars for b in name_bytes):
+        return None
+    return name_bytes.decode("ascii")
 
 
 def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddress:
@@ -341,20 +348,24 @@ def decode_address(
         checksum = account_id_bytes[open_part_size:]
         checksum_calculated = _blake2_256(open_part)[open_part_size:]
         if checksum == checksum_calculated:
-            # Extract and decode app_agent_id and address_name
+            # Extract and decode app_agent_id and address_name.
+            # The name bytes must additionally pass charset validation: an address with a
+            # valid checksum over invalid name bytes is classified as Regular, in line with
+            # the Rust implementation.
             app_agent_id_bytes = account_id_bytes[:4]
             name_bytes = account_id_bytes[5:15]
             app_agent_id = int.from_bytes(app_agent_id_bytes, byteorder="little")
-            address_name = name_bytes.decode()
+            address_name = _decode_address_name(name_bytes)
 
-            return BlockchainAddressInfo(
-                address=blockchain_address,
-                account_id=account_id,
-                address_type=AddressType.Named,
-                app_agent_id=app_agent_id,
-                ta_id=None,
-                address_name=address_name,
-            )
+            if address_name is not None:
+                return BlockchainAddressInfo(
+                    address=blockchain_address,
+                    account_id=account_id,
+                    address_type=AddressType.Named,
+                    app_agent_id=app_agent_id,
+                    ta_id=None,
+                    address_name=address_name,
+                )
 
     return BlockchainAddressInfo(
         address=blockchain_address,

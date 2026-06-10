@@ -1,6 +1,8 @@
 import unittest
+from hashlib import blake2b
 
 import trevokeyless
+from trevokeyless.ss58 import ss58_encode
 
 
 class TestKeylessAddresses(unittest.TestCase):
@@ -123,6 +125,41 @@ class TestKeylessAddresses(unittest.TestCase):
             expected_address_info,
             "Couldn't decode Named address to address info.",
         )
+
+    def test_named_address_with_invalid_charset_decodes_as_regular(self: "TestKeylessAddresses") -> None:
+        ss58_format = 5335
+
+        # Anyone can construct an account id that carries a valid checksum over arbitrary
+        # name bytes - no private key is needed. Such an address must decode as Regular,
+        # not as Named with a malformed name (and must not raise UnicodeDecodeError).
+        invalid_names = [
+            b"\x00nvalid123",  # control character
+            b"\xffnvalid123",  # not valid UTF-8
+            b"invalid@12",  # printable ASCII outside the allowed set
+        ]
+        for invalid_name_bytes in invalid_names:
+            open_part = (
+                (1).to_bytes(4, byteorder="little") + bytes([trevokeyless.AddressType.Named.value]) + invalid_name_bytes
+            )
+            checksum = blake2b(open_part, digest_size=32).digest()
+            account_id_bytes = open_part + checksum[len(open_part) :]
+            address = ss58_encode(account_id_bytes, ss58_format)
+
+            decoded_address_info = trevokeyless.decode_address(address, ss58_format)
+            self.assertEqual(
+                decoded_address_info.address_type,
+                trevokeyless.AddressType.Regular,
+                f"Named address with invalid name bytes {invalid_name_bytes!r} must decode as Regular.",
+            )
+            self.assertIsNone(decoded_address_info.app_agent_id)
+            self.assertIsNone(decoded_address_info.address_name)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "^Provided address is not a Named address but is instance of AddressType.Regular.$",
+                msg="Named address with invalid name bytes must not decode as a Named address.",
+            ):
+                trevokeyless.decode_named_address(address, ss58_format)
 
     def test_mismatch_of_address_type(self: "TestKeylessAddresses") -> None:
         ss58_format = 5335
