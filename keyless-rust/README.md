@@ -48,4 +48,7 @@ assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
   `from_ss58check*`) with the Trevo format `SS58_FORMAT_TREVO_ASSET_HUB` (5335). Works in
   `no_std` environments but requires an allocator.
 - `serde` — serde support (implies `ss58`): `AccountId32` (de)serializes as an SS58 address
-  string in the Trevo format, `AccountName` as a string.
+  string in the Trevo format, `AccountName` as a string. Deserializing `BlockchainAccountInfo`
+  validates that the embedded identifiers match the account id. Its JSON shape is the Rust
+  enum representation and is not interchangeable with the info objects of the Python and
+  TypeScript libraries — SS58 address strings are the cross-language interchange format.

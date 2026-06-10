@@ -140,6 +140,13 @@ impl AccountName {
         &self.0
     }
 
+    /// Returns the name as a string slice.
+    ///
+    /// All allowed characters are ASCII, so the conversion never fails.
+    pub fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII")
+    }
+
     /// Returns `true` if the name begins with `prefix`.
     pub fn starts_with(&self, prefix: &[u8]) -> bool {
         self.0.starts_with(prefix)
@@ -198,10 +205,7 @@ impl core::str::FromStr for AccountName {
 
 impl core::fmt::Display for AccountName {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        // All allowed characters are ASCII, so this conversion is always valid.
-        f.write_str(
-            core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII"),
-        )
+        f.write_str(self.as_str())
     }
 }
 
@@ -221,9 +225,7 @@ impl DecodeWithMemTracking for AccountName {}
 #[cfg(feature = "serde")]
 impl serde::Serialize for AccountName {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(
-            core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII"),
-        )
+        serializer.serialize_str(self.as_str())
     }
 }
 
@@ -269,8 +271,56 @@ impl core::fmt::Display for AccountNameError {
     }
 }
 
+/// Classification of a blockchain account, as determined by
+/// [`decode_account_info`](crate::decode_account_info).
+///
+/// This is the Rust counterpart of the `AddressType` enum of the Python and TypeScript
+/// trevo-keyless libraries; the variant order (Regular = 0, AppAgent = 1, Transactional = 2,
+/// Named = 3) matches their numeric values, so the keyless variants coincide with the type
+/// discriminant stored at byte `[4]` of a keyless account.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum AccountType {
+    /// A regular account: no keyless identifiers are embedded in its bytes.
+    Regular,
+    /// The root keyless account of an App Agent.
+    AppAgent,
+    /// A transactional keyless sub-account of an App Agent.
+    Transactional,
+    /// A named keyless sub-account of an App Agent.
+    Named,
+}
+
+impl core::fmt::Display for AccountType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Regular => "Regular",
+            Self::AppAgent => "AppAgent",
+            Self::Transactional => "Transactional",
+            Self::Named => "Named",
+        })
+    }
+}
+
 /// Error returned by the typed `decode_*` functions when the account is not of the expected
 /// keyless variant.
+///
+/// Each variant carries the actual classification of the account in its `found` field, as
+/// determined by [`decode_account_info`](crate::decode_account_info).
 #[derive(
     Clone,
     Copy,
@@ -287,11 +337,20 @@ impl core::fmt::Display for AccountNameError {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeylessDecodeError {
     /// The account does not decode as an App Agent root account.
-    NotAnAppAgentAccount,
+    NotAnAppAgentAccount {
+        /// The actual classification of the account.
+        found: AccountType,
+    },
     /// The account does not decode as a Transactional account.
-    NotATransactionalAccount,
+    NotATransactionalAccount {
+        /// The actual classification of the account.
+        found: AccountType,
+    },
     /// The account does not decode as a Named account.
-    NotANamedAccount,
+    NotANamedAccount {
+        /// The actual classification of the account.
+        found: AccountType,
+    },
 }
 
 #[cfg(feature = "std")]
@@ -300,9 +359,18 @@ impl std::error::Error for KeylessDecodeError {}
 impl core::fmt::Display for KeylessDecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::NotAnAppAgentAccount => f.write_str("Account is not an App Agent root account"),
-            Self::NotATransactionalAccount => f.write_str("Account is not a Transactional account"),
-            Self::NotANamedAccount => f.write_str("Account is not a Named account"),
+            Self::NotAnAppAgentAccount { found } => {
+                write!(
+                    f,
+                    "Account is not an App Agent root account (found: {found})"
+                )
+            }
+            Self::NotATransactionalAccount { found } => {
+                write!(f, "Account is not a Transactional account (found: {found})")
+            }
+            Self::NotANamedAccount { found } => {
+                write!(f, "Account is not a Named account (found: {found})")
+            }
         }
     }
 }
@@ -312,6 +380,24 @@ impl core::fmt::Display for KeylessDecodeError {
 /// Returned by [`decode_account_info`](crate::decode_account_info). The caller can
 /// pattern-match on this enum to determine whether an account is a regular (non-keyless)
 /// account or one of the three Trevo keyless variants, and to extract the embedded identifiers.
+///
+/// # Consistency guarantees
+///
+/// Values produced by [`decode_account_info`](crate::decode_account_info) are always
+/// internally consistent: the identifiers carried by the variant are exactly the ones embedded
+/// in `account_id`. The serde `Deserialize` implementation re-validates this invariant and
+/// rejects inconsistent input. The SCALE [`Decode`] implementation performs **no** such
+/// validation (keeping the usual cost model of SCALE decoding), so SCALE-decoded values from
+/// untrusted sources must not be treated as verified claims — re-derive them with
+/// [`decode_account_info`](crate::decode_account_info) if in doubt.
+///
+/// # Cross-language note (serde)
+///
+/// The serde representation is the externally tagged Rust enum, e.g.
+/// `{"Named":{"account_id":"ttow…","app_agent_id":123,"account_name":"example123"}}`.
+/// This shape differs from the flat info objects returned by the Python and TypeScript
+/// trevo-keyless libraries; only SS58 address strings and raw account-id bytes are
+/// cross-language interchange formats.
 #[derive(
     Eq,
     PartialEq,
@@ -325,7 +411,11 @@ impl core::fmt::Display for KeylessDecodeError {
     TypeInfo,
     MaxEncodedLen,
 )]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(remote = "Self")
+)]
 pub enum BlockchainAccountInfo {
     /// A regular account whose bytes do not match any valid keyless encoding. Its private
     /// key may or may not exist — the point is that no keyless identifiers are embedded.
@@ -373,9 +463,66 @@ impl BlockchainAccountInfo {
         }
     }
 
+    /// Returns the [`AccountType`] classification of this account.
+    pub fn account_type(&self) -> AccountType {
+        match self {
+            Self::Regular { .. } => AccountType::Regular,
+            Self::AppAgent { .. } => AccountType::AppAgent,
+            Self::Transactional { .. } => AccountType::Transactional,
+            Self::Named { .. } => AccountType::Named,
+        }
+    }
+
+    /// Returns the `TransactionalId` if this is a Transactional account, or `None` otherwise.
+    pub fn ta_id(&self) -> Option<TransactionalId> {
+        match self {
+            Self::Transactional { ta_id, .. } => Some(*ta_id),
+            _ => None,
+        }
+    }
+
+    /// Returns the [`AccountName`] if this is a Named account, or `None` otherwise.
+    pub fn account_name(&self) -> Option<AccountName> {
+        match self {
+            Self::Named { account_name, .. } => Some(*account_name),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if this is a keyless account (App Agent, Transactional, or Named).
     pub fn is_keyless_account(&self) -> bool {
         !matches!(self, Self::Regular { .. })
+    }
+}
+
+/// `BlockchainAccountInfo` serializes via the derived externally tagged enum representation;
+/// see the type-level documentation for the exact shape.
+#[cfg(feature = "serde")]
+impl serde::Serialize for BlockchainAccountInfo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Delegates to the inherent function generated by `#[serde(remote = "Self")]`,
+        // which holds the derived implementation.
+        Self::serialize(self, serializer)
+    }
+}
+
+/// Validating deserializer: after deserializing via the derived representation, the value is
+/// checked for internal consistency — re-classifying `account_id` must reproduce the
+/// deserialized value exactly. Inconsistent input (e.g. an `AppAgent` claim over an account id
+/// that does not embed that `app_agent_id`, or a `Regular` claim over a keyless account) is
+/// rejected.
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for BlockchainAccountInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // The inherent function generated by `#[serde(remote = "Self")]` holds the derived
+        // implementation.
+        let unchecked = Self::deserialize(deserializer)?;
+        if crate::keyless::decode_account_info(&unchecked.account_id()) != unchecked {
+            return Err(serde::de::Error::custom(
+                "inconsistent BlockchainAccountInfo: the identifiers do not match account_id",
+            ));
+        }
+        Ok(unchecked)
     }
 }
 
@@ -507,6 +654,20 @@ mod tests_display_and_codec {
     }
 
     #[test]
+    fn test_account_name_as_str() {
+        let name = AccountName::new(b"hot-wallet").unwrap();
+        assert_eq!(name.as_str(), "hot-wallet");
+    }
+
+    #[test]
+    fn test_account_type_display() {
+        assert_eq!(format!("{}", AccountType::Regular), "Regular");
+        assert_eq!(format!("{}", AccountType::AppAgent), "AppAgent");
+        assert_eq!(format!("{}", AccountType::Transactional), "Transactional");
+        assert_eq!(format!("{}", AccountType::Named), "Named");
+    }
+
+    #[test]
     fn test_account_name_error_display() {
         assert_eq!(
             format!("{}", AccountNameError::InvalidLength),
@@ -521,16 +682,31 @@ mod tests_display_and_codec {
     #[test]
     fn test_keyless_decode_error_display() {
         assert_eq!(
-            format!("{}", KeylessDecodeError::NotAnAppAgentAccount),
-            "Account is not an App Agent root account"
+            format!(
+                "{}",
+                KeylessDecodeError::NotAnAppAgentAccount {
+                    found: AccountType::Regular
+                }
+            ),
+            "Account is not an App Agent root account (found: Regular)"
         );
         assert_eq!(
-            format!("{}", KeylessDecodeError::NotATransactionalAccount),
-            "Account is not a Transactional account"
+            format!(
+                "{}",
+                KeylessDecodeError::NotATransactionalAccount {
+                    found: AccountType::Named
+                }
+            ),
+            "Account is not a Transactional account (found: Named)"
         );
         assert_eq!(
-            format!("{}", KeylessDecodeError::NotANamedAccount),
-            "Account is not a Named account"
+            format!(
+                "{}",
+                KeylessDecodeError::NotANamedAccount {
+                    found: AccountType::AppAgent
+                }
+            ),
+            "Account is not a Named account (found: AppAgent)"
         );
     }
 
@@ -569,14 +745,38 @@ mod tests_display_and_codec {
     #[test]
     fn test_keyless_decode_error_scale_codec() {
         for error in [
-            KeylessDecodeError::NotAnAppAgentAccount,
-            KeylessDecodeError::NotATransactionalAccount,
-            KeylessDecodeError::NotANamedAccount,
+            KeylessDecodeError::NotAnAppAgentAccount {
+                found: AccountType::Regular,
+            },
+            KeylessDecodeError::NotATransactionalAccount {
+                found: AccountType::AppAgent,
+            },
+            KeylessDecodeError::NotANamedAccount {
+                found: AccountType::Transactional,
+            },
         ] {
             let encoded = error.encode();
-            assert_eq!(encoded.len(), 1);
+            // One byte for the error variant, one for the embedded `AccountType`.
+            assert_eq!(encoded.len(), 2);
             let decoded = KeylessDecodeError::decode(&mut &encoded[..]).unwrap();
             assert_eq!(decoded, error);
+        }
+    }
+
+    #[test]
+    fn test_account_type_scale_codec() {
+        for (account_type, expected_index) in [
+            (AccountType::Regular, 0u8),
+            (AccountType::AppAgent, 1),
+            (AccountType::Transactional, 2),
+            (AccountType::Named, 3),
+        ] {
+            let encoded = account_type.encode();
+            // The SCALE variant index matches the numeric values of the Python/TypeScript
+            // `AddressType` enums (and, for keyless variants, the byte [4] discriminant).
+            assert_eq!(encoded, [expected_index]);
+            let decoded = AccountType::decode(&mut &encoded[..]).unwrap();
+            assert_eq!(decoded, account_type);
         }
     }
 
@@ -616,6 +816,7 @@ mod tests_display_and_codec {
         assert_impl::<AccountId32>();
         assert_impl::<AccountName>();
         assert_impl::<AccountNameError>();
+        assert_impl::<AccountType>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
     }
@@ -630,6 +831,7 @@ mod tests_display_and_codec {
         assert_impl::<AccountId32>();
         assert_impl::<AccountName>();
         assert_impl::<AccountNameError>();
+        assert_impl::<AccountType>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
     }

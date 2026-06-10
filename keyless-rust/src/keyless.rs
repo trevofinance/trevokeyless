@@ -19,23 +19,22 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
     blake2(data)
 }
 
-/// Builds a keyless `AccountId32` from its open part.
+/// Builds a keyless `AccountId32` from its `N`-byte open part.
 ///
 /// The 32-byte account is constructed as follows:
 /// 1. Compute `account_bytes = blake2_256(open_part)` (32 bytes).
-/// 2. Overwrite `account_bytes[0..open_part.len()]` with `open_part`.
+/// 2. Overwrite `account_bytes[0..N]` with `open_part`.
 ///
-/// The result is: `open_part || account_bytes[open_part.len()..]`
-/// where `account_bytes[open_part.len()..]` is the trailing portion of the hash, used as the
-/// checksum.
-fn encode_account(open_part: &[u8]) -> AccountId32 {
-    debug_assert!(
-        open_part.len() <= 32,
-        "open_part length {} exceeds the 32-byte AccountId32 limit",
-        open_part.len()
-    );
+/// The result is: `open_part || account_bytes[N..]`
+/// where `account_bytes[N..]` is the trailing portion of the hash, used as the checksum.
+///
+/// `N <= 32` is enforced at compile time.
+fn encode_account<const N: usize>(open_part: &[u8; N]) -> AccountId32 {
+    const {
+        assert!(N <= 32, "open part cannot exceed the 32-byte AccountId32");
+    }
     let mut account_bytes = blake2_256(open_part);
-    account_bytes[0..open_part.len()].copy_from_slice(open_part);
+    account_bytes[0..N].copy_from_slice(open_part);
     AccountId32::from(account_bytes)
 }
 
@@ -105,7 +104,15 @@ fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
 }
 
 /// Reads a little-endian `u32` from `bytes[OFFSET..OFFSET + 4]`.
+///
+/// `OFFSET + 4 <= 32` is enforced at compile time.
 fn le_u32_at<const OFFSET: usize>(bytes: &[u8; 32]) -> u32 {
+    const {
+        assert!(
+            OFFSET + 4 <= 32,
+            "u32 read must lie within the account bytes"
+        );
+    }
     let mut le_bytes = [0u8; 4];
     le_bytes.copy_from_slice(&bytes[OFFSET..OFFSET + 4]);
     u32::from_le_bytes(le_bytes)
@@ -172,11 +179,14 @@ pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
 /// # Returns
 ///
 /// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
-/// `Err(KeylessDecodeError::NotAnAppAgentAccount)` otherwise.
+/// `Err(KeylessDecodeError::NotAnAppAgentAccount { found })` carrying the account's actual
+/// classification otherwise.
 pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
-        _ => Err(KeylessDecodeError::NotAnAppAgentAccount),
+        other => Err(KeylessDecodeError::NotAnAppAgentAccount {
+            found: other.account_type(),
+        }),
     }
 }
 
@@ -189,7 +199,8 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 /// # Returns
 ///
 /// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
-/// verification, or `Err(KeylessDecodeError::NotATransactionalAccount)` otherwise.
+/// verification, or `Err(KeylessDecodeError::NotATransactionalAccount { found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_transactional_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
@@ -199,7 +210,9 @@ pub fn decode_transactional_account(
             ta_id,
             ..
         } => Ok((app_agent_id, ta_id)),
-        _ => Err(KeylessDecodeError::NotATransactionalAccount),
+        other => Err(KeylessDecodeError::NotATransactionalAccount {
+            found: other.account_type(),
+        }),
     }
 }
 
@@ -212,7 +225,8 @@ pub fn decode_transactional_account(
 /// # Returns
 ///
 /// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
-/// or `Err(KeylessDecodeError::NotANamedAccount)` otherwise.
+/// or `Err(KeylessDecodeError::NotANamedAccount { found })` carrying the account's actual
+/// classification otherwise.
 pub fn decode_named_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
@@ -222,7 +236,9 @@ pub fn decode_named_account(
             account_name,
             ..
         } => Ok((app_agent_id, account_name)),
-        _ => Err(KeylessDecodeError::NotANamedAccount),
+        other => Err(KeylessDecodeError::NotANamedAccount {
+            found: other.account_type(),
+        }),
     }
 }
 
@@ -231,10 +247,5 @@ pub fn decode_named_account(
 /// type discriminant is unknown. Internally performs a full Blake2b-256 hash computation.
 #[must_use]
 pub fn is_keyless_account(account: &AccountId32) -> bool {
-    match decode_account_info(account) {
-        BlockchainAccountInfo::Regular { .. } => false,
-        BlockchainAccountInfo::AppAgent { .. }
-        | BlockchainAccountInfo::Transactional { .. }
-        | BlockchainAccountInfo::Named { .. } => true,
-    }
+    decode_account_info(account).is_keyless_account()
 }

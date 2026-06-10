@@ -68,7 +68,10 @@
 //!   `no_std` environments but requires an allocator.
 //! - `serde` — serde support (implies `ss58`): [`AccountId32`] (de)serializes as an SS58
 //!   address string in the Trevo format, [`AccountName`] as a string, and the remaining
-//!   public types via derived implementations.
+//!   public types via derived implementations. Deserializing [`BlockchainAccountInfo`]
+//!   validates that the embedded identifiers match `account_id`; its serialized shape is the
+//!   Rust enum representation, which differs from the info objects of the Python and
+//!   TypeScript libraries (see the type documentation).
 //!
 //! # Examples
 //!
@@ -107,6 +110,8 @@ mod types;
 mod tests_binary;
 #[cfg(all(test, feature = "std"))]
 mod tests_encoding;
+#[cfg(all(test, feature = "std"))]
+mod tests_properties;
 #[cfg(all(test, feature = "std", feature = "serde"))]
 mod tests_serde;
 #[cfg(all(test, feature = "std", feature = "ss58"))]

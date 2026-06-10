@@ -123,6 +123,13 @@ mod tests {
             AccountId32::from_ss58check_with_version(&short).unwrap_err(),
             Ss58Error::InvalidLength
         );
+
+        // A valid base58 payload that is longer than prefix + account id + checksum.
+        let long = bs58::encode([42u8; 40]).into_string();
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&long).unwrap_err(),
+            Ss58Error::InvalidLength
+        );
     }
 
     #[test]
@@ -167,6 +174,37 @@ mod tests {
         assert_eq!(
             AccountId32::from_ss58check_with_version(&address).unwrap_err(),
             Ss58Error::InvalidFormat
+        );
+    }
+
+    #[test]
+    fn test_decode_two_byte_prefix_of_small_format() {
+        // The two-byte SS58 prefix can also (non-canonically) encode formats below 64. Like
+        // the upstream Substrate codec, decoding accepts such addresses; this test pins that
+        // behavior: the result is identical to decoding the canonical single-byte form, even
+        // though the address strings differ.
+        let format: u16 = 42;
+        let mut payload = vec![
+            (((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000) as u8,
+            ((format >> 8) | ((format & 0b0000_0000_0000_0011) << 6)) as u8,
+        ];
+        payload.extend_from_slice(alice().as_ref() as &[u8; 32]);
+        let checksum = blake2b_simd::Params::new()
+            .hash_length(64)
+            .to_state()
+            .update(b"SS58PRE")
+            .update(&payload)
+            .finalize();
+        payload.extend_from_slice(&checksum.as_bytes()[0..2]);
+        let address = bs58::encode(payload).into_string();
+
+        assert_ne!(
+            address, ALICE_SUBSTRATE_GENERIC,
+            "the two-byte form is a distinct address string"
+        );
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&address).unwrap(),
+            (alice(), format)
         );
     }
 

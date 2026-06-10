@@ -13,6 +13,9 @@ see Cargo features below).
   an allocator.
 - `serde` — serde support (implies `ss58`): `AccountId32` (de)serializes as an SS58 string in
   the Trevo format, `AccountName` as a string, other public types via derived impls.
+  Deserializing `BlockchainAccountInfo` re-validates that the embedded identifiers match
+  `account_id` (SCALE `Decode` performs no such validation). Its serde shape is the externally
+  tagged Rust enum — not interchangeable with the Python/TS info objects.
 
 ## What is a keyless account?
 
@@ -95,11 +98,13 @@ format. Decoding failures return `Ss58Error`.
 ```
 src/
   lib.rs           — crate-level docs, module declarations
-  types.rs         — AppAgentId, TransactionalId, AccountId32, AccountName, BlockchainAccountInfo
+  types.rs         — AppAgentId, TransactionalId, AccountId32, AccountName, AccountType,
+                     BlockchainAccountInfo, error types
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
   tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
   tests_encoding.rs — encode→decode round-trip tests
+  tests_properties.rs — randomized property tests (deterministic inline PRNG, no extra deps)
   tests_ss58.rs    — SS58 codec tests (feature `ss58`)
   tests_serde.rs   — serde tests (feature `serde`)
 ```
@@ -121,6 +126,14 @@ decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDec
 decode_transactional_account(account: &AccountId32) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError>
 decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), KeylessDecodeError>
 is_keyless_account(account: &AccountId32) -> bool
+
+// Classification helpers
+AccountType — Regular | AppAgent | Transactional | Named (mirrors the Python/TS AddressType)
+BlockchainAccountInfo::{account_id, account_type, app_agent_id, ta_id, account_name, is_keyless_account}
+// KeylessDecodeError variants each carry `found: AccountType` — the actual classification.
+
+// AccountName
+AccountName::{new, as_bytes, as_str, starts_with} (+ TryFrom, FromStr, Display)
 
 // SS58 (feature `ss58`)
 AccountId32::to_ss58check(&self) -> String
