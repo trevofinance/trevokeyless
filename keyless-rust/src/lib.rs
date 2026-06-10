@@ -23,7 +23,9 @@
 //! Every keyless account is 32 bytes. The first N bytes form the **open part** (plain-text
 //! identifiers); the remaining bytes are a truncated Blake2b-256 checksum of the open part.
 //! Decoding reads the open part, recomputes the checksum, and compares it — an account that
-//! fails this check is treated as a regular (non-keyless) account.
+//! fails this check is treated as a regular (non-keyless) account. For Named accounts the
+//! name bytes must additionally pass charset validation (`0-9 a-z A-Z - #`); an account
+//! carrying a valid checksum over out-of-charset name bytes is also treated as regular.
 //!
 //! ```text
 //! AppAgent Account (open part: 5 bytes, checksum: 27 bytes):
@@ -57,6 +59,17 @@
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
 //!   (performs a full Blake2b-256 hash internally).
 //!
+//! ## Cargo features
+//!
+//! - `std` (default) — implements `std::error::Error` for the error types and enables the
+//!   `std` features of the dependencies. Disable for `no_std` builds.
+//! - `ss58` — SS58 address encoding/decoding for [`AccountId32`]
+//!   (`to_ss58check*` / `from_ss58check*`, [`SS58_FORMAT_TREVO_ASSET_HUB`]). Works in
+//!   `no_std` environments but requires an allocator.
+//! - `serde` — serde support (implies `ss58`): [`AccountId32`] (de)serializes as an SS58
+//!   address string in the Trevo format, [`AccountName`] as a string, and the remaining
+//!   public types via derived implementations.
+//!
 //! # Examples
 //!
 //! ```rust
@@ -69,15 +82,35 @@
 //! // Decode it back
 //! let decoded_id = decode_app_agent_account(&account).unwrap();
 //! assert_eq!(decoded_id, app_agent_id);
+//!
+//! // SS58 address encoding (feature `ss58`)
+//! # #[cfg(feature = "ss58")]
+//! # {
+//! let address = account.to_ss58check();
+//! assert_eq!(address, "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp");
+//! assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
+//! # }
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "ss58")]
+extern crate alloc;
+
 mod keyless;
+#[cfg(feature = "ss58")]
+mod ss58;
 mod types;
 
 #[cfg(test)]
 mod tests_binary;
 #[cfg(test)]
 mod tests_encoding;
+#[cfg(all(test, feature = "serde"))]
+mod tests_serde;
+#[cfg(all(test, feature = "ss58"))]
+mod tests_ss58;
 
 pub use keyless::*;
+#[cfg(feature = "ss58")]
+pub use ss58::*;
 pub use types::*;

@@ -97,6 +97,20 @@ pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> Acco
     encode_account(&open_part)
 }
 
+/// Returns `true` iff `account_bytes` carries a valid keyless checksum for an open part of
+/// `N` bytes, i.e. the trailing `32 - N` bytes equal the trailing bytes of `blake2_256` over
+/// the leading `N` bytes.
+fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
+    blake2_256(&account_bytes[..N])[N..] == account_bytes[N..]
+}
+
+/// Reads a little-endian `u32` from `bytes[OFFSET..OFFSET + 4]`.
+fn le_u32_at<const OFFSET: usize>(bytes: &[u8; 32]) -> u32 {
+    let mut le_bytes = [0u8; 4];
+    le_bytes.copy_from_slice(&bytes[OFFSET..OFFSET + 4]);
+    u32::from_le_bytes(le_bytes)
+}
+
 /// Classifies an `AccountId32` and extracts any embedded keyless identifiers.
 ///
 /// Reads the type discriminant at byte [4], re-derives the expected checksum for the
@@ -104,105 +118,48 @@ pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> Acco
 /// matches, the account is decoded into the appropriate [`BlockchainAccountInfo`] variant.
 /// Any account whose byte [4] is not a known discriminant, or whose checksum does not match,
 /// is returned as [`BlockchainAccountInfo::Regular`].
+///
+/// For Named accounts the name bytes must additionally pass charset validation
+/// (`0-9 a-z A-Z - #`). Anyone can construct an account carrying a valid checksum over
+/// out-of-charset name bytes (no private key is needed); such an account is classified as
+/// [`BlockchainAccountInfo::Regular`].
 #[must_use]
 pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
     let account_bytes: &[u8; 32] = account.as_ref();
 
     let type_identifier: AccountIdentifierType = account_bytes[4];
     match type_identifier {
-        APP_AGENT_ACCOUNT_IDENTIFIER => {
-            // Verify checksum
-            let open_part: &[u8; 5] = account_bytes[0..5]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let checksum: &[u8; 27] = account_bytes[5..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let calculated_checksum: [u8; 32] = blake2_256(open_part);
-            let calculated_checksum_trimmed: &[u8; 27] = calculated_checksum[5..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-
-            if checksum == calculated_checksum_trimmed {
-                // Extract and decode IDs
-                let app_agent_id_bytes = account_bytes[0..4]
-                    .try_into()
-                    .expect("infallible: fixed-size slice of [u8; 32]");
-                let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
-
-                return BlockchainAccountInfo::AppAgent {
+        APP_AGENT_ACCOUNT_IDENTIFIER if open_part_valid::<5>(account_bytes) => {
+            BlockchainAccountInfo::AppAgent {
+                account_id: *account,
+                app_agent_id: le_u32_at::<0>(account_bytes),
+            }
+        }
+        TRANSACTIONAL_ACCOUNT_IDENTIFIER if open_part_valid::<9>(account_bytes) => {
+            BlockchainAccountInfo::Transactional {
+                account_id: *account,
+                app_agent_id: le_u32_at::<0>(account_bytes),
+                ta_id: le_u32_at::<5>(account_bytes),
+            }
+        }
+        NAMED_ACCOUNT_IDENTIFIER if open_part_valid::<15>(account_bytes) => {
+            // The name bytes must pass charset validation. If they don't (e.g. a crafted
+            // account with a valid checksum over out-of-charset name bytes), fall back to
+            // Regular rather than panic.
+            match AccountName::try_from(&account_bytes[5..15]) {
+                Ok(account_name) => BlockchainAccountInfo::Named {
                     account_id: *account,
-                    app_agent_id,
-                };
-            }
-        }
-        TRANSACTIONAL_ACCOUNT_IDENTIFIER => {
-            // Verify checksum
-            let open_part: &[u8; 9] = account_bytes[0..9]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let checksum: &[u8; 23] = account_bytes[9..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let calculated_checksum: [u8; 32] = blake2_256(open_part);
-            let calculated_checksum_trimmed: &[u8; 23] = calculated_checksum[9..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-
-            if checksum == calculated_checksum_trimmed {
-                // Extract and decode IDs
-                let app_agent_id_bytes = account_bytes[0..4]
-                    .try_into()
-                    .expect("infallible: fixed-size slice of [u8; 32]");
-                let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
-                let ta_id_bytes = account_bytes[5..9]
-                    .try_into()
-                    .expect("infallible: fixed-size slice of [u8; 32]");
-                let ta_id: TransactionalId = u32::from_le_bytes(ta_id_bytes);
-
-                return BlockchainAccountInfo::Transactional {
+                    app_agent_id: le_u32_at::<0>(account_bytes),
+                    account_name,
+                },
+                Err(_) => BlockchainAccountInfo::Regular {
                     account_id: *account,
-                    app_agent_id,
-                    ta_id,
-                };
+                },
             }
         }
-        NAMED_ACCOUNT_IDENTIFIER => {
-            // Verify checksum
-            let open_part: &[u8; 15] = account_bytes[0..15]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let checksum: &[u8; 17] = account_bytes[15..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-            let calculated_checksum: [u8; 32] = blake2_256(open_part);
-            let calculated_checksum_trimmed: &[u8; 17] = calculated_checksum[15..32]
-                .try_into()
-                .expect("infallible: fixed-size slice of [u8; 32]");
-
-            if checksum == calculated_checksum_trimmed {
-                // Extract and decode IDs
-                let app_agent_id_bytes = account_bytes[0..4]
-                    .try_into()
-                    .expect("infallible: fixed-size slice of [u8; 32]");
-                let app_agent_id: AppAgentId = u32::from_le_bytes(app_agent_id_bytes);
-                // The name bytes must pass charset validation. If they don't (e.g. a crafted
-                // account whose checksum collides but contains invalid characters), fall
-                // through and return Regular rather than panic.
-                if let Ok(account_name) = AccountName::try_from(&account_bytes[5..15]) {
-                    return BlockchainAccountInfo::Named {
-                        account_id: *account,
-                        app_agent_id,
-                        account_name,
-                    };
-                }
-            }
-        }
-        _ => {}
-    }
-
-    BlockchainAccountInfo::Regular {
-        account_id: *account,
+        _ => BlockchainAccountInfo::Regular {
+            account_id: *account,
+        },
     }
 }
 

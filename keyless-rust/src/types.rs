@@ -30,6 +30,7 @@ pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
     PartialEq,
     Ord,
     PartialOrd,
+    Hash,
     Encode,
     Decode,
     DecodeWithMemTracking,
@@ -37,7 +38,6 @@ pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
     TypeInfo,
     MaxEncodedLen,
 )]
-#[cfg_attr(feature = "std", derive(Hash))]
 pub struct AccountId32([u8; 32]);
 
 impl AccountId32 {
@@ -87,8 +87,9 @@ impl core::fmt::Display for AccountId32 {
 ///
 /// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
 /// The name is stored verbatim in bytes [5..=14] of the Named account's open part.
-#[derive(Clone, Encode, Debug, Eq, PartialEq, Ord, PartialOrd, Copy, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Hash))]
+#[derive(
+    Clone, Encode, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Copy, TypeInfo, MaxEncodedLen,
+)]
 pub struct AccountName([u8; 10]);
 
 impl AccountName {
@@ -120,16 +121,16 @@ impl AccountName {
     ///
     /// Returns an error if `input` is not exactly 10 bytes or contains characters outside the
     /// allowed set (`0-9 a-z A-Z - #`).
-    pub fn new(input: &[u8]) -> Result<Self, &'static str> {
+    pub fn new(input: &[u8]) -> Result<Self, AccountNameError> {
         if input.len() != 10 {
-            return Err("Input must be exactly 10 bytes long");
+            return Err(AccountNameError::InvalidLength);
         }
         if input.iter().all(|&b| AccountName::VALID_CHARS[b as usize]) {
             let mut array = [0u8; 10];
             array.copy_from_slice(input);
             Ok(AccountName(array))
         } else {
-            Err("Input contains invalid characters")
+            Err(AccountNameError::InvalidCharacter)
         }
     }
 
@@ -163,7 +164,7 @@ impl From<AccountName> for [u8; 10] {
 }
 
 impl TryFrom<&[u8]> for AccountName {
-    type Error = &'static str;
+    type Error = AccountNameError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         AccountName::new(value)
@@ -171,7 +172,7 @@ impl TryFrom<&[u8]> for AccountName {
 }
 
 impl TryFrom<[u8; 10]> for AccountName {
-    type Error = &'static str;
+    type Error = AccountNameError;
 
     fn try_from(value: [u8; 10]) -> Result<Self, Self::Error> {
         AccountName::new(&value)
@@ -179,7 +180,7 @@ impl TryFrom<[u8; 10]> for AccountName {
 }
 
 impl TryFrom<&str> for AccountName {
-    type Error = &'static str;
+    type Error = AccountNameError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         AccountName::new(s.as_bytes())
@@ -187,7 +188,7 @@ impl TryFrom<&str> for AccountName {
 }
 
 impl core::str::FromStr for AccountName {
-    type Err = &'static str;
+    type Err = AccountNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         AccountName::new(s.as_bytes())
@@ -207,13 +208,64 @@ impl Decode for AccountName {
     fn decode<I: Input>(input: &mut I) -> Result<Self, CodecError> {
         let mut buf = [0u8; 10];
         input.read(&mut buf)?;
-        AccountName::try_from(buf).map_err(CodecError::from)
+        // The length error is unreachable here: the buffer is always exactly 10 bytes.
+        AccountName::new(&buf).map_err(|_| "AccountName contains invalid characters".into())
     }
 }
 
 /// Sound because the manual `Decode` implementation above reads into a fixed-size stack
 /// buffer and never allocates heap memory.
 impl DecodeWithMemTracking for AccountName {}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for AccountName {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(
+            core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII"),
+        )
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for AccountName {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = alloc::string::String::deserialize(deserializer)?;
+        AccountName::new(s.as_bytes()).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Error returned by [`AccountName`] constructors when the input is not a valid account name.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    PartialEq,
+    Hash,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
+pub enum AccountNameError {
+    /// The input is not exactly 10 bytes long.
+    InvalidLength,
+    /// The input contains a character outside the allowed set (`0-9 a-z A-Z - #`).
+    InvalidCharacter,
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for AccountNameError {}
+
+impl core::fmt::Display for AccountNameError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::InvalidLength => f.write_str("Account name must be exactly 10 bytes long"),
+            Self::InvalidCharacter => f.write_str("Account name contains invalid characters"),
+        }
+    }
+}
 
 /// Error returned by the typed `decode_*` functions when the account is not of the expected
 /// keyless variant.
@@ -223,12 +275,14 @@ impl DecodeWithMemTracking for AccountName {}
     Debug,
     Eq,
     PartialEq,
+    Hash,
     Encode,
     Decode,
     DecodeWithMemTracking,
     TypeInfo,
     MaxEncodedLen,
 )]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeylessDecodeError {
     /// The account does not decode as an App Agent root account.
     NotAnAppAgentAccount,
@@ -262,13 +316,14 @@ impl core::fmt::Display for KeylessDecodeError {
     Debug,
     Clone,
     Copy,
+    Hash,
     Encode,
     Decode,
     DecodeWithMemTracking,
     TypeInfo,
     MaxEncodedLen,
 )]
-#[cfg_attr(feature = "std", derive(Hash))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BlockchainAccountInfo {
     /// A regular account whose bytes do not match any valid keyless encoding. Its private
     /// key may or may not exist — the point is that no keyless identifiers are embedded.
@@ -287,8 +342,7 @@ pub enum BlockchainAccountInfo {
         ta_id: TransactionalId,
     },
     /// A named sub-account of an App Agent. The `account_name` is embedded verbatim in the
-    /// account bytes and can be used to distinguish well-known sub-accounts (e.g. a hot
-    /// wallet with name `"hot-wallet"` or a cold wallet whose name starts with `"cold"`).
+    /// account bytes.
     Named {
         account_id: AccountId32,
         app_agent_id: AppAgentId,
@@ -339,11 +393,11 @@ mod tests_account_name {
         let long_account = b"abcdEF12345";
         assert_eq!(
             AccountName::new(short_account).unwrap_err(),
-            "Input must be exactly 10 bytes long"
+            AccountNameError::InvalidLength
         );
         assert_eq!(
             AccountName::new(long_account).unwrap_err(),
-            "Input must be exactly 10 bytes long"
+            AccountNameError::InvalidLength
         );
     }
 
@@ -354,15 +408,15 @@ mod tests_account_name {
         let invalid_account3 = b"abcdEF/123";
         assert_eq!(
             AccountName::new(invalid_account1).unwrap_err(),
-            "Input contains invalid characters"
+            AccountNameError::InvalidCharacter
         );
         assert_eq!(
             AccountName::new(invalid_account2).unwrap_err(),
-            "Input contains invalid characters"
+            AccountNameError::InvalidCharacter
         );
         assert_eq!(
             AccountName::new(invalid_account3).unwrap_err(),
-            "Input contains invalid characters"
+            AccountNameError::InvalidCharacter
         );
     }
 
@@ -451,6 +505,18 @@ mod tests_display_and_codec {
     }
 
     #[test]
+    fn test_account_name_error_display() {
+        assert_eq!(
+            format!("{}", AccountNameError::InvalidLength),
+            "Account name must be exactly 10 bytes long"
+        );
+        assert_eq!(
+            format!("{}", AccountNameError::InvalidCharacter),
+            "Account name contains invalid characters"
+        );
+    }
+
+    #[test]
     fn test_keyless_decode_error_display() {
         assert_eq!(
             format!("{}", KeylessDecodeError::NotAnAppAgentAccount),
@@ -534,6 +600,21 @@ mod tests_display_and_codec {
         assert_impl::<TransactionalId>();
         assert_impl::<AccountId32>();
         assert_impl::<AccountName>();
+        assert_impl::<AccountNameError>();
+        assert_impl::<KeylessDecodeError>();
+        assert_impl::<BlockchainAccountInfo>();
+    }
+
+    /// Compile-time check that every public type of the crate supports `core::hash::Hash`,
+    /// independently of the `std` feature.
+    #[test]
+    fn test_all_types_implement_hash() {
+        fn assert_impl<T: core::hash::Hash>() {}
+        assert_impl::<AppAgentId>();
+        assert_impl::<TransactionalId>();
+        assert_impl::<AccountId32>();
+        assert_impl::<AccountName>();
+        assert_impl::<AccountNameError>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
     }
