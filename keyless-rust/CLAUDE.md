@@ -104,6 +104,9 @@ src/
   tests_serde.rs   — serde tests (feature `serde`)
 ```
 
+All test modules additionally require the `std` feature; run the full suite with
+`cargo test --all-features`.
+
 ## Public API
 
 ```rust

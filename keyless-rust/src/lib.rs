@@ -101,13 +101,15 @@ mod keyless;
 mod ss58;
 mod types;
 
-#[cfg(test)]
+// The test suite requires `std` (`format!`, `Vec`, dev-dependencies); without it only the
+// doc tests run.
+#[cfg(all(test, feature = "std"))]
 mod tests_binary;
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests_encoding;
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "std", feature = "serde"))]
 mod tests_serde;
-#[cfg(all(test, feature = "ss58"))]
+#[cfg(all(test, feature = "std", feature = "ss58"))]
 mod tests_ss58;
 
 pub use keyless::*;

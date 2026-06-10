@@ -113,11 +113,11 @@ fn le_u32_at<const OFFSET: usize>(bytes: &[u8; 32]) -> u32 {
 
 /// Classifies an `AccountId32` and extracts any embedded keyless identifiers.
 ///
-/// Reads the type discriminant at byte [4], re-derives the expected checksum for the
+/// Reads the type discriminant at byte `[4]`, re-derives the expected checksum for the
 /// corresponding open-part length, and compares it to the stored bytes. If the checksum
 /// matches, the account is decoded into the appropriate [`BlockchainAccountInfo`] variant.
-/// Any account whose byte [4] is not a known discriminant, or whose checksum does not match,
-/// is returned as [`BlockchainAccountInfo::Regular`].
+/// Any account whose byte `[4]` is not a known discriminant, or whose checksum does not
+/// match, is returned as [`BlockchainAccountInfo::Regular`].
 ///
 /// For Named accounts the name bytes must additionally pass charset validation
 /// (`0-9 a-z A-Z - #`). Anyone can construct an account carrying a valid checksum over

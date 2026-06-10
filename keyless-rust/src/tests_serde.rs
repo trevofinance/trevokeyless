@@ -70,6 +70,18 @@ mod tests {
     }
 
     #[test]
+    fn test_account_name_error_serde() {
+        for error in [
+            AccountNameError::InvalidLength,
+            AccountNameError::InvalidCharacter,
+        ] {
+            let json = serde_json::to_string(&error).unwrap();
+            let decoded: AccountNameError = serde_json::from_str(&json).unwrap();
+            assert_eq!(decoded, error);
+        }
+    }
+
+    #[test]
     fn test_keyless_decode_error_serde() {
         for error in [
             KeylessDecodeError::NotAnAppAgentAccount,

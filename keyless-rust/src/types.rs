@@ -9,14 +9,15 @@ pub type AppAgentId = u32;
 /// Numeric identifier of a Transactional sub-account (u32, little-endian in bytes [5..=8]).
 pub type TransactionalId = u32;
 
-/// Raw type for the one-byte account type discriminant stored at byte [4] of a keyless account.
+/// Raw type for the one-byte account type discriminant stored at byte `[4]` of a keyless
+/// account.
 pub(crate) type AccountIdentifierType = u8;
 
-/// Byte [4] discriminant for an App Agent root keyless account.
+/// Byte `[4]` discriminant for an App Agent root keyless account.
 pub const APP_AGENT_ACCOUNT_IDENTIFIER: AccountIdentifierType = 1;
-/// Byte [4] discriminant for a Transactional keyless account.
+/// Byte `[4]` discriminant for a Transactional keyless account.
 pub const TRANSACTIONAL_ACCOUNT_IDENTIFIER: AccountIdentifierType = 2;
-/// Byte [4] discriminant for a Named keyless account.
+/// Byte `[4]` discriminant for a Named keyless account.
 pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
 
 /// A 32-byte on-chain account identifier.
@@ -248,6 +249,7 @@ impl<'de> serde::Deserialize<'de> for AccountName {
     TypeInfo,
     MaxEncodedLen,
 )]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccountNameError {
     /// The input is not exactly 10 bytes long.
     InvalidLength,
@@ -377,7 +379,7 @@ impl BlockchainAccountInfo {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests_account_name {
     use super::*;
 
@@ -479,7 +481,7 @@ mod tests_account_name {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests_display_and_codec {
     use super::*;
     use parity_scale_codec::{Decode, Encode};
@@ -539,6 +541,19 @@ mod tests_display_and_codec {
         assert_eq!(encoded.len(), 10);
         let decoded = AccountName::decode(&mut &encoded[..]).unwrap();
         assert_eq!(decoded, name);
+    }
+
+    #[test]
+    fn test_account_name_scale_decode_rejects_invalid_characters() {
+        // Exactly 10 bytes, but the first one (0x00) is outside the allowed charset.
+        let bytes = *b"\x00ot-wallet";
+        assert!(AccountName::decode(&mut &bytes[..]).is_err());
+    }
+
+    #[test]
+    fn test_account_name_scale_decode_rejects_truncated_input() {
+        // Fewer than the 10 bytes required by the fixed-size encoding.
+        assert!(AccountName::decode(&mut &b"short"[..]).is_err());
     }
 
     #[test]

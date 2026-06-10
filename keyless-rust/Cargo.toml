@@ -2,7 +2,7 @@
 name = "trevo-keyless"
 version = "0.7.0"
 edition = "2021"
-rust-version = "1.93.0"
+rust-version = "1.79.0"
 license = "Apache-2.0"
 description = "This library provides functions for encoding and decoding keyless accounts, used by the Trevo blockchain: application agent accounts, transactional accounts, and named accounts."
 homepage = "https://trevo.finance"
@@ -10,6 +10,9 @@ repository = "https://github.com/trevo-finance/trevo-keyless/"
 readme = "README.md"
 keywords = ["trevo", "blockchain", "substrate", "no-std", "scale"]
 categories = ["encoding", "wasm"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 default = ["std"]

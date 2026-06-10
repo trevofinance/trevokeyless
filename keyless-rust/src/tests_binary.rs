@@ -3,30 +3,6 @@ mod tests {
     use crate::keyless::*;
     use crate::types::*;
 
-    // Do not delete it - helpful for debugging
-    //
-    // use sp_runtime::AccountId32;
-    // use std::fmt;
-    //
-    // struct PrintableBytes(Vec<u8>);
-    // impl fmt::Binary for PrintableBytes {
-    //     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    //         let vec = &self.0;
-    //         for (count, n) in vec.iter().enumerate() {
-    //             if count != 0 {
-    //                 write!(f, " ")?;
-    //             }
-    //             write!(f, "{n:08b}")?;
-    //         }
-    //         Ok(())
-    //     }
-    // }
-    // impl From<AccountId32> for PrintableBytes {
-    //     fn from(x: AccountId32) -> PrintableBytes {
-    //         PrintableBytes(Into::<[u8; 32]>::into(x).to_vec())
-    //     }
-    // }
-
     #[test]
     fn test_app_agent_structure() {
         let account = encode_app_agent_account(123456789);
