@@ -1,6 +1,6 @@
 [package]
 name = "trevo-keyless"
-version = "0.6.1"
+version = "0.6.2"
 edition = "2021"
 license = "Apache-2.0"
 description = "This library provides functions for encoding and decoding keyless accounts, used by the Trevo blockchain: application agent accounts, transactional accounts, and named accounts."

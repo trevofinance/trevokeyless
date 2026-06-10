@@ -1,4 +1,6 @@
-use parity_scale_codec::{Decode, Encode, Error as CodecError, Input, MaxEncodedLen};
+use parity_scale_codec::{
+    Decode, DecodeWithMemTracking, Encode, Error as CodecError, Input, MaxEncodedLen,
+};
 use scale_info::TypeInfo;
 
 /// Numeric identifier of an App Agent (u32, little-endian in keyless account bytes [0..=3]).
@@ -22,7 +24,18 @@ pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
 /// For keyless accounts the bytes follow the layout described in the crate documentation.
 /// For regular accounts the bytes are an opaque public key or hash with no special structure.
 #[derive(
-    Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, Debug, TypeInfo, MaxEncodedLen,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    Debug,
+    TypeInfo,
+    MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Hash))]
 pub struct AccountId32([u8; 32]);
@@ -198,9 +211,24 @@ impl Decode for AccountName {
     }
 }
 
+/// Sound because the manual `Decode` implementation above reads into a fixed-size stack
+/// buffer and never allocates heap memory.
+impl DecodeWithMemTracking for AccountName {}
+
 /// Error returned by the typed `decode_*` functions when the account is not of the expected
 /// keyless variant.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    PartialEq,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
 pub enum KeylessDecodeError {
     /// The account does not decode as an App Agent root account.
     NotAnAppAgentAccount,
@@ -228,7 +256,18 @@ impl core::fmt::Display for KeylessDecodeError {
 /// Returned by [`decode_account_info`](crate::decode_account_info). The caller can
 /// pattern-match on this enum to determine whether an account is a regular (non-keyless)
 /// account or one of the three Trevo keyless variants, and to extract the embedded identifiers.
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(
+    Eq,
+    PartialEq,
+    Debug,
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Hash))]
 pub enum BlockchainAccountInfo {
     /// A regular account whose bytes do not match any valid keyless encoding. Its private
@@ -444,5 +483,58 @@ mod tests_display_and_codec {
         assert_eq!(encoded.len(), 32);
         let decoded = AccountId32::decode(&mut &encoded[..]).unwrap();
         assert_eq!(decoded, account);
+    }
+
+    #[test]
+    fn test_keyless_decode_error_scale_codec() {
+        for error in [
+            KeylessDecodeError::NotAnAppAgentAccount,
+            KeylessDecodeError::NotATransactionalAccount,
+            KeylessDecodeError::NotANamedAccount,
+        ] {
+            let encoded = error.encode();
+            assert_eq!(encoded.len(), 1);
+            let decoded = KeylessDecodeError::decode(&mut &encoded[..]).unwrap();
+            assert_eq!(decoded, error);
+        }
+    }
+
+    #[test]
+    fn test_blockchain_account_info_scale_codec() {
+        let account_id = AccountId32::new(core::array::from_fn(|i| i as u8));
+        for info in [
+            BlockchainAccountInfo::Regular { account_id },
+            BlockchainAccountInfo::AppAgent {
+                account_id,
+                app_agent_id: 7,
+            },
+            BlockchainAccountInfo::Transactional {
+                account_id,
+                app_agent_id: 7,
+                ta_id: 9,
+            },
+            BlockchainAccountInfo::Named {
+                account_id,
+                app_agent_id: 7,
+                account_name: AccountName::new(b"hot-wallet").unwrap(),
+            },
+        ] {
+            let encoded = info.encode();
+            let decoded = BlockchainAccountInfo::decode(&mut &encoded[..]).unwrap();
+            assert_eq!(decoded, info);
+        }
+    }
+
+    /// Compile-time check that every public type of the crate supports
+    /// `codec::DecodeWithMemTracking`.
+    #[test]
+    fn test_all_types_implement_decode_with_mem_tracking() {
+        fn assert_impl<T: DecodeWithMemTracking>() {}
+        assert_impl::<AppAgentId>();
+        assert_impl::<TransactionalId>();
+        assert_impl::<AccountId32>();
+        assert_impl::<AccountName>();
+        assert_impl::<KeylessDecodeError>();
+        assert_impl::<BlockchainAccountInfo>();
     }
 }
