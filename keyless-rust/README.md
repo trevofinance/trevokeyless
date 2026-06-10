@@ -9,7 +9,7 @@ optionally a TransactionalId or AccountName), so anyone can compute the address 
 identifiers and verify account ownership by inspecting the bytes alone.
 
 Because no private key exists, keyless accounts cannot sign transactions. Instead, an App Agent
-acts on behalf of its keyless accounts by submitting Clearing Transactions.
+acts on behalf of its keyless accounts by submitting App Transactions on Trevo blockchain.
 
 ## Byte layout
 
