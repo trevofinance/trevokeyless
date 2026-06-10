@@ -1,3 +1,5 @@
+import { blake2AsU8a } from "@polkadot/util-crypto";
+import { encodeAddress } from "@polkadot/keyring";
 import {
   encodeAppAgent,
   encodeTransactional,
@@ -125,6 +127,65 @@ describe("Named", () => {
       addressName: address_name,
     };
     expect(decoded_info).toEqual(expected_info);
+  });
+});
+
+describe("Named address with invalid name bytes", () => {
+  const ss58_format = 5335;
+
+  // Builds the raw account id of a Named address by hand: anyone can construct an account
+  // id that carries a valid checksum over arbitrary name bytes - no private key is needed.
+  function buildNamedAddress(nameBytes: Uint8Array): string {
+    const appAgentIdBytes = Buffer.alloc(4);
+    appAgentIdBytes.writeUInt32LE(1, 0);
+    const openPart = Buffer.concat([
+      appAgentIdBytes,
+      Buffer.from([AddressType.Named]),
+      Buffer.from(nameBytes),
+    ]);
+    const checksum = blake2AsU8a(openPart);
+    const accountId = Buffer.concat([
+      openPart,
+      Buffer.from(checksum.slice(openPart.length)),
+    ]);
+    return encodeAddress(accountId, ss58_format);
+  }
+
+  const invalidNames: [string, Uint8Array][] = [
+    ["control character", Uint8Array.from([0x00, ...Buffer.from("nvalid123")])],
+    ["invalid UTF-8", Uint8Array.from([0xff, ...Buffer.from("nvalid123")])],
+    ["printable ASCII outside the allowed set", Buffer.from("invalid@12")],
+  ];
+
+  it.each(invalidNames)(
+    "decodes address with %s in name bytes as Regular",
+    (_description, nameBytes) => {
+      const address = buildNamedAddress(nameBytes);
+      const decoded_info = decodeAddress(address, ss58_format);
+      expect(decoded_info.addressType).toEqual(AddressType.Regular);
+      expect(decoded_info.appAgentId).toBeNull();
+      expect(decoded_info.addressName).toBeNull();
+    },
+  );
+
+  it.each(invalidNames)(
+    "throws when address with %s in name bytes is decoded as Named",
+    (_description, nameBytes) => {
+      const address = buildNamedAddress(nameBytes);
+      expect(() => decodeNamed(address, ss58_format)).toThrow(
+        new Error(
+          "Provided address is not a Named address but is instance of Regular",
+        ),
+      );
+    },
+  );
+
+  it("decodes an address with valid name bytes built the same way as Named", () => {
+    const address = buildNamedAddress(Buffer.from("example123"));
+    const decoded_info = decodeAddress(address, ss58_format);
+    expect(decoded_info.addressType).toEqual(AddressType.Named);
+    expect(decoded_info.appAgentId).toEqual(1);
+    expect(decoded_info.addressName).toEqual("example123");
   });
 });
 

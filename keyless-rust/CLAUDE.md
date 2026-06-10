@@ -1,7 +1,18 @@
 # CLAUDE.md — trevo-keyless
 
 Pure-Rust library for encoding and decoding Trevo keyless accounts. No Substrate/frame dependency;
-only `parity-scale-codec`, `scale-info`, and `blake2b_simd`.
+only `parity-scale-codec`, `scale-info`, and `blake2b_simd` (plus optional `bs58` and `serde`,
+see Cargo features below).
+
+## Cargo features
+
+- `std` (default) — `std::error::Error` impls and `std` features of the dependencies. Disable
+  for `no_std` builds (the crate builds for `wasm32v1-none`).
+- `ss58` — SS58 address encoding/decoding for `AccountId32` (`to_ss58check*`,
+  `from_ss58check*`, `SS58_FORMAT_TREVO_ASSET_HUB = 5335`). `no_std`-compatible but requires
+  an allocator.
+- `serde` — serde support (implies `ss58`): `AccountId32` (de)serializes as an SS58 string in
+  the Trevo format, `AccountName` as a string, other public types via derived impls.
 
 ## What is a keyless account?
 
@@ -62,14 +73,22 @@ open part for that type, recomputes the expected checksum, and compares it to th
 the checksum matches, the account is decoded into the appropriate `BlockchainAccountInfo` variant.
 Any mismatch or unknown discriminant → `BlockchainAccountInfo::Regular`.
 
+For Named accounts the name bytes must additionally pass charset validation. Anyone can construct
+an account that carries a valid checksum over out-of-charset name bytes (no private key is
+needed); such an account decodes as `Regular`. The Python and TypeScript implementations apply
+the same rule.
+
 ## AccountName
 
 10-byte fixed array. Allowed characters: `0-9 a-z A-Z - #` (64 total).
-`AccountName::new(&[u8])` validates length (exactly 10) and character set.
+`AccountName::new(&[u8])` validates length (exactly 10) and character set; invalid input returns
+`AccountNameError::{InvalidLength, InvalidCharacter}`.
 
-Well-known names used by the Trevo chain:
-- `"hot-wallet"` — the default hot wallet of an App Agent.
-- Names starting with `"cold"` — cold wallets (4-byte prefix, remaining 6 bytes distinguish them).
+## SS58 (feature `ss58`)
+
+`AccountId32::to_ss58check()` / `from_ss58check(&str)` use the Trevo format
+(`SS58_FORMAT_TREVO_ASSET_HUB = 5335`); the `*_with_version` variants take/return an explicit
+format. Decoding failures return `Ss58Error`.
 
 ## File layout
 
@@ -78,17 +97,20 @@ src/
   lib.rs           — crate-level docs, module declarations
   types.rs         — AppAgentId, TransactionalId, AccountId32, AccountName, BlockchainAccountInfo
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
+  ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
   tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
   tests_encoding.rs — encode→decode round-trip tests
+  tests_ss58.rs    — SS58 codec tests (feature `ss58`)
+  tests_serde.rs   — serde tests (feature `serde`)
 ```
 
 ## Public API
 
 ```rust
-// Encoding (AppAgentId and TransactionalId taken by value; AccountName by reference)
+// Encoding (all parameters taken by value; AccountName is a 10-byte Copy type)
 encode_app_agent_account(app_agent_id: AppAgentId) -> AccountId32
 encode_transactional_account(app_agent_id: AppAgentId, ta_id: TransactionalId) -> AccountId32
-encode_named_account(app_agent_id: AppAgentId, name: &AccountName) -> AccountId32
+encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> AccountId32
 
 // Decoding (all take &AccountId32)
 decode_account_info(account: &AccountId32) -> BlockchainAccountInfo  // classifies any account
@@ -96,4 +118,10 @@ decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDec
 decode_transactional_account(account: &AccountId32) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError>
 decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), KeylessDecodeError>
 is_keyless_account(account: &AccountId32) -> bool
+
+// SS58 (feature `ss58`)
+AccountId32::to_ss58check(&self) -> String
+AccountId32::to_ss58check_with_version(&self, format: u16) -> Result<String, Ss58Error>
+AccountId32::from_ss58check(address: &str) -> Result<AccountId32, Ss58Error>
+AccountId32::from_ss58check_with_version(address: &str) -> Result<(AccountId32, u16), Ss58Error>
 ```
