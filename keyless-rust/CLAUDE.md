@@ -11,7 +11,7 @@ Its bytes are derived deterministically from a set of logical identifiers, so:
 - Anyone can identify the controlling App Agent by inspecting the bytes.
 
 Because no private key exists, keyless accounts cannot sign transactions. In the Trevo chain, an
-App Agent acts on behalf of its keyless accounts by submitting **Clearing Transactions**.
+App Agent acts on behalf of its keyless accounts by submitting **App Transactions**.
 
 ## Three account types
 

@@ -274,7 +274,7 @@ pub enum BlockchainAccountInfo {
     /// key may or may not exist — the point is that no keyless identifiers are embedded.
     Regular { account_id: AccountId32 },
     /// The root keyless account of an App Agent. No private key is known; the App Agent
-    /// acts on its behalf via Clearing Transactions.
+    /// acts on its behalf via App Transactions.
     AppAgent {
         account_id: AccountId32,
         app_agent_id: AppAgentId,

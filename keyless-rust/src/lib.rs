@@ -8,7 +8,7 @@
 //! and verify that an address belongs to a specific App Agent simply by reading its bytes.
 //!
 //! Because no private key exists, keyless accounts cannot sign transactions. Instead, an App
-//! Agent submits **Clearing Transactions** to act on behalf of its keyless accounts.
+//! Agent submits **App Transactions** to act on behalf of its keyless accounts.
 //!
 //! There are three keyless account types:
 //!
