@@ -1,6 +1,6 @@
 [package]
 name = "trevo-keyless"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "This library provides functions for encoding and decoding keyless accounts, used by the Trevo blockchain: application agent accounts, transactional accounts, and named accounts."
@@ -19,9 +19,9 @@ std = [
 ]
 
 [dependencies]
-blake2b_simd = { version = "1.0.1", default-features = false }
-parity-scale-codec = { version = "3.6.12", default-features = false, features = ["max-encoded-len"] }
-scale-info = { version = "2.11.1", default-features = false, features = ["derive"] }
+blake2b_simd = { version = "1.0.2", default-features = false }
+parity-scale-codec = { version = "3.7.5", default-features = false, features = ["max-encoded-len"] }
+scale-info = { version = "2.11.6", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 array-bytes = { version = "6.2.3", default-features = true }
