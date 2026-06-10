@@ -95,6 +95,7 @@
 //! # }
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
 
 #[cfg(feature = "ss58")]
 extern crate alloc;
@@ -121,3 +122,10 @@ pub use keyless::*;
 #[cfg(feature = "ss58")]
 pub use ss58::*;
 pub use types::*;
+
+// Compiles and runs the README example as a doctest, so the README cannot drift from the
+// API. The example exercises `to_ss58check`, so it is only collected when the `ss58`
+// feature is enabled (`cargo test --no-default-features` must keep passing).
+#[cfg(all(doctest, feature = "ss58"))]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;

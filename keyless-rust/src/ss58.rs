@@ -20,12 +20,21 @@ const SS58_FORMAT_MAX: u16 = 0b0011_1111_1111_1111;
 /// Checksum length for 32-byte account ids.
 const SS58_CHECKSUM_LENGTH: usize = 2;
 
+/// Maximum length in characters of a valid SS58 address for a 32-byte account id: the
+/// payload is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits,
+/// and each base58 character carries log2(58) ≈ 5.858 bits, so a valid address has at most
+/// ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
+/// whose cost grows quadratically with the input length.
+// pub(crate) so sibling test modules can reference the bound.
+pub(crate) const SS58_MAX_ADDRESS_LENGTH: usize = 50;
+
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Ss58Error {
     /// The string is not valid base58.
     InvalidBase58,
-    /// The decoded payload does not have the length of an SS58-encoded 32-byte account id.
+    /// The address string is longer than any valid SS58-encoded 32-byte account id, or the
+    /// decoded payload does not have the expected length.
     InvalidLength,
     /// The checksum does not match the payload.
     InvalidChecksum,
@@ -117,7 +126,14 @@ impl AccountId32 {
 
     /// Decodes an SS58 address of any (non-reserved) format, returning the account id and
     /// the format found in the address.
+    ///
+    /// Input longer than the maximum length of a valid address (50 characters) is rejected
+    /// with [`Ss58Error::InvalidLength`] before base58 decoding, so the cost of decoding
+    /// untrusted input stays bounded.
     pub fn from_ss58check_with_version(address: &str) -> Result<(Self, u16), Ss58Error> {
+        if address.len() > SS58_MAX_ADDRESS_LENGTH {
+            return Err(Ss58Error::InvalidLength);
+        }
         let data = bs58::decode(address)
             .into_vec()
             .map_err(|_| Ss58Error::InvalidBase58)?;

@@ -100,6 +100,9 @@ pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> Acco
 /// `N` bytes, i.e. the trailing `32 - N` bytes equal the trailing bytes of `blake2_256` over
 /// the leading `N` bytes.
 fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
+    const {
+        assert!(N <= 32, "open part cannot exceed the 32-byte AccountId32");
+    }
     blake2_256(&account_bytes[..N])[N..] == account_bytes[N..]
 }
 

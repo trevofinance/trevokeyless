@@ -133,6 +133,41 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_lone_two_byte_prefix_byte() {
+        // A single byte in 64..=127 announces a two-byte prefix but the second byte is
+        // missing; the decoder must report InvalidLength rather than read past the payload.
+        let address = bs58::encode([64u8]).into_string();
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&address).unwrap_err(),
+            Ss58Error::InvalidLength
+        );
+    }
+
+    #[test]
+    fn test_decode_rejects_oversized_strings_before_base58_decoding() {
+        // Strings longer than SS58_MAX_ADDRESS_LENGTH cannot be valid addresses and are
+        // rejected up front, keeping the base58 decoding cost bounded on untrusted input.
+        let oversized = "1".repeat(SS58_MAX_ADDRESS_LENGTH + 1);
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&oversized).unwrap_err(),
+            Ss58Error::InvalidLength
+        );
+
+        // The longest legitimate addresses (two-byte prefix, high account id bytes) stay
+        // within the bound and still decode.
+        let account = AccountId32::new([0xFF; 32]);
+        let address = account.to_ss58check_with_version(16383).unwrap();
+        assert!(
+            address.len() <= SS58_MAX_ADDRESS_LENGTH,
+            "a legitimate address must never exceed the bound"
+        );
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&address).unwrap(),
+            (account, 16383)
+        );
+    }
+
+    #[test]
     fn test_decode_invalid_checksum() {
         let mut payload = bs58::decode(ALICE_TREVO).into_vec().unwrap();
         let last = payload.len() - 1;

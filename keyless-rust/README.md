@@ -13,7 +13,7 @@ acts on behalf of its keyless accounts by submitting App Transactions on Trevo b
 
 ## Byte layout
 
-```
+```text
 AppAgent root account:   [0..=3] AppAgentId | [4] type=1 | [5..=31]  checksum
 Transactional account:   [0..=3] AppAgentId | [4] type=2 | [5..=8] TransactionalId | [9..=31]  checksum
 Named account:           [0..=3] AppAgentId | [4] type=3 | [5..=14] AccountName     | [15..=31] checksum

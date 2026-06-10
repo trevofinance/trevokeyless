@@ -806,6 +806,29 @@ mod tests_display_and_codec {
         }
     }
 
+    /// Pins the documented contract that SCALE decoding performs **no** consistency
+    /// validation (unlike serde deserialization, which re-validates): a value whose
+    /// identifiers do not match its `account_id` round-trips through SCALE unchanged.
+    #[test]
+    fn test_blockchain_account_info_scale_decode_performs_no_validation() {
+        let inconsistent = BlockchainAccountInfo::AppAgent {
+            account_id: AccountId32::new([0u8; 32]),
+            app_agent_id: 999,
+        };
+        assert_ne!(
+            crate::keyless::decode_account_info(&inconsistent.account_id()),
+            inconsistent,
+            "self check: the crafted value must actually be inconsistent"
+        );
+
+        let encoded = inconsistent.encode();
+        let decoded = BlockchainAccountInfo::decode(&mut &encoded[..]).unwrap();
+        assert_eq!(
+            decoded, inconsistent,
+            "SCALE decode must accept inconsistent values; see the type documentation"
+        );
+    }
+
     /// Compile-time check that every public type of the crate supports
     /// `codec::DecodeWithMemTracking`.
     #[test]

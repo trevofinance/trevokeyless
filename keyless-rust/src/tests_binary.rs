@@ -5,7 +5,7 @@ mod tests {
 
     // Do not delete it - helpful for debugging
     //
-    // use sp_runtime::AccountId32;
+    // use crate::types::AccountId32;
     // use std::fmt;
     //
     // struct PrintableBytes(Vec<u8>);
