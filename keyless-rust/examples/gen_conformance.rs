@@ -300,6 +300,16 @@ fn main() {
             "canonical account with a truncated one-byte checksum (decoded length 35)",
         ),
         (
+            raw_ss58(&payload(&[42u8], &account), 1),
+            42,
+            "single-byte-prefix account with a truncated one-byte checksum (decoded length 34)",
+        ),
+        (
+            raw_ss58(&payload(&[42u8], &[account.as_slice(), &[0u8]].concat()), 2),
+            42,
+            "33-byte payload under a single-byte prefix (decoded length 36, within the address length bound)",
+        ),
+        (
             raw_ss58(&payload(&trevo_prefix, &account[..31]), 2),
             trevo,
             "31-byte account id with a full checksum (decoded length 35)",

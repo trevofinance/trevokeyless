@@ -681,6 +681,8 @@
 ],
 "ss58_invalid": [
 {"ss58":"Ckumw79RR7Ke5fZEXknYgLB6JAoBojh1Je5FUV1oj4hDP6AP","format":5335,"reason":"canonical account with a truncated one-byte checksum (decoded length 35)"},
+{"ss58":"xhYtVZuW3AXp8oJWv3MFBMGQrvznkvFUwGd5oYUKwVjdoU","format":42,"reason":"single-byte-prefix account with a truncated one-byte checksum (decoded length 34)"},
+{"ss58":"Ki7BU227b7AYfBgZ4cK7Fqf7rp9ZAVVRUGPcv5SwE7R5e5sQg","format":42,"reason":"33-byte payload under a single-byte prefix (decoded length 36, within the address length bound)"},
 {"ss58":"Ckumw79RR7Ke5fZEXknYgLB6JAoBojh1Je5FUV1oj4hDP6id","format":5335,"reason":"31-byte account id with a full checksum (decoded length 35)"},
 {"ss58":"4x3gAn2ze72Vi9KrLPFwM35rHV8gALoVUAe5EhStmHJ4DSUub5D","format":5335,"reason":"33-byte payload (ECDSA-style public key, decoded length 37)"},
 {"ss58":"WDfrKds7yajHwoj","format":5335,"reason":"8-byte account-index payload (decoded length 11)"},
