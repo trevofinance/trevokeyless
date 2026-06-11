@@ -75,11 +75,11 @@ import trevokeyless
 
 app_agent_id = 123
 
-# Encode a Named address
+# Encode an AppAgent address
 encoded_address = trevokeyless.encode_app_agent_address(app_agent_id)
 assert encoded_address == "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp"
 
-# Decode the Named address
+# Decode the address and classify it
 decoded_data = trevokeyless.decode_address(encoded_address)
 expected_data = trevokeyless.BlockchainAddressInfo(
     address=encoded_address,
@@ -116,3 +116,8 @@ Any other input — wrong SS58 format or checksum, account ids that are not exac
 (`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
 raise `AddressTypeMismatchError` (a `ValueError` subclass carrying the `expected` and
 `found` address types) when the address decodes to a different type.
+
+The encoding functions validate their inputs: AppAgent and Transactional IDs must be
+integers in the u32 range `[0, 4294967295]` (matching the `u32` identifiers of the
+on-chain encoding), and address names must be exactly 10 characters from the set
+`0-9 a-z A-Z - #`. Invalid input raises `ValueError`.

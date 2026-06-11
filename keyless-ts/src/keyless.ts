@@ -511,5 +511,8 @@ export {
   decodeNamed,
   decodeAddress,
   isKeylessAddress,
+  ACCOUNT_ID_BYTES_LENGTH,
+  NAMED_ADDRESS_BYTES_LENGTH,
   SS58_FORMAT__TREVO_ASSET_HUB,
+  SS58_MAX_ADDRESS_LENGTH,
 };

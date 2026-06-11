@@ -1,7 +1,7 @@
 [project]
 name = "trevokeyless"
-version = "0.1.5"
-requires-python = ">=3.12"
+version = "0.2.0"
+requires-python = ">=3.10"
 
 license = "Apache-2.0"
 authors = [
@@ -48,7 +48,7 @@ include-package-data = true
 
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py310"
 line-length = 120
 fix = false
 exclude = [
@@ -68,6 +68,6 @@ exclude = ["ss58.py"]
 
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 strict = true
 exclude = ["setup.py", "build"]

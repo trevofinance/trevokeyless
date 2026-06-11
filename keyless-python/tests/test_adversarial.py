@@ -5,6 +5,7 @@ The crafted inputs are built with the reference construction rules so that each 
 documents exactly what is being fed to the decoder.
 """
 
+import dataclasses
 import unittest
 from hashlib import blake2b
 
@@ -74,6 +75,33 @@ class TestBoundaryValues(unittest.TestCase):
                     address = trevokeyless.encode_named_address(app_agent_id, name, SS58_FORMAT)
                     decoded = trevokeyless.decode_named_address(address, SS58_FORMAT)
                     self.assertEqual(decoded, (app_agent_id, name))
+
+
+class TestEncodeIdValidation(unittest.TestCase):
+    """Mirrors the TS `rejects out-of-range ids at encoding time` test. The Rust
+    implementation enforces the range through the u32 parameter types."""
+
+    def test_rejects_out_of_range_ids(self: "TestEncodeIdValidation") -> None:
+        for bad_id in [-1, U32_MAX + 1, 2**40]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)
+                with self.assertRaisesRegex(ValueError, r"^ta_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_transactional_address(1, bad_id, SS58_FORMAT)
+                with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_named_address(bad_id, "example123", SS58_FORMAT)
+
+    def test_rejects_non_integer_ids(self: "TestEncodeIdValidation") -> None:
+        for bad_id in [1.5, "123", None]:
+            with self.subTest(bad_id=bad_id), self.assertRaisesRegex(ValueError, "must be an integer"):
+                trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)  # type: ignore[arg-type]
+
+    def test_accepts_u32_boundaries(self: "TestEncodeIdValidation") -> None:
+        for good_id in [0, U32_MAX]:
+            with self.subTest(good_id=good_id):
+                trevokeyless.encode_app_agent_address(good_id, SS58_FORMAT)
+                trevokeyless.encode_transactional_address(good_id, good_id, SS58_FORMAT)
+                trevokeyless.encode_named_address(good_id, "example123", SS58_FORMAT)
 
 
 class TestAccountIdLength(unittest.TestCase):
@@ -204,6 +232,22 @@ class TestHexAccountIdContract(unittest.TestCase):
             with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
                 trevokeyless.decode_address(bad_hex, SS58_FORMAT)
 
+    def test_rejects_hex_with_whitespace(self: "TestHexAccountIdContract") -> None:
+        # bytes.fromhex tolerates ASCII whitespace, but the contract is exactly 64 hex
+        # characters; whitespace anywhere in the hex digits must be rejected (the Rust
+        # AccountId32 has no string form at all, the TS implementation uses a strict
+        # regular expression).
+        clean = APP_AGENT_123.hex()
+        spaced_inputs = [
+            "0x" + clean[:8] + " " + clean[8:],  # space inside
+            "0x" + clean + " ",  # trailing space
+            "0x " + clean,  # space after the prefix
+            "0x" + clean[:32] + "\t" + clean[32:],  # tab inside
+        ]
+        for spaced in spaced_inputs:
+            with self.subTest(spaced=spaced), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
+                trevokeyless.decode_address(spaced, SS58_FORMAT)
+
 
 class TestIsKeylessAddress(unittest.TestCase):
     """Mirrors the Rust `test_is_keyless_account` test."""
@@ -224,6 +268,23 @@ class TestIsKeylessAddress(unittest.TestCase):
         self.assertFalse(trevokeyless.is_keyless_address(alice, SS58_FORMAT))
         # A zeroed account has no valid keyless discriminant.
         self.assertFalse(trevokeyless.is_keyless_address("0x" + "00" * 32, SS58_FORMAT))
+
+
+class TestBlockchainAddressInfoValueSemantics(unittest.TestCase):
+    """BlockchainAddressInfo is a frozen dataclass: immutable and hashable, mirroring
+    the Rust BlockchainAccountInfo (Copy + Eq + Hash)."""
+
+    def test_is_immutable(self: "TestBlockchainAddressInfoValueSemantics") -> None:
+        info = trevokeyless.decode_address(trevokeyless.encode_app_agent_address(123, SS58_FORMAT), SS58_FORMAT)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            info.app_agent_id = 124  # type: ignore[misc]
+
+    def test_is_hashable(self: "TestBlockchainAddressInfoValueSemantics") -> None:
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        info_a = trevokeyless.decode_address(address, SS58_FORMAT)
+        info_b = trevokeyless.decode_address(address, SS58_FORMAT)
+        self.assertEqual(info_a, info_b)
+        self.assertEqual(len({info_a, info_b}), 1)
 
 
 class TestAddressTypeMismatchError(unittest.TestCase):

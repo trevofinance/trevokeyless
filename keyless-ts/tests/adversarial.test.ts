@@ -24,11 +24,11 @@ import {
   encodeNamed,
   encodeTransactional,
   isKeylessAddress,
+  SS58_MAX_ADDRESS_LENGTH,
 } from "../src/keyless";
 
 const ss58Format = 5335;
 const U32_MAX = 4294967295;
-const SS58_MAX_ADDRESS_LENGTH = 50;
 
 const SS58_PREFIX = Uint8Array.from("SS58PRE", (c) => c.charCodeAt(0));
 

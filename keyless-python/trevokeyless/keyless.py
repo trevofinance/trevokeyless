@@ -16,6 +16,7 @@ Examples:
     assert decoded_app_agent_id == app_agent_id
 """
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from hashlib import blake2b
@@ -27,6 +28,10 @@ from .ss58 import ss58_decode, ss58_encode
 NAMED_ADDRESS_LENGTH = 10
 SS58_FORMAT__TREVO_ASSET_HUB = 5335
 
+# Largest value of a u32 identifier (AppAgent ID, TA ID). Mirrors the `u32` types of the
+# Rust implementation and the `U32_MAX` bound of the TypeScript implementation.
+U32_MAX = 4294967295
+
 # Length in bytes of a blockchain account id.
 ACCOUNT_ID_LENGTH = 32
 
@@ -36,6 +41,12 @@ ACCOUNT_ID_LENGTH = 32
 # ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
 # whose cost grows quadratically with the input length. Mirrors the Rust implementation.
 SS58_MAX_ADDRESS_LENGTH = 50
+
+# The hex digits of a raw account id accepted by decode_address ("0x" + 64 hex chars).
+# bytes.fromhex is lenient about ASCII whitespace, so the charset must be checked
+# explicitly to enforce the documented contract (the TypeScript implementation uses an
+# equivalent regular expression).
+_HEX_DIGITS = re.compile(r"[0-9a-fA-F]*")
 
 
 # Types of address identifiers
@@ -73,8 +84,14 @@ class AddressTypeMismatchError(ValueError):
         super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found}.")
 
 
-@dataclass
+@dataclass(frozen=True)
 class BlockchainAddressInfo:
+    """Decoded identity of a blockchain address.
+
+    Immutable (and therefore hashable), mirroring the value semantics of the Rust
+    ``BlockchainAccountInfo`` (``Copy + Eq + Hash``).
+    """
+
     address: BlockchainAddress
     account_id: BlockchainAccountId
     address_type: AddressType
@@ -94,6 +111,25 @@ def _blake2_256(data: bytes) -> bytes:
         bytes: The 32-byte Blake2b digest.
     """
     return blake2b(data, digest_size=32).digest()
+
+
+def _validate_u32(value: int, label: str) -> None:
+    """
+    Validates that a value is an integer in the u32 range [0, 4294967295].
+
+    The Rust implementation enforces this through the `u32` type; the TypeScript
+    implementation performs the equivalent runtime check (raising RangeError).
+
+    Args:
+        value (int): The value to validate.
+        label (str): Name of the value, used in the error message.
+
+    Raises:
+        ValueError: If the value is not an integer in [0, 4294967295].
+    """
+    if not isinstance(value, int) or value < 0 or value > U32_MAX:
+        msg = f"{label} must be an integer in [0, {U32_MAX}], got {value!r}"
+        raise ValueError(msg)
 
 
 __allowed_chars = set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#")
@@ -173,7 +209,12 @@ def encode_app_agent_address(
 
     Returns:
         str: Encoded AppAgent address.
+
+    Raises:
+        ValueError: If app_agent_id is not an integer in [0, 4294967295].
     """
+    _validate_u32(app_agent_id, "app_agent_id")
+
     # Convert app_agent_id to little-endian bytes
     app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
 
@@ -224,7 +265,13 @@ def encode_transactional_address(
 
     Returns:
         str: Encoded Transactional address.
+
+    Raises:
+        ValueError: If app_agent_id or ta_id is not an integer in [0, 4294967295].
     """
+    _validate_u32(app_agent_id, "app_agent_id")
+    _validate_u32(ta_id, "ta_id")
+
     # Convert app_agent_id and ta_id to little-endian bytes
     app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
     ta_id_bytes = ta_id.to_bytes(4, byteorder="little")
@@ -277,7 +324,12 @@ def encode_named_address(
 
     Returns:
         str: Encoded Named address.
+
+    Raises:
+        ValueError: If app_agent_id is not an integer in [0, 4294967295], or the name
+            has a wrong length or contains invalid characters.
     """
+    _validate_u32(app_agent_id, "app_agent_id")
     _validate_address_name(name)
 
     # Convert app_agent_id to little-endian bytes
@@ -337,9 +389,17 @@ def _decode_account_id_bytes(blockchain_address: BlockchainAddress, ss58_format:
     """
     if blockchain_address.startswith("0x"):
         # Raw account id passthrough; the ss58_format argument does not apply.
+        # The charset is checked explicitly because bytes.fromhex tolerates ASCII
+        # whitespace, which the documented contract (exactly 64 hex characters) and the
+        # TypeScript implementation reject.
+        hex_digits = blockchain_address[2:]
+        if _HEX_DIGITS.fullmatch(hex_digits) is None:
+            msg = "Invalid hex account id"
+            raise ValueError(msg)
         try:
-            account_id_bytes = bytes.fromhex(blockchain_address[2:])
+            account_id_bytes = bytes.fromhex(hex_digits)
         except ValueError as error:
+            # Odd number of hex digits.
             msg = "Invalid hex account id"
             raise ValueError(msg) from error
     else:

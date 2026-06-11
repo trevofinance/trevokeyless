@@ -7,6 +7,7 @@ from .ss58 import ss58_encode as ss58_encode
 
 NAMED_ADDRESS_LENGTH: int
 SS58_FORMAT__TREVO_ASSET_HUB: int
+U32_MAX: int
 ACCOUNT_ID_LENGTH: int
 SS58_MAX_ADDRESS_LENGTH: int
 BlockchainAddress: TypeAlias = str
@@ -27,7 +28,7 @@ class AddressTypeMismatchError(ValueError):
     found: AddressType
     def __init__(self, expected: AddressType, found: AddressType) -> None: ...
 
-@dataclass
+@dataclass(frozen=True)
 class BlockchainAddressInfo:
     address: BlockchainAddress
     account_id: BlockchainAccountId

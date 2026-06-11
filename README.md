@@ -24,7 +24,7 @@ For more detailed docs, visit the README of the specific library:
 
 - **AppAgent**: on-chain entity that serves as a blockchain representation of an off-chain application;
 - **Keyless address**: an address with unknown private key controlled by an AppAgent;
-- **Address**: a 47-chars long address;
+- **Address**: an SS58-encoded address string (49 characters in the Trevo SS58 format, 5335);
 - **Account**: a 32-byte public key of an address;
 - **Address type**: one of the possible address types;
 - **AppAgent ID**: an identifier of an AppAgent `uint32`;

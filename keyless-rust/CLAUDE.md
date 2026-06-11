@@ -140,4 +140,6 @@ AccountId32::to_ss58check(&self) -> String
 AccountId32::to_ss58check_with_version(&self, format: u16) -> Result<String, Ss58Error>
 AccountId32::from_ss58check(address: &str) -> Result<AccountId32, Ss58Error>
 AccountId32::from_ss58check_with_version(address: &str) -> Result<(AccountId32, u16), Ss58Error>
+SS58_FORMAT_TREVO_ASSET_HUB: u16 = 5335
+SS58_MAX_ADDRESS_LENGTH: usize = 50  // decode rejects longer input before base58
 ```
