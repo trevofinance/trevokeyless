@@ -454,7 +454,12 @@ function decodeAppAgent(
   return decodingResult.appAgentId;
 }
 
-interface TransactionalAddressId {
+/**
+ * The identifiers embedded in a Transactional address, as returned by
+ * `decodeTransactional`. (The Python implementation returns the same pair as a tuple;
+ * its `TransactionalAddressId` type alias is the plain `taId` integer instead.)
+ */
+interface DecodedTransactionalAddress {
   appAgentId: number;
   taId: number;
 }
@@ -463,14 +468,14 @@ interface TransactionalAddressId {
  * Decodes a transactional address.
  *
  * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
- * @returns {TransactionalAddressId} - An object containing the IDs of the app agent and
- *   transactional address.
+ * @returns {DecodedTransactionalAddress} - An object containing the IDs of the app agent
+ *   and transactional address.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Transactional address.
  */
 function decodeTransactional(
   address: string,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
-): TransactionalAddressId {
+): DecodedTransactionalAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
   if (decodingResult.addressType !== AddressType.Transactional) {
@@ -499,7 +504,11 @@ function decodeTransactional(
   };
 }
 
-interface NamedAddressId {
+/**
+ * The identifiers embedded in a Named address, as returned by `decodeNamed`. (The
+ * Python implementation returns the same pair as a tuple.)
+ */
+interface DecodedNamedAddress {
   appAgentId: number;
   addressName: string;
 }
@@ -508,14 +517,14 @@ interface NamedAddressId {
  * Decodes a named address.
  *
  * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
- * @returns {NamedAddressId} - An object containing the ID of the application agent and
- *   the address name.
+ * @returns {DecodedNamedAddress} - An object containing the ID of the application agent
+ *   and the address name.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Named address.
  */
 function decodeNamed(
   address: string,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
-): NamedAddressId {
+): DecodedNamedAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
   if (decodingResult.addressType !== AddressType.Named) {
@@ -569,8 +578,8 @@ export {
   AddressType,
   AddressTypeMismatchError,
   BlockchainAddressInfo,
-  TransactionalAddressId,
-  NamedAddressId,
+  DecodedTransactionalAddress,
+  DecodedNamedAddress,
   encodeAppAgent,
   encodeTransactional,
   encodeNamed,

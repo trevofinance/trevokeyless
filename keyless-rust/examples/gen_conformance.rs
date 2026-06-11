@@ -348,6 +348,19 @@ fn main() {
             "first byte 0x80: not a valid SS58 prefix encoding",
         ),
         (
+            // The canonical Trevo two-byte prefix with the high bit set on its first byte
+            // (0x75 -> 0xF5). A decoder that masks the prefix tag bits instead of
+            // validating them would read the same format 5335 — and the checksum is valid
+            // over the crafted payload — giving every account a second spelling.
+            {
+                let mut prefix = trevo_prefix.clone();
+                prefix[0] |= 0b1000_0000;
+                raw_ss58(&payload(&prefix, &account), 2)
+            },
+            trevo,
+            "first byte 0xF5: two-byte Trevo prefix with the high bit set",
+        ),
+        (
             tampered,
             trevo,
             "canonical address with the last checksum byte flipped",

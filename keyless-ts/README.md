@@ -54,6 +54,7 @@ console.log("Decoded AppAgent address:", decodedAppAgentAddress);
 Example for Transactional addresses
 
 ```javascript
+const appAgentId = 123;
 const taId = 456;
 const encodedTaAddress = encodeTransactional(appAgentId, taId);
 console.log("Encoded Transactional address:", encodedTaAddress);
@@ -68,6 +69,7 @@ console.log("Decoded Transactional address:", decodedTransactionalAddress);
 Example for Named addresses
 
 ```javascript
+const appAgentId = 123;
 const addressName = "hot-wallet";
 const encodedNamedAddress = encodeNamed(appAgentId, addressName);
 console.log("Encoded Named address [123, 'hot-wallet']:", encodedNamedAddress);
@@ -91,8 +93,9 @@ console.log("Decoded Regular address:", decodedRegularAddress);
 Check whether an address is keyless
 
 ```javascript
+const regularAddress = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
 console.log(isKeylessAddress(encodeAppAgent(123))); // true
-console.log(isKeylessAddress(encodedRegularAddress)); // false
+console.log(isKeylessAddress(regularAddress)); // false
 ```
 
 ## Accepted input and errors

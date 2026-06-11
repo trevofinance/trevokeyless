@@ -433,11 +433,12 @@ class TestAddressTypeMismatchError(unittest.TestCase):
             trevokeyless.decode_app_agent_address(named_address, SS58_FORMAT)
         self.assertIs(ctx.exception.expected, AddressType.AppAgent)
         self.assertIs(ctx.exception.found, AddressType.Named)
-        # Backwards compatibility: the error is still a ValueError with the same message.
+        # Backwards compatibility: the error is still a ValueError. The message renders
+        # the plain type name ("Named"), like the TypeScript implementation.
         self.assertIsInstance(ctx.exception, ValueError)
         self.assertEqual(
             str(ctx.exception),
-            "Provided address is not an AppAgent address but is instance of AddressType.Named.",
+            "Provided address is not an AppAgent address but is instance of Named.",
         )
 
 

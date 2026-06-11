@@ -1,14 +1,4 @@
-import {
-  encodeAppAgent,
-  encodeTransactional,
-  encodeNamed,
-  AddressType,
-  BlockchainAddressInfo,
-  decodeAppAgent,
-  decodeTransactional,
-  decodeNamed,
-  decodeAddress,
-} from "../src/keyless";
+import { encodeNamed } from "../src/keyless";
 
 describe("Address name", () => {
   const ss58_format = 5335;

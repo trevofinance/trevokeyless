@@ -1,6 +1,6 @@
 [project]
 name = "trevokeyless"
-version = "0.3.0"
+version = "0.4.0"
 requires-python = ">=3.10"
 
 license = "Apache-2.0"
@@ -35,7 +35,9 @@ Issues = "https://github.com/trevo-finance/trevo-keyless/issues"
 
 
 [build-system]
-requires = ["setuptools>=75.6.0"]
+# >=77: first release that supports the PEP 639 SPDX string in `project.license`
+# (and ships the LICENSE file via the default `license-files` globs).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 

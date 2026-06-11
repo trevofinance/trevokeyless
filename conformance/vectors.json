@@ -690,6 +690,7 @@
 {"ss58":"aFbTasoBvrG6jB7ZzF5PSrujmWMJNZWYGrSk9eDgfPfFttTsr","format":46,"reason":"reserved format 46, non-canonical two-byte prefix"},
 {"ss58":"aMyqoRHqjSt5FAsTgD9gy2akxsQTC5EqaveCZ1xqw2PK6uAXL","format":47,"reason":"reserved format 47, non-canonical two-byte prefix"},
 {"ss58":"DpYhybeunBmaS6DGCpmQq5Yzc3gcnizo9CBFAyjoS8fmP2Yu","format":5335,"reason":"first byte 0x80: not a valid SS58 prefix encoding"},
+{"ss58":"2sGQ43q3t72UBTSdZXkEh7z66ge4i7ipPsukqEFePErYogV31X","format":5335,"reason":"first byte 0xF5: two-byte Trevo prefix with the high bit set"},
 {"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnQo","format":5335,"reason":"canonical address with the last checksum byte flipped"},
 {"ss58":"111111111111111111111111111111111111111111111111111","format":5335,"reason":"longer than any valid address of a 32-byte account id"},
 {"ss58":"","format":5335,"reason":"empty string"},

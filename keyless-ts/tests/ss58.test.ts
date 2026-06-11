@@ -10,8 +10,6 @@ import {
 } from "../src/keyless";
 
 describe("AppAgent", () => {
-  const ss58_format = 5335;
-
   const app_agent_id = 123;
   const account_id =
     "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2";
@@ -66,8 +64,6 @@ describe("AppAgent", () => {
 });
 
 describe("Transactional", () => {
-  const ss58_format = 5335;
-
   const app_agent_id = 123;
   const transactional_address_id = 456;
   const account_id =
@@ -133,8 +129,6 @@ describe("Transactional", () => {
 });
 
 describe("Named", () => {
-  const ss58_format = 5335;
-
   const app_agent_id = 123;
   const address_name = "example123";
   const account_id =
