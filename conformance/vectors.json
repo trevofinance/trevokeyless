@@ -686,6 +686,8 @@
 {"ss58":"Ckumw79RR7Ke5fZEXknYgLB6JAoBojh1Je5FUV1oj4hDP6id","format":5335,"reason":"31-byte account id with a full checksum (decoded length 35)"},
 {"ss58":"4x3gAn2ze72Vi9KrLPFwM35rHV8gALoVUAe5EhStmHJ4DSUub5D","format":5335,"reason":"33-byte payload (ECDSA-style public key, decoded length 37)"},
 {"ss58":"WDfrKds7yajHwoj","format":5335,"reason":"8-byte account-index payload (decoded length 11)"},
+{"ss58":"3fViu8jgyDJpNSxLNvRNDzMs8y9CWcxHP83KgkxTu8BUGt1","format":5335,"reason":"canonical account with no checksum at all (decoded length 34)"},
+{"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeYEmu","format":5335,"reason":"31-byte account with a three-byte checksum (decoded length 36, the canonical length class)"},
 {"ss58":"5dzcnFFrGL3ydH3DwAdTsBk9cFxWHhN7g4kUiw17U1unJiCE","format":46,"reason":"reserved format 46, canonical single-byte prefix"},
 {"ss58":"aFbTasoBvrG6jB7ZzF5PSrujmWMJNZWYGrSk9eDgfPfFttTsr","format":46,"reason":"reserved format 46, non-canonical two-byte prefix"},
 {"ss58":"aMyqoRHqjSt5FAsTgD9gy2akxsQTC5EqaveCZ1xqw2PK6uAXL","format":47,"reason":"reserved format 47, non-canonical two-byte prefix"},
@@ -696,6 +698,9 @@
 {"ss58":"","format":5335,"reason":"empty string"},
 {"ss58":"0OIl","format":5335,"reason":"characters outside the base58 alphabet"},
 {"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp ","format":5335,"reason":"canonical address with a trailing space"},
-{"ss58":" ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with a leading space"}
+{"ss58":" ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with a leading space"},
+{"ss58":"TTOWkP8aMqUgFBbgIKg2PBDynNeRHhrAlRDKTjEzeFjvEvNtP","format":5335,"reason":"case-swapped spelling of a canonical address"},
+{"ss58":"ttowKp8AmQuGfbBGikG20bdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with one character replaced by '0' (outside the base58 alphabet)"},
+{"ss58":"ttowKp8AmQuGfbBGikG2IbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with one character replaced by 'I' (outside the base58 alphabet)"}
 ]
 }

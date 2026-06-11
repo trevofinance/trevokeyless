@@ -19,6 +19,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "npx jest",
     "format-check": "npx prettier . --check",

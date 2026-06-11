@@ -328,6 +328,20 @@ fn main() {
             "8-byte account-index payload (decoded length 11)",
         ),
         (
+            raw_ss58(&payload(&trevo_prefix, &account), 0),
+            trevo,
+            "canonical account with no checksum at all (decoded length 34)",
+        ),
+        (
+            // Decoded length 36 is exactly the accepted length class for a two-byte
+            // prefix, but the bytes split as prefix + 31-byte account + 3-byte checksum.
+            // A decoder that derives the structure from the total length reads the last
+            // two bytes as the checksum of the first 34 and must find a mismatch.
+            raw_ss58(&payload(&trevo_prefix, &account[..31]), 3),
+            trevo,
+            "31-byte account with a three-byte checksum (decoded length 36, the canonical length class)",
+        ),
+        (
             raw_ss58(&payload(&[46u8], &account), 2),
             46,
             "reserved format 46, canonical single-byte prefix",
@@ -388,6 +402,36 @@ fn main() {
             format!(" {canonical_address}"),
             trevo,
             "canonical address with a leading space",
+        ),
+        (
+            // ASCII case swap of every letter. Base58 is case-sensitive, and the swap
+            // is guaranteed to leave the alphabet ('i' <-> 'I' and 'L' <-> 'l' cross
+            // into the excluded characters) or at minimum break the checksum.
+            canonical_address
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_lowercase() {
+                        c.to_ascii_uppercase()
+                    } else {
+                        c.to_ascii_lowercase()
+                    }
+                })
+                .collect::<String>(),
+            trevo,
+            "case-swapped spelling of a canonical address",
+        ),
+        (
+            // In-place corruption with characters outside the base58 alphabet, distinct
+            // from the all-garbage "0OIl" vector: the string is canonical except for one
+            // character, so decoders that sanitize instead of reject would accept it.
+            format!("{}0{}", &canonical_address[..20], &canonical_address[21..]),
+            trevo,
+            "canonical address with one character replaced by '0' (outside the base58 alphabet)",
+        ),
+        (
+            format!("{}I{}", &canonical_address[..20], &canonical_address[21..]),
+            trevo,
+            "canonical address with one character replaced by 'I' (outside the base58 alphabet)",
         ),
     ];
     let ss58_invalid: Vec<String> = ss58_invalid

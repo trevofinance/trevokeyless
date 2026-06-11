@@ -248,7 +248,8 @@ pub fn decode_named_account(
 /// Returns `true` if the account passes the keyless checksum verification (App Agent,
 /// Transactional, or Named). Returns `false` for accounts whose checksum does not match, whose
 /// type discriminant is unknown, or whose Named name bytes fail charset validation despite a
-/// valid checksum. Internally performs a full Blake2b-256 hash computation.
+/// valid checksum. Internally performs up to one full Blake2b-256 hash computation (none when
+/// byte `[4]` is not a known type discriminant).
 #[must_use]
 pub fn is_keyless_account(account: &AccountId32) -> bool {
     decode_account_info(account).is_keyless_account()

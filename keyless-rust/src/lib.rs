@@ -57,7 +57,7 @@
 //! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
 //! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
-//!   (performs a full Blake2b-256 hash internally).
+//!   (performs up to one Blake2b-256 hash internally).
 //!
 //! ## Cargo features
 //!
