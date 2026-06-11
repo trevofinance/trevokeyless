@@ -12,5 +12,4 @@ keyless-python/trevokeyless.egg-info/
 keyless-rust/target
 
 keyless-ts/dist
-keyless-ts/bundle
 */node_modules

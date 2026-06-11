@@ -1,0 +1,5 @@
+# The default setuptools sdist rules pick up tests/test_*.py (but not tests/__init__.py),
+# shipping a broken subset of the suite. The tests also depend on the repository-root
+# conformance fixture, which cannot ship with the package — exclude the suite entirely;
+# it runs from the repository.
+prune tests

@@ -72,4 +72,6 @@ exclude = ["ss58.py"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
-exclude = ["setup.py", "build"]
+# `python -m build` copies the package into build/, which would otherwise be
+# picked up as a duplicate module.
+exclude = ["build"]
