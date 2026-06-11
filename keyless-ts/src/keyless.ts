@@ -31,6 +31,10 @@ const HEX_ACCOUNT_ID = /^0x[0-9a-fA-F]{64}$/;
 
 const U32_MAX = 4294967295;
 
+// Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
+// bound of the Rust implementation.
+const SS58_FORMAT_MAX = 16383;
+
 enum AddressType {
   Regular = 0,
   AppAgent = 1,
@@ -106,6 +110,32 @@ function u32FromLeBytes(bytes: Uint8Array, offset: number): number {
 }
 
 /**
+ * Validates that an SS58 format is an integer in [0, 16383] (the prefix encodes
+ * 14 bits).
+ *
+ * The Rust implementation enforces this through the u16 type plus a range check; the
+ * Python implementation performs the equivalent runtime check. Without it, fractional
+ * values would be silently truncated by the prefix bit arithmetic of the underlying
+ * encoder, and -1 would be passed through to the underlying @polkadot decoder, where it
+ * acts as an "accept any format" sentinel and would silently disable the expected-format
+ * check. The reserved formats 46 and 47 are rejected separately by the SS58 layer.
+ *
+ * @param {number} ss58Format - The SS58 format to validate.
+ * @throws {Error} - Thrown if the format is not an integer in [0, 16383].
+ */
+function validateSs58Format(ss58Format: number): void {
+  if (
+    !Number.isInteger(ss58Format) ||
+    ss58Format < 0 ||
+    ss58Format > SS58_FORMAT_MAX
+  ) {
+    throw new Error(
+      `ss58Format must be an integer in [0, ${SS58_FORMAT_MAX}], got ${ss58Format}`,
+    );
+  }
+}
+
+/**
  * Validates that a name is exactly 10 characters long and contains only allowed ASCII
  * characters (`0-9 a-z A-Z - #`).
  *
@@ -154,12 +184,7 @@ function encodeKeylessAccount(
   openPart: Uint8Array,
   ss58Format: number,
 ): string {
-  if (!Number.isInteger(ss58Format)) {
-    // encodeAddress range-checks the format but its bitwise prefix arithmetic silently
-    // truncates fractional values; the Rust (u16) and Python (bytes()) implementations
-    // cannot encode a fractional format at all.
-    throw new Error(`ss58Format must be an integer, got ${ss58Format}`);
-  }
+  validateSs58Format(ss58Format);
   const checksum = blake2AsU8a(openPart);
   const accountId = u8aConcat(openPart, checksum.slice(openPart.length));
   return encodeAddress(accountId, ss58Format);
@@ -230,13 +255,17 @@ function encodeNamed(
  * Resolves an address string to its raw 32-byte account id.
  *
  * @param {string} address - SS58 address (or `0x`-prefixed 32-byte account id hex).
- * @param {number} ss58Format - SS58 format (network prefix) the address must use; not
- *   applied to raw hex input, which carries no format.
+ * @param {number} ss58Format - SS58 format (network prefix) the address must use;
+ *   validated unconditionally but not compared against raw hex input, which carries no
+ *   format.
  * @returns {Uint8Array} - The 32-byte account id.
- * @throws {Error} - Thrown if the input is not a valid SS58 address of a 32-byte account
- *   id in the expected format, or not a valid 32-byte hex account id.
+ * @throws {Error} - Thrown if ss58Format is not an integer in [0, 16383], or the input
+ *   is not a valid SS58 address of a 32-byte account id in the expected format, or not
+ *   a valid 32-byte hex account id.
  */
 function decodeAccountId(address: string, ss58Format: number): Uint8Array {
+  validateSs58Format(ss58Format);
+
   if (address.startsWith("0x")) {
     // Raw account id passthrough; the ss58Format argument does not apply.
     if (!HEX_ACCOUNT_ID.test(address)) {
@@ -293,13 +322,14 @@ function decodeAccountId(address: string, ss58Format: number): Uint8Array {
  *
  * Accepts an SS58 address string. For backwards compatibility a raw account id in hex
  * form (`0x` followed by exactly 64 hex characters) is also accepted; such input
- * bypasses SS58 decoding — including the ss58Format check, which does not apply to raw
- * account bytes.
+ * bypasses SS58 decoding, so the ss58Format argument (although still validated) is not
+ * compared against raw account bytes, which carry no format.
  *
  * @param {string} address - The blockchain address to decode.
  * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
- * @throws {Error} - Thrown if the address is not a valid SS58 string of a 32-byte
- *   account id in the expected format, or not a valid 32-byte hex account id.
+ * @throws {Error} - Thrown if ss58Format is not an integer in [0, 16383], or the
+ *   address is not a valid SS58 string of a 32-byte account id in the expected format,
+ *   or not a valid 32-byte hex account id.
  */
 function decodeAddress(
   address: string,
@@ -553,4 +583,5 @@ export {
   NAMED_ADDRESS_BYTES_LENGTH,
   SS58_FORMAT__TREVO_ASSET_HUB,
   SS58_MAX_ADDRESS_LENGTH,
+  U32_MAX,
 };

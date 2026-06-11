@@ -691,6 +691,8 @@
 {"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnQo","format":5335,"reason":"canonical address with the last checksum byte flipped"},
 {"ss58":"111111111111111111111111111111111111111111111111111","format":5335,"reason":"longer than any valid address of a 32-byte account id"},
 {"ss58":"","format":5335,"reason":"empty string"},
-{"ss58":"0OIl","format":5335,"reason":"characters outside the base58 alphabet"}
+{"ss58":"0OIl","format":5335,"reason":"characters outside the base58 alphabet"},
+{"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp ","format":5335,"reason":"canonical address with a trailing space"},
+{"ss58":" ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with a leading space"}
 ]
 }

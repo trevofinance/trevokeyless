@@ -236,6 +236,81 @@ class TestMalformedSs58(unittest.TestCase):
         self.assertEqual(get_ss58_format(longest), 16383)
 
 
+class TestSurroundingWhitespace(unittest.TestCase):
+    """An address with surrounding whitespace is not the canonical spelling of the
+    account: whitespace is outside the base58 alphabet and must be rejected, as in the
+    Rust and TypeScript implementations (pinned by the ss58_invalid conformance
+    vectors). base58.b58decode right-strips its input, so the charset is checked
+    explicitly before decoding."""
+
+    def test_decode_rejects_surrounding_whitespace(self: "TestSurroundingWhitespace") -> None:
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        spellings = [
+            address + " ",
+            " " + address,
+            address + "\n",
+            address + "\t",
+            address + "\u00a0",  # non-breaking space, also stripped by str.rstrip
+        ]
+        for spelling in spellings:
+            with self.subTest(spelling=spelling), self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
+                trevokeyless.decode_address(spelling, SS58_FORMAT)
+
+    def test_generic_ss58_helpers_reject_surrounding_whitespace(self: "TestSurroundingWhitespace") -> None:
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        for spelling in [address + " ", address + "\n", " " + address]:
+            with self.subTest(spelling=spelling):
+                with self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
+                    ss58_decode(spelling, SS58_FORMAT)
+                with self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
+                    get_ss58_format(spelling)
+                self.assertFalse(is_valid_ss58_address(spelling, SS58_FORMAT))
+
+
+class TestSs58FormatValidation(unittest.TestCase):
+    """The ss58_format parameter must be an integer in [0, 16383] (bool excluded),
+    mirroring the u16-typed format of the Rust implementation and the runtime check of
+    the TypeScript implementation. In particular a float must not surface as TypeError,
+    and True must not be silently encoded as format 1."""
+
+    def test_encode_rejects_invalid_formats(self: "TestSs58FormatValidation") -> None:
+        for bad_format in [-1, 16384, True, False, 5335.0, "5335", None]:
+            with self.subTest(bad_format=bad_format):
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_app_agent_address(123, bad_format)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_transactional_address(123, 456, bad_format)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_named_address(123, "example123", bad_format)  # type: ignore[arg-type]
+
+    def test_decode_rejects_invalid_formats(self: "TestSs58FormatValidation") -> None:
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        for bad_format in [-1, 16384, True, 5335.0, None]:
+            with (
+                self.subTest(bad_format=bad_format),
+                self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
+            ):
+                trevokeyless.decode_address(address, bad_format)  # type: ignore[arg-type]
+
+    def test_format_argument_is_validated_for_hex_input(self: "TestSs58FormatValidation") -> None:
+        # Raw hex input carries no SS58 format, so the argument is not compared against
+        # it - but the argument itself must still be a valid format.
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+            trevokeyless.decode_address("0x" + APP_AGENT_123.hex(), -1)
+
+    def test_format_boundaries_accepted(self: "TestSs58FormatValidation") -> None:
+        for good_format in [0, 16383]:
+            with self.subTest(good_format=good_format):
+                address = trevokeyless.encode_app_agent_address(123, good_format)
+                self.assertEqual(trevokeyless.decode_app_agent_address(address, good_format), 123)
+
+    def test_reserved_formats_still_rejected_by_the_ss58_layer(self: "TestSs58FormatValidation") -> None:
+        # 46 and 47 pass the integer range validation; the SS58 layer rejects them.
+        for reserved in [46, 47]:
+            with self.subTest(reserved=reserved), self.assertRaisesRegex(ValueError, "Invalid value for ss58_format"):
+                trevokeyless.encode_app_agent_address(123, reserved)
+
+
 class TestHexAccountIdContract(unittest.TestCase):
     """A raw account id ("0x" + 64 hex chars) is accepted and validated; anything else
     hex-like is rejected."""

@@ -120,9 +120,9 @@ All test modules additionally require the `std` feature; run the full suite with
 `conformance/vectors.json` (repository root) holds encoding, classification, and SS58
 vectors derived from this crate — the source of truth — plus `ss58_invalid`: address
 strings every implementation must *reject* (non-canonical shapes such as one-byte
-checksums, reserved formats, corrupted checksums). The Rust, Python, and TypeScript
-test suites all verify against the committed fixture, and CI checks that the fixture
-matches the generator output. After an intentional change to the encoding semantics,
+checksums, reserved formats, corrupted checksums, surrounding whitespace). The Rust,
+Python, and TypeScript test suites all verify against the committed fixture, and CI
+checks that the fixture matches the generator output. After an intentional change to the encoding semantics,
 regenerate with:
 
 ```

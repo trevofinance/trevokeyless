@@ -92,10 +92,15 @@ The decoding functions accept an SS58 address string of a 32-byte account id in 
 expected SS58 format (5335, the Trevo asset hub, by default). For backwards
 compatibility, a raw account id in hex form (`0x` followed by exactly 64 hex characters)
 is also accepted; raw account bytes carry no SS58 format, so the `ss58Format` argument
-does not apply to such input.
+is not compared against such input.
 
 Any other input — wrong SS58 format or checksum, account ids that are not exactly
-32 bytes, malformed base58 or hex — throws an `Error`. The typed decoders
+32 bytes, malformed base58 or hex, surrounding whitespace — throws an `Error`; only the
+canonical spelling of an address is accepted. The typed decoders
 (`decodeAppAgent`, `decodeTransactional`, `decodeNamed`) throw
 `AddressTypeMismatchError` (carrying the `expected` and `found` address types) when the
 address decodes to a different type.
+
+The `ss58Format` argument of every function must be an integer in `[0, 16383]` and not
+a reserved format (46, 47); in particular `-1` is rejected rather than passed to the
+underlying decoder, where it would act as an "accept any format" sentinel.

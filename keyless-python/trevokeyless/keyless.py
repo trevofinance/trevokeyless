@@ -32,6 +32,10 @@ SS58_FORMAT__TREVO_ASSET_HUB = 5335
 # Rust implementation and the `U32_MAX` bound of the TypeScript implementation.
 U32_MAX = 4294967295
 
+# Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the `SS58_FORMAT_MAX`
+# bound of the Rust implementation.
+_SS58_FORMAT_MAX = 16383
+
 # Length in bytes of a blockchain account id.
 ACCOUNT_ID_LENGTH = 32
 
@@ -134,6 +138,28 @@ def _validate_u32(value: int, label: str) -> None:
         raise ValueError(msg)
 
 
+def _validate_ss58_format(ss58_format: int) -> None:
+    """
+    Validates that an SS58 format is an integer in [0, 16383] (the prefix encodes
+    14 bits).
+
+    The Rust implementation enforces this through the `u16` type plus a range check; the
+    TypeScript implementation performs the equivalent runtime check. ``bool`` is rejected
+    for the same reason as in `_validate_u32`; non-integers (e.g. floats) would otherwise
+    surface as a confusing TypeError from the prefix byte arithmetic. The reserved
+    formats 46 and 47 are rejected separately by the SS58 layer.
+
+    Args:
+        ss58_format (int): The SS58 format to validate.
+
+    Raises:
+        ValueError: If the format is not an integer in [0, 16383].
+    """
+    if isinstance(ss58_format, bool) or not isinstance(ss58_format, int) or not 0 <= ss58_format <= _SS58_FORMAT_MAX:
+        msg = f"ss58_format must be an integer in [0, {_SS58_FORMAT_MAX}], got {ss58_format!r}"
+        raise ValueError(msg)
+
+
 __allowed_chars = set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#")
 
 
@@ -190,7 +216,12 @@ def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddr
 
     Returns:
         str: Encoded SS58 address.
+
+    Raises:
+        ValueError: If ss58_format is not an integer in [0, 16383], or is reserved.
     """
+    _validate_ss58_format(ss58_format)
+
     # Calculate checksum using blake2_256
     checksum = _blake2_256(open_part)
 
@@ -213,7 +244,8 @@ def encode_app_agent_address(
         str: Encoded AppAgent address.
 
     Raises:
-        ValueError: If app_agent_id is not an integer in [0, 4294967295].
+        ValueError: If app_agent_id is not an integer in [0, 4294967295], or
+            ss58_format is not a valid SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
 
@@ -269,7 +301,8 @@ def encode_transactional_address(
         str: Encoded Transactional address.
 
     Raises:
-        ValueError: If app_agent_id or ta_id is not an integer in [0, 4294967295].
+        ValueError: If app_agent_id or ta_id is not an integer in [0, 4294967295], or
+            ss58_format is not a valid SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
     _validate_u32(ta_id, "ta_id")
@@ -328,8 +361,9 @@ def encode_named_address(
         str: Encoded Named address.
 
     Raises:
-        ValueError: If app_agent_id is not an integer in [0, 4294967295], or the name
-            has a wrong length or contains invalid characters.
+        ValueError: If app_agent_id is not an integer in [0, 4294967295], the name has
+            a wrong length or contains invalid characters, or ss58_format is not a
+            valid SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
     _validate_address_name(name)
@@ -379,16 +413,20 @@ def _decode_account_id_bytes(blockchain_address: BlockchainAddress, ss58_format:
 
     Args:
         blockchain_address (str): SS58 address (or `0x`-prefixed 32-byte account id hex).
-        ss58_format (int): SS58 format (network prefix) the address must use; not applied
-            to raw hex input, which carries no format.
+        ss58_format (int): SS58 format (network prefix) the address must use; validated
+            unconditionally but not compared against raw hex input, which carries no
+            format.
 
     Returns:
         bytes: The 32-byte account id.
 
     Raises:
-        ValueError: If the input is not a valid SS58 address of a 32-byte account id in
-            the expected format, or not a valid 32-byte hex account id.
+        ValueError: If ss58_format is not an integer in [0, 16383], or the input is not
+            a valid SS58 address of a 32-byte account id in the expected format, or not
+            a valid 32-byte hex account id.
     """
+    _validate_ss58_format(ss58_format)
+
     if blockchain_address.startswith("0x"):
         # Raw account id passthrough; the ss58_format argument does not apply.
         # The charset is checked explicitly because bytes.fromhex tolerates ASCII
@@ -427,8 +465,8 @@ def decode_address(
 
     Accepts an SS58 address string. For backwards compatibility a raw account id in hex
     form (`0x` followed by exactly 64 hex characters) is also accepted; such input
-    bypasses SS58 decoding — including the `ss58_format` check, which does not apply to
-    raw account bytes.
+    bypasses SS58 decoding, so the `ss58_format` argument (although still validated) is
+    not compared against raw account bytes, which carry no format.
 
     Args:
         blockchain_address (str): SS58 address (or `0x`-prefixed 32-byte account id hex).
@@ -438,8 +476,9 @@ def decode_address(
         BlockchainAddressInfo: an object with info about the address.
 
     Raises:
-        ValueError: If the address is not a valid SS58 string of a 32-byte account id in
-            the expected format, or not a valid 32-byte hex account id.
+        ValueError: If ss58_format is not an integer in [0, 16383], or the address is
+            not a valid SS58 string of a 32-byte account id in the expected format, or
+            not a valid 32-byte hex account id.
     """
     account_id_bytes = _decode_account_id_bytes(blockchain_address, ss58_format)
     account_id = "0x" + account_id_bytes.hex()

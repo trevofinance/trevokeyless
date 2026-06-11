@@ -168,6 +168,27 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_rejects_surrounding_whitespace() {
+        // An address with leading or trailing whitespace is not the canonical spelling of
+        // the account: any whitespace is outside the base58 alphabet and must be rejected.
+        // (Pinned cross-language by the `ss58_invalid` conformance vectors; permissive
+        // decoders such as python base58 historically right-stripped their input.)
+        let address = encode_app_agent_account(123).to_ss58check();
+        for spelling in [
+            format!("{address} "),
+            format!(" {address}"),
+            format!("{address}\n"),
+            format!("{address}\t"),
+        ] {
+            assert_eq!(
+                AccountId32::from_ss58check_with_version(&spelling).unwrap_err(),
+                Ss58Error::InvalidBase58,
+                "{spelling:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
     fn test_decode_invalid_checksum() {
         let mut payload = bs58::decode(ALICE_TREVO).into_vec().unwrap();
         let last = payload.len() - 1;

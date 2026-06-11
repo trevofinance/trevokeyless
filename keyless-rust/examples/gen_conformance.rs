@@ -279,7 +279,9 @@ fn main() {
     // the accompanying expected format. These pin the *rejection* side of the SS58
     // contract — non-canonical shapes that permissive decoders historically accepted
     // (e.g. one-byte checksums) must fail in every language, exactly like in this crate.
-    let account: [u8; 32] = encode_app_agent_account(123).into();
+    let account_id = encode_app_agent_account(123);
+    let canonical_address = account_id.to_ss58check();
+    let account: [u8; 32] = account_id.into();
     let trevo_prefix = format_prefix(SS58_FORMAT_TREVO_ASSET_HUB);
     let payload = |prefix: &[u8], data: &[u8]| [prefix, data].concat();
     let tampered = {
@@ -350,6 +352,19 @@ fn main() {
             "0OIl".to_string(),
             trevo,
             "characters outside the base58 alphabet",
+        ),
+        // Whitespace around an otherwise canonical address: permissive base58 decoders
+        // (e.g. python base58, which right-strips its input) would otherwise give every
+        // account additional accepted spellings.
+        (
+            format!("{canonical_address} "),
+            trevo,
+            "canonical address with a trailing space",
+        ),
+        (
+            format!(" {canonical_address}"),
+            trevo,
+            "canonical address with a leading space",
         ),
     ];
     let ss58_invalid: Vec<String> = ss58_invalid

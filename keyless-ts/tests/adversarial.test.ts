@@ -128,6 +128,54 @@ describe("Boundary values", () => {
   });
 });
 
+describe("ss58Format validation", () => {
+  // The ss58Format parameter must be an integer in [0, 16383], mirroring the u16-typed
+  // format of the Rust implementation and the runtime check of the Python
+  // implementation.
+
+  it("rejects out-of-range and non-integer formats at decoding time", () => {
+    const address = encodeAppAgent(123, ss58Format);
+    [-1, 16384, 1.5, NaN].forEach((badFormat) => {
+      expect(() => decodeAddress(address, badFormat)).toThrow(
+        /ss58Format must be an integer in \[0, 16383\]/,
+      );
+    });
+  });
+
+  it("rejects -1 instead of treating it as the @polkadot any-format sentinel", () => {
+    // The underlying @polkadot decoder interprets -1 as "accept any format"; passing
+    // it through would silently disable the expected-format check, so an address of a
+    // *different* format must still be rejected with -1.
+    const substrateGenericAddress = encodeAppAgent(123, 42);
+    expect(() => decodeAddress(substrateGenericAddress, -1)).toThrow(
+      /ss58Format must be an integer in \[0, 16383\]/,
+    );
+  });
+
+  it("validates the format argument for raw hex input as well", () => {
+    // Raw hex input carries no SS58 format, so the argument is not compared against
+    // it - but the argument itself must still be a valid format.
+    expect(() => decodeAddress(u8aToHex(appAgent123), -1)).toThrow(
+      /ss58Format must be an integer in \[0, 16383\]/,
+    );
+  });
+
+  it("rejects out-of-range formats at encoding time", () => {
+    [-1, 16384].forEach((badFormat) => {
+      expect(() => encodeAppAgent(123, badFormat)).toThrow(
+        /ss58Format must be an integer in \[0, 16383\]/,
+      );
+    });
+  });
+
+  it("accepts the format boundaries 0 and 16383", () => {
+    [0, 16383].forEach((goodFormat) => {
+      const address = encodeAppAgent(123, goodFormat);
+      expect(decodeAppAgent(address, goodFormat)).toEqual(123);
+    });
+  });
+});
+
 describe("Account id length", () => {
   // Account ids must be exactly 32 bytes; the Rust AccountId32 makes this structural.
 
@@ -252,6 +300,18 @@ describe("Malformed SS58 input", () => {
     ["", " ", "   ", "0OIl", "x", "1"].forEach((garbage) => {
       expect(() => decodeAddress(garbage, ss58Format)).toThrow();
     });
+  });
+
+  it("rejects surrounding whitespace", () => {
+    // An address with surrounding whitespace is not the canonical spelling of the
+    // account; whitespace is outside the base58 alphabet (pinned cross-language by the
+    // ss58_invalid conformance vectors).
+    const address = encodeAppAgent(123, ss58Format);
+    [`${address} `, ` ${address}`, `${address}\n`, `${address}\t`].forEach(
+      (spelling) => {
+        expect(() => decodeAddress(spelling, ss58Format)).toThrow();
+      },
+    );
   });
 
   it("rejects oversized input before base58 decoding", () => {

@@ -37,6 +37,18 @@ from hashlib import blake2b
 # ids; this generic bound mirrors the same hardening inside the Rust SS58 decoder.)
 _MAX_SS58_ADDRESS_LENGTH = 51
 
+# The 58 characters of the Bitcoin base58 alphabet used by SS58. base58.b58decode
+# right-strips whitespace from its input (str.rstrip) before decoding, which would give
+# every address additional accepted spellings such as "<address>\n"; the Rust (bs58) and
+# TypeScript (@polkadot) decoders reject any character outside the alphabet. The charset
+# is therefore checked explicitly before decoding.
+_BASE58_ALPHABET = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+
+
+def _validate_base58_charset(address: str) -> None:
+    if not all(c in _BASE58_ALPHABET for c in address):
+        raise ValueError("Invalid base58 character")
+
 
 def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
     """
@@ -62,6 +74,8 @@ def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
         # No valid address of any supported payload is longer; rejecting early keeps the
         # cost of base58-decoding untrusted input bounded.
         raise ValueError("Invalid address length")
+
+    _validate_base58_charset(address)
 
     checksum_prefix = b'SS58PRE'
 
@@ -205,6 +219,8 @@ def get_ss58_format(ss58_address: str) -> int:
     if len(ss58_address) > _MAX_SS58_ADDRESS_LENGTH:
         # Same early bound as ss58_decode: keeps base58 decoding of untrusted input cheap.
         raise ValueError("Invalid address length")
+
+    _validate_base58_charset(ss58_address)
 
     address_decoded = base58.b58decode(ss58_address)
 
