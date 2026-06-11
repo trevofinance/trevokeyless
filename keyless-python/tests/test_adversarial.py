@@ -267,6 +267,41 @@ class TestSurroundingWhitespace(unittest.TestCase):
                 self.assertFalse(is_valid_ss58_address(spelling, SS58_FORMAT))
 
 
+class TestGenericSs58HexHandling(unittest.TestCase):
+    """The generic helpers of trevokeyless.ss58 accept "0x"-prefixed hex account ids;
+    the hex digits must be validated strictly. bytes.fromhex tolerates ASCII whitespace,
+    and str.replace would strip "0x" occurrences anywhere in the string - both would
+    silently accept malformed input."""
+
+    def test_ss58_decode_validates_the_hex_passthrough(self: "TestGenericSs58HexHandling") -> None:
+        # Valid hex passes through unchanged (the historical contract).
+        hex_account = "0x" + APP_AGENT_123.hex()
+        self.assertEqual(ss58_decode(hex_account), hex_account)
+
+        # Malformed hex must raise instead of being returned verbatim: invalid digits,
+        # an odd digit count, and embedded whitespace.
+        for bad in ["0xzz", "0xabc", "0x" + "0" * 63, "0x12 34", "0x12\n34"]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
+                ss58_decode(bad)
+
+    def test_ss58_encode_strips_only_the_hex_prefix(self: "TestGenericSs58HexHandling") -> None:
+        # The canonical spellings: raw bytes, bare hex, and "0x"-prefixed hex must all
+        # produce the same address.
+        address = ss58_encode(APP_AGENT_123, SS58_FORMAT)
+        self.assertEqual(ss58_encode(APP_AGENT_123.hex(), SS58_FORMAT), address)
+        self.assertEqual(ss58_encode("0x" + APP_AGENT_123.hex(), SS58_FORMAT), address)
+
+        # "0x" embedded in the middle of the string must raise, not be stripped
+        # (str.replace would silently accept this as a 32-byte account id).
+        embedded = "00" * 16 + "0x" + "00" * 16
+        with self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
+            ss58_encode(embedded, SS58_FORMAT)
+
+        # Whitespace inside the hex digits must raise (bytes.fromhex tolerates it).
+        with self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
+            ss58_encode("7b 00" + "00" * 30, SS58_FORMAT)
+
+
 class TestSs58FormatValidation(unittest.TestCase):
     """The ss58_format parameter must be an integer in [0, 16383] (bool excluded),
     mirroring the u16-typed format of the Rust implementation and the runtime check of

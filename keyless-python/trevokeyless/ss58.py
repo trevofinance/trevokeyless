@@ -44,10 +44,26 @@ _MAX_SS58_ADDRESS_LENGTH = 51
 # is therefore checked explicitly before decoding.
 _BASE58_ALPHABET = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
+# The hex digits accepted in a "0x"-prefixed account id string.
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
 
 def _validate_base58_charset(address: str) -> None:
     if not all(c in _BASE58_ALPHABET for c in address):
         raise ValueError("Invalid base58 character")
+
+
+def _decode_hex_strict(hex_digits: str) -> bytes:
+    """bytes.fromhex with a strict charset: fromhex tolerates ASCII whitespace between
+    digit pairs, which would let malformed strings through. The trevokeyless layer and
+    the Rust and TypeScript implementations all reject such input."""
+    if not all(c in _HEX_DIGITS for c in hex_digits):
+        raise ValueError("Invalid hex account id")
+    try:
+        return bytes.fromhex(hex_digits)
+    except ValueError as error:
+        # Odd number of hex digits.
+        raise ValueError("Invalid hex account id") from error
 
 
 def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
@@ -63,8 +79,10 @@ def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
     Decoded string AccountId
     """
 
-    # Check if address is already decoded
+    # Check if address is already decoded. The hex digits are still validated, so that
+    # malformed input (e.g. "0xzz") raises ValueError instead of being returned verbatim.
     if address.startswith('0x'):
+        _decode_hex_strict(address[2:])
         return address
 
     if address == '':
@@ -152,7 +170,11 @@ def ss58_encode(address: Union[str, bytes], ss58_format: int = 42) -> str:
     if type(address) is bytes or type(address) is bytearray:
         address_bytes = address
     else:
-        address_bytes = bytes.fromhex(address.replace('0x', ''))  # type: ignore[arg-type]
+        # Strip only the optional "0x" prefix: str.replace would drop "0x" occurrences
+        # anywhere in the string, silently accepting malformed input such as
+        # "00...0x...00". The strict decode also rejects the whitespace that
+        # bytes.fromhex would otherwise tolerate.
+        address_bytes = _decode_hex_strict(address.removeprefix('0x'))  # type: ignore[arg-type]
 
     if len(address_bytes) in [32, 33]:
         # Checksum size is 2 bytes for public key
