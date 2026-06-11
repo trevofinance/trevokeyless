@@ -8,6 +8,15 @@ cryptographic keys for identification.
 Instead, it is derived from a combination of identifiers and checksums and is controlled by an AppAgent.
 This makes the keyless addresses convenient for use in off-chain applications.
 
+## Installation
+
+```
+npm install @trevofinance/trevo-keyless
+```
+
+The package ships a single CommonJS module with TypeScript declarations; it works from
+both `require` and `import`.
+
 ## Usage
 
 To use this library in your project, import the necessary functions and constants:
@@ -70,11 +79,11 @@ const decodedNamedAddress = decodeAddress(encodedNamedAddress);
 console.log("Decoded Named address:", decodedNamedAddress);
 ```
 
-Example for Regular addresses
+Example for Regular addresses (Alice's well-known development account)
 
 ```javascript
 const encodedRegularAddress =
-  "ttowKp8AmRn9nxt8Gcout4stYQem7TZNkhpnVmtpS5KG39m2Y";
+  "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
 const decodedRegularAddress = decodeAddress(encodedRegularAddress);
 console.log("Decoded Regular address:", decodedRegularAddress);
 ```
