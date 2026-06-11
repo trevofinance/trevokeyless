@@ -4,3 +4,23 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+
+  - package-ecosystem: "cargo"
+    directory: "/keyless-rust"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: "pip"
+    directory: "/keyless-python"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: "npm"
+    directory: "/keyless-ts"
+    schedule:
+      interval: monthly
+    # The @polkadot packages release very frequently; group them to keep the noise down.
+    groups:
+      polkadot:
+        patterns:
+          - "@polkadot/*"

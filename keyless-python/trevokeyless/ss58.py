@@ -28,6 +28,15 @@ from typing import Optional, Union
 import base58
 from hashlib import blake2b
 
+# Longest base58 string any payload supported by this codec can produce: the largest
+# payload in the checksum-length table of ss58_decode is 2 (prefix) + 33 (public key) +
+# 2 (checksum) = 37 bytes = 296 bits, and each base58 character carries log2(58) ~ 5.858
+# bits, so a valid address has at most ceil(296 / 5.858) = 51 characters. Longer input is
+# rejected before base58 decoding, whose cost grows quadratically with the input length.
+# (The trevokeyless layer applies its stricter 50-character bound for 32-byte account
+# ids; this generic bound mirrors the same hardening inside the Rust SS58 decoder.)
+_MAX_SS58_ADDRESS_LENGTH = 51
+
 
 def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
     """
@@ -48,6 +57,11 @@ def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
 
     if address == '':
         raise ValueError("Empty address provided")
+
+    if len(address) > _MAX_SS58_ADDRESS_LENGTH:
+        # No valid address of any supported payload is longer; rejecting early keeps the
+        # cost of base58-decoding untrusted input bounded.
+        raise ValueError("Invalid address length")
 
     checksum_prefix = b'SS58PRE'
 
@@ -188,6 +202,10 @@ def get_ss58_format(ss58_address: str) -> int:
     -------
     int
     """
+    if len(ss58_address) > _MAX_SS58_ADDRESS_LENGTH:
+        # Same early bound as ss58_decode: keeps base58 decoding of untrusted input cheap.
+        raise ValueError("Invalid address length")
+
     address_decoded = base58.b58decode(ss58_address)
 
     if len(address_decoded) < 2:

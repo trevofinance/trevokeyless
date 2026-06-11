@@ -38,3 +38,9 @@ serde = { version = "1.0", default-features = false, features = ["alloc", "deriv
 [dev-dependencies]
 array-bytes = { version = "6.2.3", default-features = true }
 serde_json = { version = "1.0", default-features = true }
+
+# Generates the cross-language conformance fixture `conformance/vectors.json` consumed by
+# the Rust, Python, and TypeScript test suites.
+[[example]]
+name = "gen_conformance"
+required-features = ["ss58"]

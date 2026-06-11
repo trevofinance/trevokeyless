@@ -20,6 +20,11 @@ For more detailed docs, visit the README of the specific library:
   - Sources: [GitHub](./keyless-rust/)
   - Package: [Crates.io](https://crates.io/crates/trevo-keyless)
 
+The Rust implementation is the source of truth for the encoding. The shared fixture
+[`conformance/vectors.json`](./conformance/vectors.json) is generated from it
+(`keyless-rust/examples/gen_conformance.rs`) and verified by the test suites of all three
+libraries, so the implementations cannot drift apart unnoticed.
+
 ## Common terms
 
 - **AppAgent**: on-chain entity that serves as a blockchain representation of an off-chain application;

@@ -110,6 +110,8 @@ mod types;
 #[cfg(all(test, feature = "std"))]
 mod tests_binary;
 #[cfg(all(test, feature = "std"))]
+mod tests_conformance;
+#[cfg(all(test, feature = "std"))]
 mod tests_encoding;
 #[cfg(all(test, feature = "std"))]
 mod tests_properties;

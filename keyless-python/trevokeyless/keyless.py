@@ -118,7 +118,9 @@ def _validate_u32(value: int, label: str) -> None:
     Validates that a value is an integer in the u32 range [0, 4294967295].
 
     The Rust implementation enforces this through the `u32` type; the TypeScript
-    implementation performs the equivalent runtime check (raising RangeError).
+    implementation performs the equivalent runtime check (raising RangeError). ``bool``
+    is rejected explicitly: it is an ``int`` subclass, but silently encoding ``True``
+    as 1 would hide a caller bug that the other implementations surface.
 
     Args:
         value (int): The value to validate.
@@ -127,7 +129,7 @@ def _validate_u32(value: int, label: str) -> None:
     Raises:
         ValueError: If the value is not an integer in [0, 4294967295].
     """
-    if not isinstance(value, int) or value < 0 or value > U32_MAX:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > U32_MAX:
         msg = f"{label} must be an integer in [0, {U32_MAX}], got {value!r}"
         raise ValueError(msg)
 

@@ -13,7 +13,7 @@ import base58
 
 import trevokeyless
 from trevokeyless import AddressType, AddressTypeMismatchError
-from trevokeyless.ss58 import ss58_encode
+from trevokeyless.ss58 import get_ss58_format, is_valid_ss58_address, ss58_decode, ss58_encode
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -95,6 +95,16 @@ class TestEncodeIdValidation(unittest.TestCase):
         for bad_id in [1.5, "123", None]:
             with self.subTest(bad_id=bad_id), self.assertRaisesRegex(ValueError, "must be an integer"):
                 trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)  # type: ignore[arg-type]
+
+    def test_rejects_bool_ids(self: "TestEncodeIdValidation") -> None:
+        # bool is an int subclass, but silently encoding True as 1 would hide a caller
+        # bug that the TypeScript (Number.isInteger) and Rust (u32) implementations reject.
+        for bad_id in [True, False]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(ValueError, "must be an integer"):
+                    trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)
+                with self.assertRaisesRegex(ValueError, "must be an integer"):
+                    trevokeyless.encode_transactional_address(1, bad_id, SS58_FORMAT)
 
     def test_accepts_u32_boundaries(self: "TestEncodeIdValidation") -> None:
         for good_id in [0, U32_MAX]:
@@ -205,6 +215,25 @@ class TestMalformedSs58(unittest.TestCase):
         self.assertLessEqual(len(address), trevokeyless.SS58_MAX_ADDRESS_LENGTH)
         info = trevokeyless.decode_address(address, max_format)
         self.assertIs(info.address_type, AddressType.Regular)
+
+    def test_generic_ss58_helpers_reject_oversized_input(self: "TestMalformedSs58") -> None:
+        # The generic helpers of trevokeyless.ss58 support payloads up to 33 bytes, whose
+        # addresses reach 51 characters; anything longer must be rejected before base58
+        # decoding (whose cost grows quadratically), mirroring the bound inside the Rust
+        # SS58 decoder.
+        oversized = "z" * 52
+        with self.assertRaisesRegex(ValueError, "^Invalid address length$"):
+            ss58_decode(oversized)
+        with self.assertRaisesRegex(ValueError, "^Invalid address length$"):
+            get_ss58_format(oversized)
+        self.assertFalse(is_valid_ss58_address(oversized))
+
+        # The longest legitimate generic address (33-byte payload, two-byte prefix) is
+        # exactly 51 characters and must still decode.
+        longest = ss58_encode(b"\xff" * 33, 16383)
+        self.assertEqual(len(longest), 51)
+        self.assertEqual(ss58_decode(longest, 16383), "0x" + "ff" * 33)
+        self.assertEqual(get_ss58_format(longest), 16383)
 
 
 class TestHexAccountIdContract(unittest.TestCase):

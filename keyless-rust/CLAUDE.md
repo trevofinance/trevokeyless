@@ -103,14 +103,31 @@ src/
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
   tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
+  tests_conformance.rs — verifies the committed cross-language fixture (see below)
   tests_encoding.rs — encode→decode round-trip tests
   tests_properties.rs — randomized property tests (deterministic inline PRNG, no extra deps)
   tests_ss58.rs    — SS58 codec tests (feature `ss58`)
   tests_serde.rs   — serde tests (feature `serde`)
+examples/
+  gen_conformance.rs — generates ../../conformance/vectors.json (requires feature `ss58`)
 ```
 
 All test modules additionally require the `std` feature; run the full suite with
 `cargo test --all-features`.
+
+## Cross-language conformance fixture
+
+`conformance/vectors.json` (repository root) holds encoding, classification, and SS58
+vectors derived from this crate — the source of truth. The Rust, Python, and TypeScript
+test suites all verify against the committed fixture, and CI checks that the fixture
+matches the generator output. After an intentional change to the encoding semantics,
+regenerate with:
+
+```
+cargo run --example gen_conformance --features ss58 > ../conformance/vectors.json
+```
+
+and review the diff together with the corresponding Python/TypeScript changes.
 
 ## Public API
 
