@@ -5,22 +5,26 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  
+
   workflow_dispatch:
 
 jobs:
   python-checks:
     concurrency:
-      group: python-checks-${{ github.ref }}
+      group: python-checks-${{ github.ref }}-${{ matrix.python-version }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Oldest supported version (requires-python >= 3.10) and a current one.
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: 3.12.3
+          python-version: ${{ matrix.python-version }}
 
       - name: Install deps
         run: |
@@ -43,6 +47,8 @@ jobs:
             mypy trevokeyless
 
       - name: Run tests
+        # Discovery picks up every tests/test_*.py module; the previous explicit module
+        # list silently skipped test_adversarial.py.
         run: |
             cd keyless-python
-            python3 -m unittest tests.test_encoding tests.test_ss58 tests.test_names
+            python3 -m unittest discover --verbose

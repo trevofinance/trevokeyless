@@ -5,23 +5,22 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  
+
   workflow_dispatch:
 
 jobs:
   js-checks:
     concurrency:
-      group: js-checks-${{ github.ref }}
+      group: js-checks-${{ github.ref }}-${{ matrix.node_version }}
       cancel-in-progress: true
-    
+
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node_version: [18]
+        # Active LTS versions (Node 18 reached end of life in April 2025).
+        node_version: [20, 22]
 
     steps:
-      - uses: actions/checkout@v6
-
       - uses: actions/checkout@v6
       - name: Use Node.js ${{ matrix.node_version }}
         uses: actions/setup-node@v6
@@ -29,8 +28,8 @@ jobs:
           node-version: ${{ matrix.node_version }}
       - run: |
           cd keyless-ts
-          npm install
+          npm ci
           npm run format-check
           npm run lint-check
+          npm run build
           npm run test
-        

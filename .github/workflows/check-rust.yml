@@ -39,6 +39,9 @@ jobs:
       - name: Run test suite (no default features)
         run: cargo test --no-default-features
 
+      - name: Conformance fixture is up to date
+        run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
+
       - name: Build no_std (wasm32v1-none, ss58 + serde)
         run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde
 
