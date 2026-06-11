@@ -1,7 +1,8 @@
 //! Generates the cross-language conformance fixture `conformance/vectors.json`.
 //!
 //! The Rust implementation is the source of truth for the keyless encoding; this example
-//! derives a deterministic set of encoding, classification, and SS58 vectors from it. The
+//! derives a deterministic set of encoding, classification, and SS58 vectors from it —
+//! including `ss58_invalid`, address strings every implementation must *reject*. The
 //! Rust, Python, and TypeScript test suites all consume the committed fixture, so any
 //! semantic drift between the implementations fails the test suite of the drifting port.
 //!
@@ -40,6 +41,46 @@ impl Rng {
 
 /// The 64 characters allowed in an [`AccountName`].
 const CHARSET: &[u8; 64] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#";
+
+/// The 64-byte SS58 hash (`blake2b_512(b"SS58PRE" ++ data)`); its first bytes are the
+/// SS58 checksum.
+fn ss58hash(data: &[u8]) -> [u8; 64] {
+    blake2b_simd::Params::new()
+        .hash_length(64)
+        .to_state()
+        .update(b"SS58PRE")
+        .update(data)
+        .finalize()
+        .as_bytes()
+        .try_into()
+        .expect("slice is always the necessary length")
+}
+
+/// The two-byte SS58 prefix encoding of a format. Canonical for formats 64..=16383;
+/// non-canonical (but decodable) for smaller formats.
+fn two_byte_prefix(format: u16) -> Vec<u8> {
+    vec![
+        (((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000) as u8,
+        ((format >> 8) | ((format & 0b0000_0000_0000_0011) << 6)) as u8,
+    ]
+}
+
+/// The canonical 1- or 2-byte SS58 prefix encoding of a format.
+fn format_prefix(format: u16) -> Vec<u8> {
+    if format < 64 {
+        vec![format as u8]
+    } else {
+        two_byte_prefix(format)
+    }
+}
+
+/// Wraps a raw prefix+data payload in an SS58 envelope with a valid checksum of
+/// `checksum_len` bytes (2 is canonical for 32-byte account ids).
+fn raw_ss58(payload: &[u8], checksum_len: usize) -> String {
+    let mut data = payload.to_vec();
+    data.extend_from_slice(&ss58hash(payload)[..checksum_len]);
+    bs58::encode(data).into_string()
+}
 
 fn random_name(rng: &mut Rng) -> AccountName {
     let mut bytes = [0u8; 10];
@@ -234,11 +275,101 @@ fn main() {
         }
     }
 
+    // 6. SS58 address strings that every implementation must reject when decoding with
+    // the accompanying expected format. These pin the *rejection* side of the SS58
+    // contract — non-canonical shapes that permissive decoders historically accepted
+    // (e.g. one-byte checksums) must fail in every language, exactly like in this crate.
+    let account: [u8; 32] = encode_app_agent_account(123).into();
+    let trevo_prefix = format_prefix(SS58_FORMAT_TREVO_ASSET_HUB);
+    let payload = |prefix: &[u8], data: &[u8]| [prefix, data].concat();
+    let tampered = {
+        let canonical = payload(&trevo_prefix, &account);
+        let mut data = canonical.clone();
+        data.extend_from_slice(&ss58hash(&canonical)[..2]);
+        let last = data.len() - 1;
+        data[last] ^= 0xFF;
+        bs58::encode(data).into_string()
+    };
+    let trevo = SS58_FORMAT_TREVO_ASSET_HUB;
+    let ss58_invalid: Vec<(String, u16, &str)> = vec![
+        (
+            raw_ss58(&payload(&trevo_prefix, &account), 1),
+            trevo,
+            "canonical account with a truncated one-byte checksum (decoded length 35)",
+        ),
+        (
+            raw_ss58(&payload(&trevo_prefix, &account[..31]), 2),
+            trevo,
+            "31-byte account id with a full checksum (decoded length 35)",
+        ),
+        (
+            raw_ss58(
+                &payload(&trevo_prefix, &[account.as_slice(), &[0u8]].concat()),
+                2,
+            ),
+            trevo,
+            "33-byte payload (ECDSA-style public key, decoded length 37)",
+        ),
+        (
+            raw_ss58(&payload(&trevo_prefix, &[7u8; 8]), 1),
+            trevo,
+            "8-byte account-index payload (decoded length 11)",
+        ),
+        (
+            raw_ss58(&payload(&[46u8], &account), 2),
+            46,
+            "reserved format 46, canonical single-byte prefix",
+        ),
+        (
+            raw_ss58(&payload(&two_byte_prefix(46), &account), 2),
+            46,
+            "reserved format 46, non-canonical two-byte prefix",
+        ),
+        (
+            raw_ss58(&payload(&two_byte_prefix(47), &account), 2),
+            47,
+            "reserved format 47, non-canonical two-byte prefix",
+        ),
+        (
+            raw_ss58(&payload(&[0x80u8], &account), 2),
+            trevo,
+            "first byte 0x80: not a valid SS58 prefix encoding",
+        ),
+        (
+            tampered,
+            trevo,
+            "canonical address with the last checksum byte flipped",
+        ),
+        (
+            "1".repeat(51),
+            trevo,
+            "longer than any valid address of a 32-byte account id",
+        ),
+        (String::new(), trevo, "empty string"),
+        (
+            "0OIl".to_string(),
+            trevo,
+            "characters outside the base58 alphabet",
+        ),
+    ];
+    let ss58_invalid: Vec<String> = ss58_invalid
+        .into_iter()
+        .map(|(address, format, reason)| {
+            // The generator must never emit a vector this crate itself accepts.
+            assert!(
+                AccountId32::from_ss58check_with_version(&address).is_err(),
+                "self check: {reason:?} must not decode"
+            );
+            format!(r#"{{"ss58":"{address}","format":{format},"reason":"{reason}"}}"#)
+        })
+        .collect();
+
     println!("{{");
     print_group("app_agent", &app_agent, false);
     print_group("transactional", &transactional, false);
     print_group("named", &named, false);
     print_group("classify", &classify, false);
-    print_group("ss58_formats", &ss58_formats, true);
+    print_group("ss58_formats", &ss58_formats, false);
+    print_group("ss58_invalid", &ss58_invalid, true);
     println!("}}");
 }

@@ -530,7 +530,8 @@ def is_keyless_address(
 ) -> bool:
     """
     Returns True if the address passes the keyless checksum verification (AppAgent,
-    Transactional, or Named), False for any other (Regular) address.
+    Transactional, or Named), False for any other (Regular) address - including a Named
+    layout whose checksum is valid but whose name bytes fail charset validation.
 
     Mirrors `is_keyless_account` of the Rust implementation.
 

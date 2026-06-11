@@ -1,4 +1,5 @@
 import {
+  base58Decode,
   blake2AsU8a,
   decodeAddress as decodeAddressSs58,
   encodeAddress,
@@ -14,6 +15,9 @@ const SS58_FORMAT__TREVO_ASSET_HUB = 5335;
 
 // Length in bytes of a blockchain account id.
 const ACCOUNT_ID_BYTES_LENGTH = 32;
+
+// Length in bytes of the SS58 checksum of a 32-byte account id.
+const SS58_CHECKSUM_LENGTH = 2;
 
 // Maximum length in characters of an SS58 address of a 32-byte account id: the payload
 // is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
@@ -150,6 +154,12 @@ function encodeKeylessAccount(
   openPart: Uint8Array,
   ss58Format: number,
 ): string {
+  if (!Number.isInteger(ss58Format)) {
+    // encodeAddress range-checks the format but its bitwise prefix arithmetic silently
+    // truncates fractional values; the Rust (u16) and Python (bytes()) implementations
+    // cannot encode a fractional format at all.
+    throw new Error(`ss58Format must be an integer, got ${ss58Format}`);
+  }
   const checksum = blake2AsU8a(openPart);
   const accountId = u8aConcat(openPart, checksum.slice(openPart.length));
   return encodeAddress(accountId, ss58Format);
@@ -248,6 +258,33 @@ function decodeAccountId(address: string, ss58Format: number): Uint8Array {
       `Invalid account id length: expected ${ACCOUNT_ID_BYTES_LENGTH} bytes, got ${accountId.length}`,
     );
   }
+
+  // decodeAddressSs58 validates base58, the SS58 checksum, and the expected format, but
+  // it also accepts legacy payload shapes that the Rust and Python implementations
+  // reject: a one-byte checksum after a two-byte prefix (which would give every account
+  // a second, shorter address spelling with only 8 bits of checksum) and two-byte-prefix
+  // encodings of the reserved formats 46 and 47. Enforce the canonical structure:
+  // prefix, account id, and a full two-byte checksum, with a non-reserved format.
+  /* eslint-disable no-bitwise */
+  const decoded = base58Decode(address);
+  const prefixLength = (decoded[0] & 0b0100_0000) === 0 ? 1 : 2;
+  if (
+    decoded.length !==
+    prefixLength + ACCOUNT_ID_BYTES_LENGTH + SS58_CHECKSUM_LENGTH
+  ) {
+    throw new Error("Invalid address length");
+  }
+  const embeddedFormat =
+    prefixLength === 1
+      ? decoded[0]
+      : ((decoded[0] & 0b0011_1111) << 2) |
+        (decoded[1] >> 6) |
+        ((decoded[1] & 0b0011_1111) << 8);
+  /* eslint-enable no-bitwise */
+  if (embeddedFormat === 46 || embeddedFormat === 47) {
+    throw new Error(`${embeddedFormat} is a reserved SS58 format`);
+  }
+
   return accountId;
 }
 
@@ -482,7 +519,8 @@ function decodeNamed(
 
 /**
  * Returns true if the address passes the keyless checksum verification (AppAgent,
- * Transactional, or Named), false for any other (Regular) address.
+ * Transactional, or Named), false for any other (Regular) address — including a Named
+ * layout whose checksum is valid but whose name bytes fail charset validation.
  *
  * Mirrors `is_keyless_account` of the Rust implementation.
  *

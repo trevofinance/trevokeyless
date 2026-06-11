@@ -107,5 +107,19 @@ mod tests {
                 "SS58 decoding of {address} must match the fixture"
             );
         }
+
+        // Rejection vectors: address strings that must not decode in any implementation
+        // (the Python and TypeScript suites decode them with the accompanying expected
+        // format; this crate's decoder takes no expected format and must reject them
+        // outright).
+        #[cfg(feature = "ss58")]
+        for v in vectors["ss58_invalid"].as_array().unwrap() {
+            let address = v["ss58"].as_str().unwrap();
+            let reason = v["reason"].as_str().unwrap();
+            assert!(
+                AccountId32::from_ss58check_with_version(address).is_err(),
+                "{address:?} must be rejected: {reason}"
+            );
+        }
     }
 }

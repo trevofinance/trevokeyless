@@ -116,6 +116,16 @@ describe("Boundary values", () => {
       );
     });
   });
+
+  it("rejects a fractional ss58Format at encoding time", () => {
+    // encodeAddress range-checks the format but its bitwise prefix arithmetic would
+    // silently truncate fractional values to an integer format.
+    [5335.5, NaN].forEach((badFormat) => {
+      expect(() => encodeAppAgent(123, badFormat)).toThrow(
+        /ss58Format must be an integer/,
+      );
+    });
+  });
 });
 
 describe("Account id length", () => {
@@ -184,6 +194,36 @@ describe("Malformed SS58 input", () => {
   it("rejects the reserved format 46, crafted with a valid checksum", () => {
     const address = rawSs58(u8aConcat(formatPrefix(46), appAgent123));
     expect(() => decodeAddress(address, 46)).toThrow();
+  });
+
+  it("rejects two-byte-prefix encodings of the reserved formats 46 and 47", () => {
+    // The underlying @polkadot decoder accepts these; the Rust and Python
+    // implementations reject reserved formats in any prefix encoding.
+    /* eslint-disable no-bitwise */
+    [46, 47].forEach((reserved) => {
+      const prefix = Uint8Array.of(
+        ((reserved & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
+        (reserved >> 8) | ((reserved & 0b0000_0000_0000_0011) << 6),
+      );
+      const address = rawSs58(u8aConcat(prefix, appAgent123));
+      expect(() => decodeAddress(address, reserved)).toThrow(
+        new Error(`${reserved} is a reserved SS58 format`),
+      );
+    });
+    /* eslint-enable no-bitwise */
+  });
+
+  it("rejects a one-byte-checksum spelling of a canonical address", () => {
+    // The underlying @polkadot decoder accepts a 35-byte decoded payload (two-byte
+    // prefix + 32-byte account + one-byte checksum), which would give every account a
+    // second, shorter address string; the Rust and Python implementations reject it.
+    const address = rawSs58(
+      u8aConcat(formatPrefix(ss58Format), appAgent123),
+      1,
+    );
+    expect(() => decodeAddress(address, ss58Format)).toThrow(
+      new Error("Invalid address length"),
+    );
   });
 
   it("rejects a prefix byte in the reserved range 128..=255", () => {

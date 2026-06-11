@@ -66,6 +66,16 @@ class TestConformanceVectors(unittest.TestCase):
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
 
+    def test_ss58_invalid_vectors(self: "TestConformanceVectors") -> None:
+        # Rejection vectors: address strings that must not decode in any implementation
+        # when the accompanying format is expected.
+        for v in _VECTORS["ss58_invalid"]:
+            with (
+                self.subTest(ss58=v["ss58"], reason=v["reason"]),
+                self.assertRaises(ValueError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}"),
+            ):
+                trevokeyless.decode_address(v["ss58"], v["format"])
+
 
 if __name__ == "__main__":
     unittest.main()
