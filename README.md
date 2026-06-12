@@ -56,6 +56,11 @@ Additional properties:
 - **No secrets, no constant time.** Every input and output of these libraries is a
   public identifier; checksum comparisons are deliberately not constant-time because
   there is nothing to hide.
+- **SCALE decoding performs no validation** (Rust, feature `scale`). SCALE `Decode` of
+  `BlockchainAccountInfo` keeps the usual SCALE cost model and does **not** re-check
+  that the embedded identifiers match `account_id` — unlike serde deserialization,
+  which does. Treat SCALE-decoded values from untrusted sources as unverified claims
+  and re-derive them with `decode_account_info`.
 - **Canonical spellings only.** Decoders reject non-canonical address spellings
   (wrong-length checksums, surrounding whitespace, case variations, out-of-alphabet
   characters) and bound input length before base58 work, so the decoding cost of
