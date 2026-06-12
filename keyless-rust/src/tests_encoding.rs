@@ -12,12 +12,9 @@ mod tests {
 
     #[test]
     fn test_app_agent_account() {
-        // let ss58_format = 5335;
-
         let app_agent_id: AppAgentId = 123;
         let account_id =
             account_id_from_str("7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2");
-        // let blockchain_account = "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp";
 
         // ******************************** //
 
@@ -44,19 +41,28 @@ mod tests {
             "Couldn't decode AppAgent account to account info."
         );
 
-        // TODO enable feature = "serde" to make it work
-        // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
+        #[cfg(feature = "ss58")]
+        {
+            let blockchain_account = "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp";
+            assert_eq!(
+                account_id.to_ss58check(),
+                blockchain_account,
+                "Couldn't encode AppAgent account to SS58 address."
+            );
+            assert_eq!(
+                AccountId32::from_ss58check(blockchain_account).unwrap(),
+                account_id,
+                "Couldn't decode SS58 address to AppAgent account."
+            );
+        }
     }
 
     #[test]
     fn test_transactional_account() {
-        // let ss58_format = 5335;
-
         let app_agent_id: AppAgentId = 123;
         let transactional_account_id: TransactionalId = 456;
         let account_id =
             account_id_from_str("7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0");
-        // let blockchain_account = "ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG";
 
         // ******************************** //
 
@@ -85,19 +91,28 @@ mod tests {
             "Couldn't decode Transactional account to account info."
         );
 
-        // TODO enable feature = "serde" to make it work
-        // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
+        #[cfg(feature = "ss58")]
+        {
+            let blockchain_account = "ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG";
+            assert_eq!(
+                account_id.to_ss58check(),
+                blockchain_account,
+                "Couldn't encode Transactional account to SS58 address."
+            );
+            assert_eq!(
+                AccountId32::from_ss58check(blockchain_account).unwrap(),
+                account_id,
+                "Couldn't decode SS58 address to Transactional account."
+            );
+        }
     }
 
     #[test]
     fn test_named_account() {
-        // let ss58_format = 5335;
-
         let app_agent_id: AppAgentId = 123;
         let account_name = AccountName::new(b"example123").unwrap();
         let account_id =
             account_id_from_str("7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409");
-        // let blockchain_account = "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k";
 
         // ******************************** //
 
@@ -125,8 +140,20 @@ mod tests {
             "Couldn't decode Named account to account info."
         );
 
-        // TODO enable feature = "serde" to make it work
-        // assert(account_id.to_ss58check_with_version(ss58_format) == blockchain_account);
+        #[cfg(feature = "ss58")]
+        {
+            let blockchain_account = "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k";
+            assert_eq!(
+                account_id.to_ss58check(),
+                blockchain_account,
+                "Couldn't encode Named account to SS58 address."
+            );
+            assert_eq!(
+                AccountId32::from_ss58check(blockchain_account).unwrap(),
+                account_id,
+                "Couldn't decode SS58 address to Named account."
+            );
+        }
     }
 
     #[test]
@@ -167,33 +194,61 @@ mod tests {
     #[test]
     fn test_mismatch_of_account_type() {
         let account_aa = encode_app_agent_account(1);
-        assert!(
-            decode_transactional_account(&account_aa).is_err(),
+        assert_eq!(
+            decode_transactional_account(&account_aa).unwrap_err(),
+            KeylessDecodeError::NotATransactionalAccount {
+                found: AccountType::AppAgent
+            },
             "AppAgent account can not be considered as a Transactional account"
         );
-        assert!(
-            decode_named_account(&account_aa).is_err(),
+        assert_eq!(
+            decode_named_account(&account_aa).unwrap_err(),
+            KeylessDecodeError::NotANamedAccount {
+                found: AccountType::AppAgent
+            },
             "AppAgent account can not be considered as a Named account"
         );
 
         let account_ta = encode_transactional_account(1, 0);
-        assert!(
-            decode_app_agent_account(&account_ta).is_err(),
+        assert_eq!(
+            decode_app_agent_account(&account_ta).unwrap_err(),
+            KeylessDecodeError::NotAnAppAgentAccount {
+                found: AccountType::Transactional
+            },
             "Transactional account can not be considered as an AppAgent account"
         );
-        assert!(
-            decode_named_account(&account_ta).is_err(),
+        assert_eq!(
+            decode_named_account(&account_ta).unwrap_err(),
+            KeylessDecodeError::NotANamedAccount {
+                found: AccountType::Transactional
+            },
             "Transactional account can not be considered as a Named account"
         );
 
         let account_named = encode_named_account(1, AccountName::new(b"test123456").unwrap());
-        assert!(
-            decode_app_agent_account(&account_named).is_err(),
+        assert_eq!(
+            decode_app_agent_account(&account_named).unwrap_err(),
+            KeylessDecodeError::NotAnAppAgentAccount {
+                found: AccountType::Named
+            },
             "Named account can not be considered as an AppAgent account"
         );
-        assert!(
-            decode_transactional_account(&account_named).is_err(),
+        assert_eq!(
+            decode_transactional_account(&account_named).unwrap_err(),
+            KeylessDecodeError::NotATransactionalAccount {
+                found: AccountType::Named
+            },
             "Named account can not be considered as a Transactional account"
+        );
+
+        // A regular account is reported as Regular by all typed decoders.
+        let regular = AccountId32::from([0u8; 32]);
+        assert_eq!(
+            decode_app_agent_account(&regular).unwrap_err(),
+            KeylessDecodeError::NotAnAppAgentAccount {
+                found: AccountType::Regular
+            },
+            "Regular account can not be considered as an AppAgent account"
         );
     }
 
@@ -332,6 +387,39 @@ mod tests {
             Some(app_agent_id)
         );
         assert_eq!(decode_account_info(&regular_account).app_agent_id(), None);
+
+        // account_type()
+        assert_eq!(
+            decode_account_info(&aa_account).account_type(),
+            AccountType::AppAgent
+        );
+        assert_eq!(
+            decode_account_info(&ta_account).account_type(),
+            AccountType::Transactional
+        );
+        assert_eq!(
+            decode_account_info(&named_account).account_type(),
+            AccountType::Named
+        );
+        assert_eq!(
+            decode_account_info(&regular_account).account_type(),
+            AccountType::Regular
+        );
+
+        // ta_id()
+        assert_eq!(decode_account_info(&ta_account).ta_id(), Some(ta_id));
+        assert_eq!(decode_account_info(&aa_account).ta_id(), None);
+        assert_eq!(decode_account_info(&named_account).ta_id(), None);
+        assert_eq!(decode_account_info(&regular_account).ta_id(), None);
+
+        // account_name()
+        assert_eq!(
+            decode_account_info(&named_account).account_name(),
+            Some(name)
+        );
+        assert_eq!(decode_account_info(&aa_account).account_name(), None);
+        assert_eq!(decode_account_info(&ta_account).account_name(), None);
+        assert_eq!(decode_account_info(&regular_account).account_name(), None);
 
         // is_keyless_account()
         assert!(decode_account_info(&aa_account).is_keyless_account());

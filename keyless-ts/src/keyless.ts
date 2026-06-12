@@ -9,6 +9,7 @@ const APP_AGENT_ADDRESS_IDENTIFIER = 1;
 const TRANSACTIONAL_ADDRESS_IDENTIFIER = 2;
 const NAMED_ADDRESS_IDENTIFIER = 3;
 const NAMED_ADDRESS_BYTES_LENGTH = 10;
+const ADDRESS_NAME_ALLOWED_CHARS = /^[0-9a-zA-Z\-#]+$/;
 const SS58_FORMAT__TREVO_ASSET_HUB = 5335;
 
 enum AddressType {
@@ -36,8 +37,29 @@ interface BlockchainAddressInfo {
  */
 function validateAddressName(name: string): void {
   assert(name.length === NAMED_ADDRESS_BYTES_LENGTH, "Name size not supported");
-  const allowedChars = /^[0-9a-zA-Z\-#]+$/;
-  assert(allowedChars.test(name), "Name contains invalid characters");
+  assert(
+    ADDRESS_NAME_ALLOWED_CHARS.test(name),
+    "Name contains invalid characters",
+  );
+}
+
+/**
+ * Checks that the given bytes form a valid address name: exactly 10 bytes, each one of the
+ * allowed characters (`0-9 a-z A-Z - #`).
+ *
+ * Anyone can construct an account id that carries a valid checksum over arbitrary name
+ * bytes (no private key is needed), so the name bytes must be validated during decoding.
+ *
+ * @param {Uint8Array} nameBytes - The raw name bytes of a Named address.
+ * @returns {boolean} - True if the bytes are a valid address name.
+ */
+function isValidAddressNameBytes(nameBytes: Uint8Array): boolean {
+  return (
+    nameBytes.length === NAMED_ADDRESS_BYTES_LENGTH &&
+    Array.from(nameBytes).every((byte) =>
+      ADDRESS_NAME_ALLOWED_CHARS.test(String.fromCharCode(byte)),
+    )
+  );
 }
 
 /**
@@ -192,10 +214,17 @@ function decodeAddress(
     const openPart = accountId.slice(0, openPartSize);
     const checksum = accountId.slice(openPartSize);
     const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    if (isEqualArrays(checksum, checksumCalculated)) {
+    // The name bytes must additionally pass charset validation: an address with a valid
+    // checksum over invalid name bytes is classified as Regular, in line with the Rust
+    // implementation.
+    const nameBytes = accountId.slice(5, 15);
+    if (
+      isEqualArrays(checksum, checksumCalculated) &&
+      isValidAddressNameBytes(nameBytes)
+    ) {
       // Extract and decode appAgentId and address_name
       const appAgentId = accountIdBuffer.subarray(0, 4).readUint32LE(0);
-      const addressName = accountIdBuffer.subarray(5, 15).toString();
+      const addressName = accountIdBuffer.subarray(5, 15).toString("ascii");
 
       return {
         address,

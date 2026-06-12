@@ -1,27 +1,40 @@
 [package]
 name = "trevo-keyless"
-version = "0.6.0"
+version = "0.8.0"
 edition = "2021"
+rust-version = "1.79.0"
 license = "Apache-2.0"
 description = "This library provides functions for encoding and decoding keyless accounts, used by the Trevo blockchain: application agent accounts, transactional accounts, and named accounts."
 homepage = "https://trevo.finance"
 repository = "https://github.com/trevo-finance/trevo-keyless/"
 readme = "README.md"
-keywords = ["trevo"]
+keywords = ["trevo", "blockchain", "substrate", "no-std", "scale"]
 categories = ["encoding", "wasm"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 default = ["std"]
 std = [
     "blake2b_simd/std",
+    "bs58?/std",
     "parity-scale-codec/std",
     "scale-info/std",
+    "serde?/std",
 ]
+# SS58 address encoding/decoding for `AccountId32` (requires an allocator).
+ss58 = ["dep:bs58"]
+# Serde support: `AccountId32` (de)serializes as an SS58 string, `AccountName` as a string.
+serde = ["dep:serde", "ss58"]
 
 [dependencies]
-blake2b_simd = { version = "1.0.1", default-features = false }
-parity-scale-codec = { version = "3.6.12", default-features = false, features = ["max-encoded-len"] }
-scale-info = { version = "2.11.1", default-features = false, features = ["derive"] }
+blake2b_simd = { version = "1.0.2", default-features = false }
+bs58 = { version = "0.5.1", default-features = false, features = ["alloc"], optional = true }
+parity-scale-codec = { version = "3.7.5", default-features = false, features = ["max-encoded-len"] }
+scale-info = { version = "2.11.6", default-features = false, features = ["derive"] }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [dev-dependencies]
 array-bytes = { version = "6.2.3", default-features = true }
+serde_json = { version = "1.0", default-features = true }

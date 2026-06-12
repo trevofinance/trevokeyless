@@ -7,7 +7,7 @@ on:
     branches: [ main ]
     paths-ignore:
       - 'README.md'
-  
+
   workflow_dispatch:
 
 jobs:
@@ -16,19 +16,50 @@ jobs:
       group: rust-checks-${{ github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
     steps:
       - uses: actions/checkout@v6
       - name: Install latest stable
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
-          components: rustfmt
+          components: rustfmt, clippy
+          targets: wasm32v1-none
 
       - name: Rustfmt check
-        working-directory: ./keyless-rust
         run: cargo fmt --all -- --check
 
-      - name: Run test suite
+      - name: Clippy (all features)
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
+      - name: Run test suite (all features)
+        run: cargo test --all-features
+
+      - name: Run test suite (no default features)
+        run: cargo test --no-default-features
+
+      - name: Build no_std (wasm32v1-none, ss58 + serde)
+        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde
+
+      - name: Docs (all features)
+        run: cargo doc --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  rust-msrv:
+    concurrency:
+      group: rust-msrv-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
         working-directory: ./keyless-rust
-        run: cargo test --release --workspace
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.79.0
+      - name: Check (all features) on MSRV
+        run: cargo check --all-features
