@@ -25,7 +25,7 @@ describe("Address name", () => {
     ];
     for (let i = 0; i < invalid_names.length; i++) {
       expect(() => encodeNamed(123, invalid_names[i], ss58_format)).toThrow(
-        new Error("Name contains invalid characters"),
+        new Error("Address name contains invalid characters"),
       );
     }
 
@@ -33,7 +33,7 @@ describe("Address name", () => {
     for (let i = 0; i < invalidLengthNames.length; i++) {
       expect(() =>
         encodeNamed(123, invalidLengthNames[i], ss58_format),
-      ).toThrow(new Error("Name size not supported"));
+      ).toThrow(new Error("Address name must be exactly 10 characters long"));
     }
   });
 });

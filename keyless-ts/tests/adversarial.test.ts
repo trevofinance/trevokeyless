@@ -467,7 +467,7 @@ describe("AddressTypeMismatchError", () => {
     const mismatch = thrown as AddressTypeMismatchError;
     expect(mismatch.expected).toEqual(AddressType.AppAgent);
     expect(mismatch.found).toEqual(AddressType.Named);
-    // Backwards compatibility: the message is unchanged from previous releases.
+    // The message is identical across the Python and TypeScript implementations.
     expect(mismatch.message).toEqual(
       "Provided address is not an AppAgent address but is instance of Named",
     );

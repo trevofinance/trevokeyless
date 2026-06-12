@@ -74,9 +74,9 @@ class AddressTypeMismatchError(ValueError):
     """Raised by the typed decode_* functions when the address is of a different type.
 
     Carries the expected and the actual (found) classification of the address, mirroring
-    the ``KeylessDecodeError`` of the Rust implementation. Subclasses ``ValueError`` for
-    backwards compatibility with previous releases. The message renders the plain type
-    names (e.g. ``Named``), like the TypeScript implementation.
+    the ``KeylessDecodeError`` of the Rust implementation. Subclasses ``ValueError`` so
+    ``except ValueError`` handlers treat it like any other decoding failure. The message
+    is identical to the TypeScript implementation's.
 
     Attributes:
         expected (AddressType): The address type required by the caller.
@@ -87,7 +87,7 @@ class AddressTypeMismatchError(ValueError):
         self.expected = expected
         self.found = found
         article = "an" if expected is AddressType.AppAgent else "a"
-        super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}.")
+        super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}")
 
 
 class Ss58FormatMismatchError(ValueError):
@@ -195,7 +195,7 @@ def _validate_address_name(name: str) -> None:
         ValueError: If the name has a wrong length or contains invalid characters.
     """
     if len(name) != NAMED_ADDRESS_LENGTH:
-        msg = "Named keyless address must be of 10 chars length"
+        msg = "Address name must be exactly 10 characters long"
         raise ValueError(msg)
 
     if not all(c in __allowed_chars for c in name):

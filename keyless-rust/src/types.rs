@@ -214,7 +214,7 @@ impl Decode for AccountName {
         let mut buf = [0u8; 10];
         input.read(&mut buf)?;
         // The length error is unreachable here: the buffer is always exactly 10 bytes.
-        AccountName::new(&buf).map_err(|_| "AccountName contains invalid characters".into())
+        AccountName::new(&buf).map_err(|_| "Account name contains invalid characters".into())
     }
 }
 

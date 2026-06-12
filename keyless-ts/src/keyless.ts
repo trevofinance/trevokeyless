@@ -39,8 +39,8 @@ enum AddressType {
  * Thrown by the typed decode functions when the address is of a different type.
  *
  * Carries the expected and the actual (found) classification of the address, mirroring
- * the `KeylessDecodeError` of the Rust implementation. The message is unchanged from
- * previous releases for backwards compatibility.
+ * the `KeylessDecodeError` of the Rust implementation. The message is identical to the
+ * Python implementation's.
  */
 class AddressTypeMismatchError extends Error {
   readonly expected: AddressType;
@@ -135,10 +135,10 @@ function validateSs58Format(ss58Format: number): void {
  */
 function validateAddressName(name: string): void {
   if (name.length !== NAMED_ADDRESS_BYTES_LENGTH) {
-    throw new Error("Name size not supported");
+    throw new Error("Address name must be exactly 10 characters long");
   }
   if (!ADDRESS_NAME_ALLOWED_CHARS.test(name)) {
-    throw new Error("Name contains invalid characters");
+    throw new Error("Address name contains invalid characters");
   }
 }
 
