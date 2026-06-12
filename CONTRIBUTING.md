@@ -19,10 +19,12 @@ cd keyless-rust
 cargo run --example gen_conformance --features ss58 > ../conformance/vectors.json
 ```
 
-and **review the diff**. A change to an existing vector means the encoding itself
-changed — that is a breaking change of the on-chain format and needs a very good
-reason. Additive vector groups (new rejection cases, new boundary cases) are the normal
-way to pin newly specified behavior.
+and **review the diff**. A change to the *value* fields of an existing vector (`hex`,
+`ss58`, `expected`, `account_id`) means the encoding itself changed — that is a
+breaking change of the on-chain format and needs a very good reason. Additive changes —
+new vector groups, new vectors in a group, new metadata fields such as `error_kind` —
+are the normal way to pin newly specified behavior (rejection cases, boundary cases,
+error classifications).
 
 ## Development
 

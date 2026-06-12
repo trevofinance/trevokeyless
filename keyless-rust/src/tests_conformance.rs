@@ -25,6 +25,35 @@ mod tests {
         AccountId32::from(bytes)
     }
 
+    /// Decodes with an expected format, mirroring the decode entry points of the Python
+    /// and TypeScript implementations (and `from_ss58check`, which is fixed to the
+    /// Trevo format): full validation first, then the format comparison. The same
+    /// construction lives in `examples/gen_conformance.rs`.
+    #[cfg(feature = "ss58")]
+    fn decode_expecting(address: &str, format: u16) -> Result<AccountId32, crate::Ss58Error> {
+        let (account, found) = AccountId32::from_ss58check_with_version(address)?;
+        if found != format {
+            return Err(crate::Ss58Error::UnexpectedFormat {
+                expected: format,
+                found,
+            });
+        }
+        Ok(account)
+    }
+
+    /// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
+    /// TypeScript `Ss58Error.kind` and the Python `Ss58DecodeError.kind`.
+    #[cfg(feature = "ss58")]
+    fn ss58_error_kind(error: &crate::Ss58Error) -> &'static str {
+        match error {
+            crate::Ss58Error::InvalidBase58 => "InvalidBase58",
+            crate::Ss58Error::InvalidLength => "InvalidLength",
+            crate::Ss58Error::InvalidChecksum => "InvalidChecksum",
+            crate::Ss58Error::InvalidFormat => "InvalidFormat",
+            crate::Ss58Error::UnexpectedFormat { .. } => "UnexpectedFormat",
+        }
+    }
+
     fn assert_classification(account: &AccountId32, expected: &serde_json::Value) {
         let info = decode_account_info(account);
         let expected_type = expected["type"].as_str().unwrap();
@@ -108,17 +137,23 @@ mod tests {
             );
         }
 
-        // Rejection vectors: address strings that must not decode in any implementation
-        // (the Python and TypeScript suites decode them with the accompanying expected
-        // format; this crate's decoder takes no expected format and must reject them
-        // outright).
+        // Rejection vectors: address strings that every implementation must reject when
+        // decoding with the accompanying expected format, with the failure
+        // classification pinned by `error_kind` (the `Ss58Error` variant name). All
+        // three suites decode with the expected format and assert the kind, so the
+        // error taxonomy cannot drift apart unnoticed either.
         #[cfg(feature = "ss58")]
         for v in vectors["ss58_invalid"].as_array().unwrap() {
             let address = v["ss58"].as_str().unwrap();
+            let format = v["format"].as_u64().unwrap() as u16;
+            let error_kind = v["error_kind"].as_str().unwrap();
             let reason = v["reason"].as_str().unwrap();
-            assert!(
-                AccountId32::from_ss58check_with_version(address).is_err(),
-                "{address:?} must be rejected: {reason}"
+            let error = decode_expecting(address, format)
+                .expect_err(&format!("{address:?} must be rejected: {reason}"));
+            assert_eq!(
+                ss58_error_kind(&error),
+                error_kind,
+                "error kind of {address:?} must match the fixture: {reason}"
             );
         }
 
@@ -134,13 +169,18 @@ mod tests {
             );
         }
 
-        // The `hex_invalid` group pins the "0x" + 64 hex contract of the Python
-        // decode_account_id and TypeScript decodeAccountId entry points. This crate has
-        // no string form of an account id (AccountId32 is constructed from bytes), so
-        // there is nothing to verify here beyond the group being present.
+        // The `hex_invalid` and `hex_valid` groups pin the "0x" + 64 hex contract of
+        // the Python decode_account_id and TypeScript decodeAccountId entry points
+        // (rejection and mixed-case acceptance respectively). This crate has no string
+        // form of an account id (AccountId32 is constructed from bytes), so there is
+        // nothing to verify here beyond the groups being present.
         assert!(
             !vectors["hex_invalid"].as_array().unwrap().is_empty(),
             "hex_invalid group must be present for the Python/TypeScript suites"
+        );
+        assert!(
+            !vectors["hex_valid"].as_array().unwrap().is_empty(),
+            "hex_valid group must be present for the Python/TypeScript suites"
         );
     }
 }

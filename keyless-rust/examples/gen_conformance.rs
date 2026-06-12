@@ -109,6 +109,34 @@ fn is_valid_hex_account_id(s: &str) -> bool {
     bytes.len() == 66 && bytes.starts_with(b"0x") && bytes[2..].iter().all(u8::is_ascii_hexdigit)
 }
 
+/// Decodes with an expected format, mirroring the decode entry points of all three
+/// implementations: full validation first, then the format comparison. An address that
+/// fails validation reports its validation error, never a format mismatch.
+/// `tests_conformance.rs` uses the same construction to consume the `ss58_invalid`
+/// group.
+fn decode_expecting(address: &str, format: u16) -> Result<AccountId32, Ss58Error> {
+    let (account, found) = AccountId32::from_ss58check_with_version(address)?;
+    if found != format {
+        return Err(Ss58Error::UnexpectedFormat {
+            expected: format,
+            found,
+        });
+    }
+    Ok(account)
+}
+
+/// The fixture name of an `Ss58Error`: the Rust variant name, matched by the TypeScript
+/// `Ss58Error.kind` and the Python `Ss58DecodeError.kind`.
+fn ss58_error_kind(error: &Ss58Error) -> &'static str {
+    match error {
+        Ss58Error::InvalidBase58 => "InvalidBase58",
+        Ss58Error::InvalidLength => "InvalidLength",
+        Ss58Error::InvalidChecksum => "InvalidChecksum",
+        Ss58Error::InvalidFormat => "InvalidFormat",
+        Ss58Error::UnexpectedFormat { .. } => "UnexpectedFormat",
+    }
+}
+
 /// The expected classification of `account` as a JSON object, with the same field values
 /// the Python and TypeScript info objects expose.
 fn classification_json(account: &AccountId32) -> String {
@@ -292,14 +320,20 @@ fn main() {
     // 6. SS58 address strings that every implementation must reject when decoding with
     // the accompanying expected format. These pin the *rejection* side of the SS58
     // contract — non-canonical shapes that permissive decoders historically accepted
-    // (e.g. one-byte checksums) must fail in every language, exactly like in this crate.
+    // (e.g. one-byte checksums) must fail in every language, exactly like in this
+    // crate. `error_kind` pins the failure classification: the Rust `Ss58Error` variant
+    // name, mirrored by the TypeScript `Ss58Error.kind` and the Python
+    // `Ss58DecodeError.kind` — so the error taxonomy cannot drift apart unnoticed
+    // either.
     let account_id = encode_app_agent_account(123);
     let canonical_address = account_id.to_ss58check();
     let account: [u8; 32] = account_id.into();
     let trevo_prefix = format_prefix(SS58_FORMAT_TREVO_ASSET_HUB);
     let payload = |prefix: &[u8], data: &[u8]| [prefix, data].concat();
-    let tampered = {
-        let canonical = payload(&trevo_prefix, &account);
+    // A canonically checksummed address of `account` under `prefix`, with the last
+    // checksum byte flipped.
+    let tampered = |prefix: &[u8]| {
+        let canonical = payload(prefix, &account);
         let mut data = canonical.clone();
         data.extend_from_slice(&ss58hash(&canonical)[..2]);
         let last = data.len() - 1;
@@ -307,25 +341,29 @@ fn main() {
         bs58::encode(data).into_string()
     };
     let trevo = SS58_FORMAT_TREVO_ASSET_HUB;
-    let ss58_invalid: Vec<(String, u16, &str)> = vec![
+    let ss58_invalid: Vec<(String, u16, &str, &str)> = vec![
         (
             raw_ss58(&payload(&trevo_prefix, &account), 1),
             trevo,
+            "InvalidLength",
             "canonical account with a truncated one-byte checksum (decoded length 35)",
         ),
         (
             raw_ss58(&payload(&[42u8], &account), 1),
             42,
+            "InvalidLength",
             "single-byte-prefix account with a truncated one-byte checksum (decoded length 34)",
         ),
         (
             raw_ss58(&payload(&[42u8], &[account.as_slice(), &[0u8]].concat()), 2),
             42,
+            "InvalidLength",
             "33-byte payload under a single-byte prefix (decoded length 36, within the address length bound)",
         ),
         (
             raw_ss58(&payload(&trevo_prefix, &account[..31]), 2),
             trevo,
+            "InvalidLength",
             "31-byte account id with a full checksum (decoded length 35)",
         ),
         (
@@ -334,16 +372,19 @@ fn main() {
                 2,
             ),
             trevo,
+            "InvalidLength",
             "33-byte payload (ECDSA-style public key, decoded length 37)",
         ),
         (
             raw_ss58(&payload(&trevo_prefix, &[7u8; 8]), 1),
             trevo,
+            "InvalidLength",
             "8-byte account-index payload (decoded length 11)",
         ),
         (
             raw_ss58(&payload(&trevo_prefix, &account), 0),
             trevo,
+            "InvalidLength",
             "canonical account with no checksum at all (decoded length 34)",
         ),
         (
@@ -353,26 +394,31 @@ fn main() {
             // two bytes as the checksum of the first 34 and must find a mismatch.
             raw_ss58(&payload(&trevo_prefix, &account[..31]), 3),
             trevo,
+            "InvalidChecksum",
             "31-byte account with a three-byte checksum (decoded length 36, the canonical length class)",
         ),
         (
             raw_ss58(&payload(&[46u8], &account), 2),
             46,
+            "InvalidFormat",
             "reserved format 46, canonical single-byte prefix",
         ),
         (
             raw_ss58(&payload(&two_byte_prefix(46), &account), 2),
             46,
+            "InvalidFormat",
             "reserved format 46, non-canonical two-byte prefix",
         ),
         (
             raw_ss58(&payload(&two_byte_prefix(47), &account), 2),
             47,
+            "InvalidFormat",
             "reserved format 47, non-canonical two-byte prefix",
         ),
         (
             raw_ss58(&payload(&[0x80u8], &account), 2),
             trevo,
+            "InvalidFormat",
             "first byte 0x80: not a valid SS58 prefix encoding",
         ),
         (
@@ -386,22 +432,52 @@ fn main() {
                 raw_ss58(&payload(&prefix, &account), 2)
             },
             trevo,
+            "InvalidFormat",
             "first byte 0xF5: two-byte Trevo prefix with the high bit set",
         ),
         (
-            tampered,
+            tampered(&trevo_prefix),
             trevo,
+            "InvalidChecksum",
             "canonical address with the last checksum byte flipped",
+        ),
+        (
+            // A fully valid address of a non-expected format: the one rejection whose
+            // kind is the format mismatch itself.
+            account_id.to_ss58check_with_version(42).unwrap(),
+            trevo,
+            "UnexpectedFormat",
+            "valid format-42 address, decoded expecting the Trevo format",
+        ),
+        (
+            // A corrupt address of a non-expected format: the checksum failure must win
+            // over the format mismatch. The format carried by an address that fails
+            // validation is not trustworthy information, so reporting UnexpectedFormat
+            // here (as the Python implementation once did) would claim that a corrupt
+            // string is a valid address of another network.
+            tampered(&[42u8]),
+            trevo,
+            "InvalidChecksum",
+            "format-42 address with the last checksum byte flipped, decoded expecting the Trevo format",
+        ),
+        (
+            // Same ordering for structural failures of a non-expected format.
+            raw_ss58(&payload(&[42u8], &account[..31]), 2),
+            trevo,
+            "InvalidLength",
+            "format-42 31-byte payload with a full checksum, decoded expecting the Trevo format",
         ),
         (
             "1".repeat(51),
             trevo,
+            "InvalidLength",
             "longer than any valid address of a 32-byte account id",
         ),
-        (String::new(), trevo, "empty string"),
+        (String::new(), trevo, "InvalidLength", "empty string"),
         (
             "0OIl".to_string(),
             trevo,
+            "InvalidBase58",
             "characters outside the base58 alphabet",
         ),
         // Whitespace around an otherwise canonical address: permissive base58 decoders
@@ -410,11 +486,13 @@ fn main() {
         (
             format!("{canonical_address} "),
             trevo,
+            "InvalidBase58",
             "canonical address with a trailing space",
         ),
         (
             format!(" {canonical_address}"),
             trevo,
+            "InvalidBase58",
             "canonical address with a leading space",
         ),
         (
@@ -432,6 +510,7 @@ fn main() {
                 })
                 .collect::<String>(),
             trevo,
+            "InvalidBase58",
             "case-swapped spelling of a canonical address",
         ),
         (
@@ -440,25 +519,33 @@ fn main() {
             // character, so decoders that sanitize instead of reject would accept it.
             format!("{}0{}", &canonical_address[..20], &canonical_address[21..]),
             trevo,
+            "InvalidBase58",
             "canonical address with one character replaced by '0' (outside the base58 alphabet)",
         ),
         (
             format!("{}I{}", &canonical_address[..20], &canonical_address[21..]),
             trevo,
+            "InvalidBase58",
             "canonical address with one character replaced by 'I' (outside the base58 alphabet)",
         ),
     ];
     let ss58_invalid: Vec<String> = ss58_invalid
         .into_iter()
-        .map(|(address, format, reason)| {
-            // The generator must never emit a vector this crate itself accepts.
-            assert!(
-                AccountId32::from_ss58check_with_version(&address).is_err(),
-                "self check: {reason:?} must not decode"
+        .map(|(address, format, error_kind, reason)| {
+            // The generator must never emit a vector whose declared kind differs from
+            // the actual classification of this crate (decoding with the expected
+            // format, exactly like the consuming suites).
+            let error = decode_expecting(&address, format)
+                .expect_err(&format!("self check: {reason:?} must not decode"));
+            assert_eq!(
+                ss58_error_kind(&error),
+                error_kind,
+                "self check: declared error kind of {reason:?} must match the implementation"
             );
             format!(
-                r#"{{"ss58":{},"format":{format},"reason":{}}}"#,
+                r#"{{"ss58":{},"format":{format},"error_kind":{},"reason":{}}}"#,
                 js(&address),
+                js(error_kind),
                 js(reason)
             )
         })
@@ -537,6 +624,48 @@ fn main() {
         })
         .collect();
 
+    // 9. Raw account id strings that must be *accepted*: the "0x" + 64 hex contract
+    // allows both hex digit cases ([0-9a-fA-F]), and the normalized `account_id` of the
+    // result is always "0x" + lowercase hex. Pinning the acceptance keeps a future
+    // "strictness fix" in one implementation from silently diverging. Like
+    // `hex_invalid`, this group applies to the Python/TypeScript string entry points
+    // only; this crate has no string form of an account id.
+    let mut hex_valid: Vec<String> = Vec::new();
+    for account in [
+        encode_app_agent_account(123),
+        encode_transactional_account(123, 456),
+        encode_named_account(123, AccountName::try_from("example123").unwrap()),
+    ] {
+        let lower = hex(&account);
+        let upper = lower.to_uppercase();
+        // Alternating-case spelling, mixing both digit cases in one string.
+        let alternating: String = lower
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i % 2 == 0 {
+                    c.to_ascii_uppercase()
+                } else {
+                    c
+                }
+            })
+            .collect();
+        for spelling in [upper, alternating] {
+            let input = format!("0x{spelling}");
+            // The generator must never emit a string outside the contract.
+            assert!(
+                is_valid_hex_account_id(&input),
+                "self check: {input:?} must be a valid hex account id"
+            );
+            hex_valid.push(format!(
+                r#"{{"hex":{},"account_id":{},"expected":{}}}"#,
+                js(&input),
+                js(&format!("0x{lower}")),
+                classification_json(&account)
+            ));
+        }
+    }
+
     println!("{{");
     print_group("app_agent", &app_agent, false);
     print_group("transactional", &transactional, false);
@@ -545,6 +674,7 @@ fn main() {
     print_group("ss58_formats", &ss58_formats, false);
     print_group("ss58_invalid", &ss58_invalid, false);
     print_group("named_invalid_encode", &named_invalid_encode, false);
-    print_group("hex_invalid", &hex_invalid, true);
+    print_group("hex_invalid", &hex_invalid, false);
+    print_group("hex_valid", &hex_valid, true);
     println!("}}");
 }

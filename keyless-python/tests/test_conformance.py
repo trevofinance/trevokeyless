@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import trevokeyless
+from trevokeyless import Ss58DecodeError
 from trevokeyless._ss58 import ss58_decode, ss58_encode
 
 _VECTORS_PATH = Path(__file__).resolve().parents[2] / "conformance" / "vectors.json"
@@ -68,13 +69,20 @@ class TestConformanceVectors(unittest.TestCase):
 
     def test_ss58_invalid_vectors(self: "TestConformanceVectors") -> None:
         # Rejection vectors: address strings that must not decode in any implementation
-        # when the accompanying format is expected.
+        # when the accompanying format is expected. The error_kind field pins the
+        # failure classification (the Rust Ss58Error variant name, carried here by
+        # Ss58DecodeError.kind), so the error taxonomy cannot drift apart unnoticed.
         for v in _VECTORS["ss58_invalid"]:
-            with (
-                self.subTest(ss58=v["ss58"], reason=v["reason"]),
-                self.assertRaises(ValueError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}"),
-            ):
-                trevokeyless.decode_address(v["ss58"], v["format"])
+            with self.subTest(ss58=v["ss58"], reason=v["reason"]):
+                with self.assertRaises(
+                    Ss58DecodeError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}"
+                ) as ctx:
+                    trevokeyless.decode_address(v["ss58"], v["format"])
+                self.assertEqual(
+                    ctx.exception.kind,
+                    v["error_kind"],
+                    f"error kind of {v['ss58']!r} must match the fixture: {v['reason']}",
+                )
 
     def test_named_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
         # Names every implementation must reject at encode time.
@@ -94,6 +102,20 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"),
             ):
                 trevokeyless.decode_account_id(v["hex"])
+
+    def test_hex_valid_vectors(self: "TestConformanceVectors") -> None:
+        # Mixed-case spellings of valid raw account ids: the "0x" + 64 hex contract
+        # accepts both hex digit cases; the account_id of the result is normalized to
+        # lowercase.
+        for v in _VECTORS["hex_valid"]:
+            expected = v["expected"]
+            with self.subTest(hex=v["hex"]):
+                info = trevokeyless.decode_account_id(v["hex"])
+                self.assertEqual(info.account_id, v["account_id"])
+                self.assertEqual(info.address_type.name, expected["type"])
+                self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
+                self.assertEqual(info.ta_id, expected.get("ta_id"))
+                self.assertEqual(info.address_name, expected.get("name"))
 
 
 if __name__ == "__main__":
