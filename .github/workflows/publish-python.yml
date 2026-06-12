@@ -33,7 +33,7 @@ jobs:
       - name: Run tests
         run: |
           cd keyless-python
-          pip install .[test]
+          pip install .[dev]
           python3 -m unittest discover
 
       - name: Build and validate

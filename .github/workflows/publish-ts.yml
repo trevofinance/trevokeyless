@@ -1,4 +1,4 @@
-# Publishes @trevofinance/trevo-keyless to npm on a `ts-vX.Y.Z` tag.
+# Publishes @trevofinance/trevokeyless to npm on a `ts-vX.Y.Z` tag.
 #
 # One-time registry setup (no token is stored): on npmjs.com, configure a Trusted
 # Publisher for the package with repository `trevo-finance/trevo-keyless` and workflow

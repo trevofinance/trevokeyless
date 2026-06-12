@@ -66,7 +66,7 @@ jobs:
           npm init -y > /dev/null
           npm install --no-save "$TARBALL"
           node --input-type=commonjs -e "
-          const { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevo-keyless');
+          const { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevokeyless');
           const address = encodeAppAgentAddress(123);
           if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
           if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
@@ -74,10 +74,18 @@ jobs:
           console.log('require interop OK');
           "
           node --input-type=module -e "
-          import { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } from '@trevofinance/trevo-keyless';
+          import { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } from '@trevofinance/trevokeyless';
           const address = encodeAppAgentAddress(123);
           if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
           if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
           if (typeof Ss58Error !== 'function') process.exit(1);
           console.log('import interop OK');
           "
+
+      - name: README examples run against the packed tarball
+        # The Rust README is compiled as a doctest; this is the TypeScript
+        # equivalent. Every README example executes against the tarball installed by
+        # the interop smoke test above, so a drifting example (or address) fails CI.
+        run: |
+          cd /tmp/interop-smoke
+          node "$GITHUB_WORKSPACE/keyless-ts/scripts/run-readme.mjs" "$GITHUB_WORKSPACE/keyless-ts/README.md"

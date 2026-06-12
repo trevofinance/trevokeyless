@@ -1,4 +1,4 @@
-# Publishes the trevo-keyless crate to crates.io on a `rust-vX.Y.Z` tag.
+# Publishes the trevokeyless crate to crates.io on a `rust-vX.Y.Z` tag.
 #
 # One-time registry setup (no long-lived token is stored): on crates.io, configure a
 # Trusted Publisher for the crate with repository `trevo-finance/trevo-keyless` and

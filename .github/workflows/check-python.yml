@@ -32,7 +32,7 @@ jobs:
       - name: Install deps
         run: |
             cd keyless-python
-            pip install .[test]
+            pip install .[dev]
 
       - name: Audit dependencies
         run: |
