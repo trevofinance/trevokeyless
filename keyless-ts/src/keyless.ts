@@ -26,7 +26,9 @@ const SS58_CHECKSUM_LENGTH = 2;
 // whose cost grows quadratically with the input length. Mirrors the Rust implementation.
 const SS58_MAX_ADDRESS_LENGTH = 50;
 
-// A raw account id accepted by decodeAddress: 0x followed by exactly 64 hex characters.
+// A raw account id accepted by decodeAccountId: 0x followed by exactly 64 hex
+// characters. (The Python implementation uses the same expression; the Rust
+// implementation has no string form at all - AccountId32 is constructed from bytes.)
 const HEX_ACCOUNT_ID = /^0x[0-9a-fA-F]{64}$/;
 
 const U32_MAX = 4294967295;
@@ -252,28 +254,24 @@ function encodeNamed(
 }
 
 /**
- * Resolves an address string to its raw 32-byte account id.
+ * Resolves an SS58 address string to its raw 32-byte account id.
  *
- * @param {string} address - SS58 address (or `0x`-prefixed 32-byte account id hex).
- * @param {number} ss58Format - SS58 format (network prefix) the address must use;
- *   validated unconditionally but not compared against raw hex input, which carries no
- *   format.
+ * @param {string} address - SS58 address of a 32-byte account id.
+ * @param {number} ss58Format - SS58 format (network prefix) the address must use.
  * @returns {Uint8Array} - The 32-byte account id.
  * @throws {Error} - Thrown if ss58Format is not an integer in [0, 16383], or the input
- *   is not a valid SS58 address of a 32-byte account id in the expected format, or not
- *   a valid 32-byte hex account id.
+ *   is not a valid SS58 address of a 32-byte account id in the expected format.
  */
-function decodeAccountId(address: string, ss58Format: number): Uint8Array {
+function decodeSs58AccountId(address: string, ss58Format: number): Uint8Array {
   validateSs58Format(ss58Format);
 
   if (address.startsWith("0x")) {
-    // Raw account id passthrough; the ss58Format argument does not apply.
-    if (!HEX_ACCOUNT_ID.test(address)) {
-      throw new Error(
-        "Invalid hex account id: expected 0x followed by 64 hex characters",
-      );
-    }
-    return hexToU8a(address);
+    // Raw account ids are deliberately not accepted here: they carry no SS58 format
+    // and would silently bypass the expected-format check. decodeAccountId is the
+    // entry point for raw account ids.
+    throw new Error(
+      "Raw account id hex is not an SS58 address; use decodeAccountId",
+    );
   }
 
   if (address.length > SS58_MAX_ADDRESS_LENGTH) {
@@ -318,24 +316,59 @@ function decodeAccountId(address: string, ss58Format: number): Uint8Array {
 }
 
 /**
- * Decodes a blockchain address and classifies it.
+ * Decodes an SS58 blockchain address and classifies it.
  *
- * Accepts an SS58 address string. For backwards compatibility a raw account id in hex
- * form (`0x` followed by exactly 64 hex characters) is also accepted; such input
- * bypasses SS58 decoding, so the ss58Format argument (although still validated) is not
- * compared against raw account bytes, which carry no format.
+ * Accepts an SS58 address string of a 32-byte account id in the expected format. Raw
+ * account ids in hex form are rejected here because they carry no SS58 format; use
+ * `decodeAccountId` for those.
  *
- * @param {string} address - The blockchain address to decode.
+ * @param {string} address - The SS58 address to decode.
  * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
  * @throws {Error} - Thrown if ss58Format is not an integer in [0, 16383], or the
- *   address is not a valid SS58 string of a 32-byte account id in the expected format,
- *   or not a valid 32-byte hex account id.
+ *   address is not a valid SS58 string of a 32-byte account id in the expected format.
  */
 function decodeAddress(
   address: string,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): BlockchainAddressInfo {
-  const accountId = decodeAccountId(address, ss58Format);
+  return classifyAccountId(address, decodeSs58AccountId(address, ss58Format));
+}
+
+/**
+ * Decodes a raw 32-byte account id and classifies it.
+ *
+ * Mirrors `decode_account_info` of the Rust implementation, which takes the raw
+ * `AccountId32` bytes. Raw account bytes carry no SS58 format, so unlike
+ * `decodeAddress` this function has no ss58Format parameter.
+ *
+ * @param {string} accountId - The account id: `0x` followed by exactly 64 hex
+ *   characters.
+ * @returns {BlockchainAddressInfo} - An object containing the decoded address type and
+ *   data; its `address` field holds the input verbatim.
+ * @throws {Error} - Thrown if the input is not `0x` followed by exactly 64 hex
+ *   characters.
+ */
+function decodeAccountId(accountId: string): BlockchainAddressInfo {
+  if (!HEX_ACCOUNT_ID.test(accountId)) {
+    throw new Error(
+      "Invalid hex account id: expected 0x followed by 64 hex characters",
+    );
+  }
+  return classifyAccountId(accountId, hexToU8a(accountId));
+}
+
+/**
+ * Classifies a 32-byte account id and extracts any embedded keyless identifiers.
+ *
+ * @param {string} address - The original input (SS58 address or account id hex),
+ *   stored verbatim in the `address` field of the result.
+ * @param {Uint8Array} accountId - The 32-byte account id.
+ * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
+ */
+function classifyAccountId(
+  address: string,
+  accountId: Uint8Array,
+): BlockchainAddressInfo {
   const accountIdHex = u8aToHex(accountId);
 
   // Read the byte that encodes type of the address
@@ -426,7 +459,7 @@ function decodeAddress(
 /**
  * Decodes an application agent address.
  *
- * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
+ * @param {string} address - The SS58 address to decode.
  * @returns {number} - The ID of the application agent.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not an AppAgent address.
  */
@@ -467,7 +500,7 @@ interface DecodedTransactionalAddress {
 /**
  * Decodes a transactional address.
  *
- * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
+ * @param {string} address - The SS58 address to decode.
  * @returns {DecodedTransactionalAddress} - An object containing the IDs of the app agent
  *   and transactional address.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Transactional address.
@@ -516,7 +549,7 @@ interface DecodedNamedAddress {
 /**
  * Decodes a named address.
  *
- * @param {string} address - The SS58 address (or 32-byte hex account id) to decode.
+ * @param {string} address - The SS58 address to decode.
  * @returns {DecodedNamedAddress} - An object containing the ID of the application agent
  *   and the address name.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Named address.
@@ -563,7 +596,7 @@ function decodeNamed(
  *
  * Mirrors `is_keyless_account` of the Rust implementation.
  *
- * @param {string} address - The SS58 address (or 32-byte hex account id) to check.
+ * @param {string} address - The SS58 address to check.
  * @returns {boolean} - True if the address is a keyless address.
  * @throws {Error} - Thrown if the address cannot be decoded at all.
  */
@@ -587,6 +620,7 @@ export {
   decodeTransactional,
   decodeNamed,
   decodeAddress,
+  decodeAccountId,
   isKeylessAddress,
   ACCOUNT_ID_BYTES_LENGTH,
   NAMED_ADDRESS_BYTES_LENGTH,

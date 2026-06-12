@@ -22,6 +22,7 @@ from trevokeyless.keyless import (
     encode_named_address,
     decode_named_address,
     decode_address,
+    decode_account_id,
     is_keyless_address,
 )
 
@@ -40,6 +41,7 @@ __all__ = [
     "BlockchainAddressInfo",
     "SS58Format",
     "TransactionalAddressId",
+    "decode_account_id",
     "decode_address",
     "decode_app_agent_address",
     "decode_named_address",

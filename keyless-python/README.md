@@ -106,10 +106,10 @@ assert not trevokeyless.is_keyless_address("ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28Jyv
 ## Accepted input and errors
 
 The decoding functions accept an SS58 address string of a 32-byte account id in the
-expected SS58 format (5335, the Trevo asset hub, by default). For backwards
-compatibility, a raw account id in hex form (`0x` followed by exactly 64 hex characters)
-is also accepted; raw account bytes carry no SS58 format, so the `ss58_format` argument
-is not compared against such input.
+expected SS58 format (5335, the Trevo asset hub, by default). A raw account id in hex
+form (`0x` followed by exactly 64 hex characters) is classified with
+`decode_account_id` instead; raw account bytes carry no SS58 format, so that function
+takes no `ss58_format` argument.
 
 Any other input — wrong SS58 format or checksum, account ids that are not exactly
 32 bytes, malformed base58 or hex, surrounding whitespace — raises `ValueError`; only

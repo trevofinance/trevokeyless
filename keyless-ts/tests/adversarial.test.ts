@@ -16,6 +16,7 @@ import { u8aConcat, u8aToHex } from "@polkadot/util";
 import {
   AddressType,
   AddressTypeMismatchError,
+  decodeAccountId,
   decodeAddress,
   decodeAppAgent,
   decodeNamed,
@@ -152,11 +153,15 @@ describe("ss58Format validation", () => {
     );
   });
 
-  it("validates the format argument for raw hex input as well", () => {
-    // Raw hex input carries no SS58 format, so the argument is not compared against
-    // it - but the argument itself must still be a valid format.
-    expect(() => decodeAddress(u8aToHex(appAgent123), -1)).toThrow(
-      /ss58Format must be an integer in \[0, 16383\]/,
+  it("rejects raw hex input in decodeAddress", () => {
+    // SS58 addresses and raw account ids are separate input classes: a raw account id
+    // carries no SS58 format, so accepting it here would silently bypass the
+    // expected-format check. decodeAccountId (which takes no format) handles them.
+    expect(() => decodeAddress(u8aToHex(appAgent123), ss58Format)).toThrow(
+      new Error("Raw account id hex is not an SS58 address; use decodeAccountId"),
+    );
+    expect(() => isKeylessAddress(u8aToHex(appAgent123), ss58Format)).toThrow(
+      /use decodeAccountId/,
     );
   });
 
@@ -333,36 +338,44 @@ describe("Malformed SS58 input", () => {
 });
 
 describe("Hex account id contract", () => {
-  // A raw account id ("0x" + 64 hex chars) is accepted and validated; anything else
-  // hex-like is rejected.
+  // decodeAccountId accepts a raw account id ("0x" + exactly 64 hex chars); anything
+  // else is rejected. decodeAddress accepts SS58 addresses only.
 
   it("classifies a valid hex account id", () => {
-    const info = decodeAddress(u8aToHex(appAgent123), ss58Format);
+    const info = decodeAccountId(u8aToHex(appAgent123));
     expect(info.addressType).toEqual(AddressType.AppAgent);
     expect(info.appAgentId).toEqual(123);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
+    expect(info.address).toEqual(u8aToHex(appAgent123));
   });
 
   it("normalizes uppercase hex", () => {
     const upper = `0x${u8aToHex(appAgent123).slice(2).toUpperCase()}`;
-    const info = decodeAddress(upper, ss58Format);
+    const info = decodeAccountId(upper);
     expect(info.addressType).toEqual(AddressType.AppAgent);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
+    // The address field holds the input verbatim.
+    expect(info.address).toEqual(upper);
   });
 
   it("rejects hex of the wrong length", () => {
-    ["0x", "0xdeadbeef", `${u8aToHex(appAgent123)}00`].forEach((badHex) => {
-      expect(() => decodeAddress(badHex, ss58Format)).toThrow(
-        /Invalid hex account id/,
-      );
-    });
+    ["0x", "0xdeadbeef", `${u8aToHex(appAgent123)}00`, "0xabc"].forEach(
+      (badHex) => {
+        expect(() => decodeAccountId(badHex)).toThrow(
+          /Invalid hex account id/,
+        );
+      },
+    );
   });
 
   it("rejects invalid hex", () => {
-    ["0xabc", `0xzz${"00".repeat(31)}`].forEach((badHex) => {
-      expect(() => decodeAddress(badHex, ss58Format)).toThrow(
-        /Invalid hex account id/,
-      );
+    // Wrong charset, an uppercase "0X" prefix, and a missing prefix are all rejected.
+    [
+      `0xzz${"00".repeat(31)}`,
+      `0X${u8aToHex(appAgent123).slice(2)}`,
+      u8aToHex(appAgent123).slice(2),
+    ].forEach((badHex) => {
+      expect(() => decodeAccountId(badHex)).toThrow(/Invalid hex account id/);
     });
   });
 });
@@ -384,8 +397,10 @@ describe("isKeylessAddress", () => {
     // Alice's well-known development account.
     const alice = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
     expect(isKeylessAddress(alice, ss58Format)).toBe(false);
-    // A zeroed account has no valid keyless discriminant.
-    expect(isKeylessAddress(`0x${"00".repeat(32)}`, ss58Format)).toBe(false);
+    // A zeroed account has no valid keyless discriminant; raw account ids are
+    // classified via decodeAccountId.
+    const info = decodeAccountId(`0x${"00".repeat(32)}`);
+    expect(info.addressType).toEqual(AddressType.Regular);
   });
 });
 

@@ -52,7 +52,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["classify"]:
             expected = v["expected"]
             with self.subTest(hex=v["hex"]):
-                info = trevokeyless.decode_address("0x" + v["hex"])
+                info = trevokeyless.decode_account_id("0x" + v["hex"])
                 self.assertEqual(info.address_type.name, expected["type"])
                 self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
                 self.assertEqual(info.ta_id, expected.get("ta_id"))

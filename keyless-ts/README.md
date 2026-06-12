@@ -32,6 +32,7 @@ const {
   decodeTransactional,
   decodeNamed,
   decodeAddress,
+  decodeAccountId,
   isKeylessAddress,
 } = require("@trevofinance/trevo-keyless");
 ```
@@ -104,10 +105,10 @@ console.log(isKeylessAddress(regularAddress)); // false
 ## Accepted input and errors
 
 The decoding functions accept an SS58 address string of a 32-byte account id in the
-expected SS58 format (5335, the Trevo asset hub, by default). For backwards
-compatibility, a raw account id in hex form (`0x` followed by exactly 64 hex characters)
-is also accepted; raw account bytes carry no SS58 format, so the `ss58Format` argument
-is not compared against such input.
+expected SS58 format (5335, the Trevo asset hub, by default). A raw account id in hex
+form (`0x` followed by exactly 64 hex characters) is classified with `decodeAccountId`
+instead; raw account bytes carry no SS58 format, so that function takes no `ss58Format`
+argument.
 
 Any other input — wrong SS58 format or checksum, account ids that are not exactly
 32 bytes, malformed base58 or hex, surrounding whitespace — throws an `Error`; only the

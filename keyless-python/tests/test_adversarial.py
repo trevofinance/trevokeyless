@@ -327,11 +327,11 @@ class TestSs58FormatValidation(unittest.TestCase):
             ):
                 trevokeyless.decode_address(address, bad_format)  # type: ignore[arg-type]
 
-    def test_format_argument_is_validated_for_hex_input(self: "TestSs58FormatValidation") -> None:
-        # Raw hex input carries no SS58 format, so the argument is not compared against
-        # it - but the argument itself must still be a valid format.
-        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-            trevokeyless.decode_address("0x" + APP_AGENT_123.hex(), -1)
+    def test_decode_account_id_takes_no_format(self: "TestSs58FormatValidation") -> None:
+        # Raw account ids carry no SS58 format; decode_account_id therefore has no
+        # ss58_format parameter at all.
+        with self.assertRaises(TypeError):
+            trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex(), 5335)  # type: ignore[call-arg]
 
     def test_format_boundaries_accepted(self: "TestSs58FormatValidation") -> None:
         for good_format in [0, 16383]:
@@ -347,35 +347,39 @@ class TestSs58FormatValidation(unittest.TestCase):
 
 
 class TestHexAccountIdContract(unittest.TestCase):
-    """A raw account id ("0x" + 64 hex chars) is accepted and validated; anything else
-    hex-like is rejected."""
+    """decode_account_id accepts a raw account id ("0x" + exactly 64 hex chars);
+    anything else is rejected. decode_address accepts SS58 addresses only."""
 
     def test_valid_hex_account_id_is_classified(self: "TestHexAccountIdContract") -> None:
-        info = trevokeyless.decode_address("0x" + APP_AGENT_123.hex(), SS58_FORMAT)
+        info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex())
         self.assertIs(info.address_type, AddressType.AppAgent)
         self.assertEqual(info.app_agent_id, 123)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
+        self.assertEqual(info.address, "0x" + APP_AGENT_123.hex())
 
     def test_uppercase_hex_is_normalized(self: "TestHexAccountIdContract") -> None:
-        info = trevokeyless.decode_address("0x" + APP_AGENT_123.hex().upper(), SS58_FORMAT)
+        info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex().upper())
         self.assertIs(info.address_type, AddressType.AppAgent)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
+        # The address field holds the input verbatim.
+        self.assertEqual(info.address, "0x" + APP_AGENT_123.hex().upper())
 
     def test_rejects_hex_of_wrong_length(self: "TestHexAccountIdContract") -> None:
-        for bad_hex in ["0x", "0xdeadbeef", "0x" + APP_AGENT_123.hex() + "00"]:
-            with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid account id length"):
-                trevokeyless.decode_address(bad_hex, SS58_FORMAT)
+        for bad_hex in ["0x", "0xdeadbeef", "0x" + APP_AGENT_123.hex() + "00", "0xabc"]:
+            with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid hex account id"):
+                trevokeyless.decode_account_id(bad_hex)
 
     def test_rejects_invalid_hex(self: "TestHexAccountIdContract") -> None:
-        for bad_hex in ["0xabc", "0xzz" + "00" * 31]:
-            with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
-                trevokeyless.decode_address(bad_hex, SS58_FORMAT)
+        # Wrong charset, an uppercase "0X" prefix, and a missing prefix are all rejected.
+        for bad_hex in ["0xzz" + "00" * 31, "0X" + APP_AGENT_123.hex(), APP_AGENT_123.hex()]:
+            with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid hex account id"):
+                trevokeyless.decode_account_id(bad_hex)
 
     def test_rejects_hex_with_whitespace(self: "TestHexAccountIdContract") -> None:
         # bytes.fromhex tolerates ASCII whitespace, but the contract is exactly 64 hex
         # characters; whitespace anywhere in the hex digits must be rejected (the Rust
-        # AccountId32 has no string form at all, the TS implementation uses a strict
-        # regular expression).
+        # AccountId32 has no string form at all, the TS implementation uses the same
+        # strict regular expression).
         clean = APP_AGENT_123.hex()
         spaced_inputs = [
             "0x" + clean[:8] + " " + clean[8:],  # space inside
@@ -384,8 +388,23 @@ class TestHexAccountIdContract(unittest.TestCase):
             "0x" + clean[:32] + "\t" + clean[32:],  # tab inside
         ]
         for spaced in spaced_inputs:
-            with self.subTest(spaced=spaced), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
-                trevokeyless.decode_address(spaced, SS58_FORMAT)
+            with self.subTest(spaced=spaced), self.assertRaisesRegex(ValueError, "^Invalid hex account id"):
+                trevokeyless.decode_account_id(spaced)
+
+    def test_decode_address_rejects_raw_hex(self: "TestHexAccountIdContract") -> None:
+        # SS58 addresses and raw account ids are separate input classes: a raw account
+        # id carries no SS58 format, so accepting it here would silently bypass the
+        # expected-format check.
+        for hex_input in ["0x" + APP_AGENT_123.hex(), "0x" + APP_AGENT_123.hex()[:46]]:
+            with (
+                self.subTest(hex_input=hex_input),
+                self.assertRaisesRegex(
+                    ValueError, "^Raw account id hex is not an SS58 address; use decode_account_id$"
+                ),
+            ):
+                trevokeyless.decode_address(hex_input, SS58_FORMAT)
+        with self.assertRaisesRegex(ValueError, "use decode_account_id"):
+            trevokeyless.is_keyless_address("0x" + APP_AGENT_123.hex(), SS58_FORMAT)
 
 
 class TestIsKeylessAddress(unittest.TestCase):
@@ -405,8 +424,10 @@ class TestIsKeylessAddress(unittest.TestCase):
         # Alice's well-known development account.
         alice = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4"
         self.assertFalse(trevokeyless.is_keyless_address(alice, SS58_FORMAT))
-        # A zeroed account has no valid keyless discriminant.
-        self.assertFalse(trevokeyless.is_keyless_address("0x" + "00" * 32, SS58_FORMAT))
+        # A zeroed account has no valid keyless discriminant; raw account ids are
+        # classified via decode_account_id.
+        info = trevokeyless.decode_account_id("0x" + "00" * 32)
+        self.assertIs(info.address_type, AddressType.Regular)
 
 
 class TestBlockchainAddressInfoValueSemantics(unittest.TestCase):
