@@ -163,18 +163,25 @@ def _validate_u32(value: int, label: str) -> None:
     Validates that a value is an integer in the u32 range [0, 4294967295].
 
     The Rust implementation enforces this through the `u32` type; the TypeScript
-    implementation performs the equivalent runtime check (raising RangeError). ``bool``
-    is rejected explicitly: it is an ``int`` subclass, but silently encoding ``True``
-    as 1 would hide a caller bug that the other implementations surface.
+    implementation performs the equivalent runtime check (RangeError, its closest
+    native fit for both failure modes). Here the failure modes split along Python
+    convention: a non-int raises TypeError, an out-of-range int raises ValueError.
+    ``bool`` is rejected as a wrong type: it is an ``int`` subclass, but silently
+    encoding ``True`` as 1 would hide a caller bug that the other implementations
+    surface.
 
     Args:
         value (int): The value to validate.
         label (str): Name of the value, used in the error message.
 
     Raises:
-        ValueError: If the value is not an integer in [0, 4294967295].
+        TypeError: If the value is not an int (``bool`` included).
+        ValueError: If the value is outside [0, 4294967295].
     """
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > U32_MAX:
+    if isinstance(value, bool) or not isinstance(value, int):
+        msg = f"{label} must be an int, got {type(value).__name__}"
+        raise TypeError(msg)
+    if value < 0 or value > U32_MAX:
         msg = f"{label} must be an integer in [0, {U32_MAX}], got {value!r}"
         raise ValueError(msg)
 
@@ -185,18 +192,23 @@ def _validate_ss58_format(ss58_format: int) -> None:
     14 bits).
 
     The Rust implementation enforces this through the `u16` type plus a range check; the
-    TypeScript implementation performs the equivalent runtime check. ``bool`` is rejected
-    for the same reason as in `_validate_u32`; non-integers (e.g. floats) would otherwise
-    surface as a confusing TypeError from the prefix byte arithmetic. The reserved
-    formats 46 and 47 are rejected separately by the SS58 layer.
+    TypeScript implementation performs the equivalent runtime check. The failure modes
+    split along Python convention: a non-int (``bool`` included, for the same reason as
+    in `_validate_u32`) raises a deliberate TypeError - not one leaked from the prefix
+    byte arithmetic - and an out-of-range int raises ValueError. The reserved formats
+    46 and 47 are rejected separately by the SS58 layer.
 
     Args:
         ss58_format (int): The SS58 format to validate.
 
     Raises:
-        ValueError: If the format is not an integer in [0, 16383].
+        TypeError: If the format is not an int (``bool`` included).
+        ValueError: If the format is outside [0, 16383].
     """
-    if isinstance(ss58_format, bool) or not isinstance(ss58_format, int) or not 0 <= ss58_format <= _SS58_FORMAT_MAX:
+    if isinstance(ss58_format, bool) or not isinstance(ss58_format, int):
+        msg = f"ss58_format must be an int, got {type(ss58_format).__name__}"
+        raise TypeError(msg)
+    if not 0 <= ss58_format <= _SS58_FORMAT_MAX:
         msg = f"ss58_format must be an integer in [0, {_SS58_FORMAT_MAX}], got {ss58_format!r}"
         raise ValueError(msg)
 
@@ -261,7 +273,8 @@ def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddr
         str: Encoded SS58 address.
 
     Raises:
-        ValueError: If ss58_format is not an integer in [0, 16383], or is reserved.
+        TypeError: If ss58_format is not an int.
+        ValueError: If ss58_format is outside [0, 16383], or is reserved.
     """
     _validate_ss58_format(ss58_format)
 
@@ -287,8 +300,9 @@ def encode_app_agent_address(
         str: Encoded AppAgent address.
 
     Raises:
-        ValueError: If app_agent_id is not an integer in [0, 4294967295], or
-            ss58_format is not a valid SS58 format.
+        TypeError: If app_agent_id or ss58_format is not an int.
+        ValueError: If app_agent_id is outside [0, 4294967295], or ss58_format is
+            not a valid SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
 
@@ -344,7 +358,8 @@ def encode_transactional_address(
         str: Encoded Transactional address.
 
     Raises:
-        ValueError: If app_agent_id or ta_id is not an integer in [0, 4294967295], or
+        TypeError: If app_agent_id, ta_id, or ss58_format is not an int.
+        ValueError: If app_agent_id or ta_id is outside [0, 4294967295], or
             ss58_format is not a valid SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
@@ -404,9 +419,10 @@ def encode_named_address(
         str: Encoded Named address.
 
     Raises:
-        ValueError: If app_agent_id is not an integer in [0, 4294967295], the name has
-            a wrong length or contains invalid characters, or ss58_format is not a
-            valid SS58 format.
+        TypeError: If app_agent_id or ss58_format is not an int, or name is not a str.
+        ValueError: If app_agent_id is outside [0, 4294967295], the name has a wrong
+            length or contains invalid characters, or ss58_format is not a valid
+            SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
     _validate_address_name(name)
@@ -462,11 +478,11 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
         bytes: The 32-byte account id.
 
     Raises:
-        TypeError: If blockchain_address is not a str.
+        TypeError: If blockchain_address is not a str, or ss58_format is not an int.
         Ss58DecodeError: If the input is not a valid SS58 address of a 32-byte account
             id (``Ss58FormatMismatchError`` if it is valid but uses a different format
             than expected).
-        ValueError: If ss58_format is not an integer in [0, 16383].
+        ValueError: If ss58_format is outside [0, 16383].
     """
     _require_str(blockchain_address, "blockchain_address")
     _validate_ss58_format(ss58_format)
@@ -505,12 +521,12 @@ def decode_address(
         BlockchainAddressInfo: an object with info about the address.
 
     Raises:
-        TypeError: If blockchain_address is not a str.
+        TypeError: If blockchain_address is not a str, or ss58_format is not an int.
         Ss58DecodeError: If the address is not a valid SS58 string of a 32-byte account
             id; its ``kind`` carries the failure classification
             (``Ss58FormatMismatchError`` if the address is valid but uses a different
             format than expected).
-        ValueError: If ss58_format is not an integer in [0, 16383].
+        ValueError: If ss58_format is outside [0, 16383].
     """
     account_id_bytes = _decode_ss58_account_id_bytes(blockchain_address, ss58_format)
     return _classify_account_id(blockchain_address, account_id_bytes)
@@ -563,9 +579,9 @@ def encode_address(
         str: The SS58 address.
 
     Raises:
-        TypeError: If account_id is not a str.
+        TypeError: If account_id is not a str, or ss58_format is not an int.
         ValueError: If the input is not `0x` followed by exactly 64 hex characters, or
-            ss58_format is not an integer in [0, 16383].
+            ss58_format is outside [0, 16383].
         Ss58DecodeError: kind ``"InvalidFormat"`` if ss58_format is reserved (46, 47).
     """
     _require_str(account_id, "account_id")

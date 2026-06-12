@@ -92,18 +92,21 @@ class TestEncodeIdValidation(unittest.TestCase):
                     trevokeyless.encode_named_address(bad_id, "example123", SS58_FORMAT)
 
     def test_rejects_non_integer_ids(self: "TestEncodeIdValidation") -> None:
+        # Wrong types raise TypeError (Python convention, matching the TypeError for
+        # non-string address/name parameters); out-of-range ints raise ValueError.
         for bad_id in [1.5, "123", None]:
-            with self.subTest(bad_id=bad_id), self.assertRaisesRegex(ValueError, "must be an integer"):
+            with self.subTest(bad_id=bad_id), self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
                 trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)  # type: ignore[arg-type]
 
     def test_rejects_bool_ids(self: "TestEncodeIdValidation") -> None:
         # bool is an int subclass, but silently encoding True as 1 would hide a caller
-        # bug that the TypeScript (Number.isInteger) and Rust (u32) implementations reject.
+        # bug that the TypeScript (Number.isInteger) and Rust (u32) implementations
+        # reject; it is classified as a wrong type, not an out-of-range value.
         for bad_id in [True, False]:
             with self.subTest(bad_id=bad_id):
-                with self.assertRaisesRegex(ValueError, "must be an integer"):
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
                     trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)
-                with self.assertRaisesRegex(ValueError, "must be an integer"):
+                with self.assertRaisesRegex(TypeError, "^ta_id must be an int"):
                     trevokeyless.encode_transactional_address(1, bad_id, SS58_FORMAT)
 
     def test_accepts_u32_boundaries(self: "TestEncodeIdValidation") -> None:
@@ -320,27 +323,47 @@ class TestStrictCodecContract(unittest.TestCase):
 class TestSs58FormatValidation(unittest.TestCase):
     """The ss58_format parameter must be an integer in [0, 16383] (bool excluded),
     mirroring the u16-typed format of the Rust implementation and the runtime check of
-    the TypeScript implementation. In particular a float must not surface as TypeError,
-    and True must not be silently encoded as format 1."""
+    the TypeScript implementation. A wrong type (float, str, None, bool) raises a
+    deliberate TypeError - not one leaked from the prefix byte arithmetic - and True
+    must not be silently encoded as format 1; an out-of-range int raises ValueError."""
 
-    def test_encode_rejects_invalid_formats(self: "TestSs58FormatValidation") -> None:
-        for bad_format in [-1, 16384, True, False, 5335.0, "5335", None]:
+    def test_encode_rejects_wrong_type_formats(self: "TestSs58FormatValidation") -> None:
+        for bad_format in [True, False, 5335.0, "5335", None]:
             with self.subTest(bad_format=bad_format):
-                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
                     trevokeyless.encode_app_agent_address(123, bad_format)  # type: ignore[arg-type]
-                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
                     trevokeyless.encode_transactional_address(123, 456, bad_format)  # type: ignore[arg-type]
-                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
                     trevokeyless.encode_named_address(123, "example123", bad_format)  # type: ignore[arg-type]
 
-    def test_decode_rejects_invalid_formats(self: "TestSs58FormatValidation") -> None:
+    def test_encode_rejects_out_of_range_formats(self: "TestSs58FormatValidation") -> None:
+        for bad_format in [-1, 16384]:
+            with self.subTest(bad_format=bad_format):
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_app_agent_address(123, bad_format)
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_transactional_address(123, 456, bad_format)
+                with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+                    trevokeyless.encode_named_address(123, "example123", bad_format)
+
+    def test_decode_rejects_wrong_type_formats(self: "TestSs58FormatValidation") -> None:
         address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
-        for bad_format in [-1, 16384, True, 5335.0, None]:
+        for bad_format in [True, 5335.0, None]:
+            with (
+                self.subTest(bad_format=bad_format),
+                self.assertRaisesRegex(TypeError, "^ss58_format must be an int"),
+            ):
+                trevokeyless.decode_address(address, bad_format)  # type: ignore[arg-type]
+
+    def test_decode_rejects_out_of_range_formats(self: "TestSs58FormatValidation") -> None:
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        for bad_format in [-1, 16384]:
             with (
                 self.subTest(bad_format=bad_format),
                 self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
             ):
-                trevokeyless.decode_address(address, bad_format)  # type: ignore[arg-type]
+                trevokeyless.decode_address(address, bad_format)
 
     def test_decode_account_id_takes_no_format(self: "TestSs58FormatValidation") -> None:
         # Raw account ids carry no SS58 format; decode_account_id therefore has no
@@ -454,12 +477,18 @@ class TestEncodeAddress(unittest.TestCase):
 
     def test_rejects_invalid_formats(self: "TestEncodeAddress") -> None:
         hex_account = "0x" + APP_AGENT_123.hex()
-        for bad_format in [-1, 16384, True, 5335.0, None]:
+        for wrong_type_format in [True, 5335.0, None]:
             with (
-                self.subTest(bad_format=bad_format),
+                self.subTest(wrong_type_format=wrong_type_format),
+                self.assertRaisesRegex(TypeError, "^ss58_format must be an int"),
+            ):
+                trevokeyless.encode_address(hex_account, wrong_type_format)  # type: ignore[arg-type]
+        for out_of_range_format in [-1, 16384]:
+            with (
+                self.subTest(out_of_range_format=out_of_range_format),
                 self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
             ):
-                trevokeyless.encode_address(hex_account, bad_format)  # type: ignore[arg-type]
+                trevokeyless.encode_address(hex_account, out_of_range_format)
         for reserved in [46, 47]:
             with self.subTest(reserved=reserved):
                 with self.assertRaises(Ss58DecodeError) as ctx:

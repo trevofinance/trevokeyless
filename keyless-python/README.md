@@ -165,6 +165,7 @@ The encoding functions validate their inputs: AppAgent and Transactional IDs mus
 integers in the u32 range `[0, 4294967295]` (matching the `u32` identifiers of the
 on-chain encoding), and address names must be exactly 10 characters from the set
 `0-9 a-z A-Z - #`. The `ss58_format` argument of every function must be an integer in
-`[0, 16383]` and not a reserved format (46, 47). Invalid input raises `ValueError`;
-passing a non-string where an address, account id, or name is expected raises
-`TypeError`.
+`[0, 16383]` and not a reserved format (46, 47). Wrong types raise `TypeError`: a
+non-string where an address, account id, or name is expected, and a non-integer
+(`bool` included) where an ID or SS58 format is expected. Out-of-range values and
+other invalid input raise `ValueError`.

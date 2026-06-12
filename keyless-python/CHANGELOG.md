@@ -34,6 +34,10 @@ First public release line. Breaking changes from 0.4.0 (pre-1.0 API freeze):
   input verbatim); render one explicitly with `encode_address`.
 - **Non-string inputs raise `TypeError`** (previously an `AttributeError` leaked from
   string method lookups) for address, account id, and name parameters.
+- **Wrong-type numeric parameters raise `TypeError` too** (previously `ValueError`): a
+  non-int (`bool` included) where an AppAgent ID, TA ID, or `ss58_format` is expected
+  is a type error, consistent with the string parameters; out-of-range ints still
+  raise `ValueError`.
 - **`SS58_FORMAT__TREVO_ASSET_HUB` renamed to `SS58_FORMAT_TREVO_ASSET_HUB`** (single
   underscore, matching the Rust crate). No alias.
 - **Error wording unified cross-language:** the name-length error is now
