@@ -22,7 +22,7 @@ from enum import Enum
 from hashlib import blake2b
 from typing import TypeAlias
 
-from .ss58 import ss58_decode, ss58_encode
+from ._ss58 import ss58_decode, ss58_encode
 
 # Constants
 NAMED_ADDRESS_LENGTH = 10

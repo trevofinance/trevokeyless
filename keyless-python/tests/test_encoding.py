@@ -2,7 +2,7 @@ import unittest
 from hashlib import blake2b
 
 import trevokeyless
-from trevokeyless.ss58 import ss58_encode
+from trevokeyless._ss58 import ss58_encode
 
 
 class TestKeylessAddresses(unittest.TestCase):

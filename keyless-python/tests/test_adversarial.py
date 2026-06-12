@@ -13,7 +13,7 @@ import base58
 
 import trevokeyless
 from trevokeyless import AddressType, AddressTypeMismatchError
-from trevokeyless.ss58 import get_ss58_format, is_valid_ss58_address, ss58_decode, ss58_encode
+from trevokeyless._ss58 import get_ss58_format, is_valid_ss58_address, ss58_decode, ss58_encode
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -217,7 +217,7 @@ class TestMalformedSs58(unittest.TestCase):
         self.assertIs(info.address_type, AddressType.Regular)
 
     def test_generic_ss58_helpers_reject_oversized_input(self: "TestMalformedSs58") -> None:
-        # The generic helpers of trevokeyless.ss58 support payloads up to 33 bytes, whose
+        # The generic helpers of trevokeyless._ss58 support payloads up to 33 bytes, whose
         # addresses reach 51 characters; anything longer must be rejected before base58
         # decoding (whose cost grows quadratically), mirroring the bound inside the Rust
         # SS58 decoder.
@@ -268,7 +268,7 @@ class TestSurroundingWhitespace(unittest.TestCase):
 
 
 class TestGenericSs58HexHandling(unittest.TestCase):
-    """The generic helpers of trevokeyless.ss58 accept "0x"-prefixed hex account ids;
+    """The generic helpers of trevokeyless._ss58 accept "0x"-prefixed hex account ids;
     the hex digits must be validated strictly. bytes.fromhex tolerates ASCII whitespace,
     and str.replace would strip "0x" occurrences anywhere in the string - both would
     silently accept malformed input."""

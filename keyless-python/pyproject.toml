@@ -66,7 +66,7 @@ ignore = ["COM812", "UP040"]
 fixable = ["ALL"]
 
 [tool.ruff.format]
-exclude = ["ss58.py"]
+exclude = ["_ss58.py"]
 
 
 [tool.mypy]

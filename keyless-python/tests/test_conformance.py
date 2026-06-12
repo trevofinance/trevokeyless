@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import trevokeyless
-from trevokeyless.ss58 import ss58_decode, ss58_encode
+from trevokeyless._ss58 import ss58_decode, ss58_encode
 
 _VECTORS_PATH = Path(__file__).resolve().parents[2] / "conformance" / "vectors.json"
 _VECTORS: dict[str, Any] = json.loads(_VECTORS_PATH.read_text()) if _VECTORS_PATH.is_file() else {}

@@ -16,6 +16,6 @@ python3 -m unittest discover
 
 The package ships a `py.typed` marker, so type checkers read the inline annotations of
 `keyless.py` directly — there is no stub file to keep in sync. The vendored
-`ss58.py` (Polkascan code, kept byte-stable apart from hardening fixes) is the one
-exception: it is shadowed by the handwritten `ss58.pyi` stub, which is the typed surface
+`_ss58.py` (Polkascan code, kept byte-stable apart from hardening fixes) is the one
+exception: it is shadowed by the handwritten `_ss58.pyi` stub, which is the typed surface
 of that module.
