@@ -50,6 +50,9 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+      - name: Publish dry run
+        run: cargo publish --dry-run
+
   rust-msrv:
     concurrency:
       group: rust-msrv-${{ github.ref }}
@@ -66,3 +69,40 @@ jobs:
           toolchain: 1.79.0
       - name: Check (all features) on MSRV
         run: cargo check --all-features
+
+  rust-fuzz:
+    concurrency:
+      group: rust-fuzz-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz the SS58 decoder (smoke run)
+        run: cargo +nightly fuzz run ss58_decode -- -max_total_time=60
+
+  rust-audit:
+    concurrency:
+      group: rust-audit-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Audit dependencies against the RustSec database
+        run: cargo audit

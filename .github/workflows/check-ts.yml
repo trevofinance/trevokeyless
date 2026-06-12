@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Active LTS versions (Node 18 reached end of life in April 2025).
-        node_version: [20, 22]
+        # Active LTS versions (Node 20 reached end of life in April 2026).
+        node_version: [22, 24]
 
     steps:
       - uses: actions/checkout@v6
@@ -33,3 +33,21 @@ jobs:
           npm run lint-check
           npm run build
           npm run test
+
+      - name: Audit production dependencies
+        run: |
+          cd keyless-ts
+          npm audit --omit=dev --audit-level=high
+
+      - name: Check package contents
+        # The "files" allowlist is release-critical; verify the packed tarball instead
+        # of trusting the configuration.
+        run: |
+          cd keyless-ts
+          npm pack --dry-run --json > /tmp/pack-report.json
+          node -e "
+          const files = require('/tmp/pack-report.json')[0].files.map((f) => f.path);
+          const allowed = (f) => f.startsWith('dist/') || ['package.json', 'README.md', 'LICENSE'].includes(f);
+          if (files.length === 0 || !files.every(allowed)) { console.error('unexpected package contents:', files); process.exit(1); }
+          console.log('npm package contents OK:', files.length, 'files');
+          "
