@@ -18,6 +18,7 @@ import {
   decodeAppAgentAddress,
   decodeNamedAddress,
   decodeTransactionalAddress,
+  encodeAddress,
   encodeAppAgentAddress,
   encodeNamedAddress,
   encodeTransactionalAddress,
@@ -378,6 +379,58 @@ describe("Hex account id contract", () => {
       u8aToHex(appAgent123).slice(2),
     ].forEach((badHex) => {
       expect(() => decodeAccountId(badHex)).toThrow(/Invalid hex account id/);
+    });
+  });
+});
+
+describe("encodeAddress", () => {
+  // encodeAddress renders a raw account id ("0x" + exactly 64 hex chars) as its
+  // canonical SS58 address, mirroring AccountId32::to_ss58check_with_version.
+
+  it("round-trips with decodeAddress", () => {
+    const hexAccount = u8aToHex(appAgent123);
+    const address = encodeAddress(hexAccount, ss58Format);
+    expect(address).toEqual(encodeAppAgentAddress(123, ss58Format));
+    expect(decodeAddress(address, ss58Format).accountId).toEqual(hexAccount);
+  });
+
+  it("defaults to the Trevo format", () => {
+    expect(encodeAddress(u8aToHex(appAgent123))).toEqual(
+      encodeAppAgentAddress(123),
+    );
+  });
+
+  it("rejects invalid hex", () => {
+    const clean = u8aToHex(appAgent123).slice(2);
+    [
+      "",
+      "0x",
+      `0x${clean.slice(0, 62)}`,
+      `0x${clean}00`,
+      `0X${clean}`,
+      clean,
+      `0x${clean.slice(0, 62)}zz`,
+    ].forEach((badHex) => {
+      expect(() => encodeAddress(badHex)).toThrow(/Invalid hex account id/);
+    });
+  });
+
+  it("rejects invalid and reserved formats", () => {
+    const hexAccount = u8aToHex(appAgent123);
+    [-1, 16384, 5335.5, NaN].forEach((badFormat) => {
+      expect(() => encodeAddress(hexAccount, badFormat)).toThrow(
+        /ss58Format must be an integer/,
+      );
+    });
+    [46, 47].forEach((reserved) => {
+      let thrown: unknown;
+      try {
+        encodeAddress(hexAccount, reserved);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(Ss58Error);
+      expect((thrown as Ss58Error).kind).toEqual("InvalidFormat");
     });
   });
 });

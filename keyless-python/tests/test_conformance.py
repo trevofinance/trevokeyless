@@ -25,6 +25,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["app_agent"]:
             with self.subTest(id=v["id"]):
                 self.assertEqual(trevokeyless.encode_app_agent_address(v["id"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.address_type, trevokeyless.AddressType.AppAgent)
@@ -35,6 +36,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["transactional"]:
             with self.subTest(aa=v["aa"], ta=v["ta"]):
                 self.assertEqual(trevokeyless.encode_transactional_address(v["aa"], v["ta"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.address_type, trevokeyless.AddressType.Transactional)
@@ -44,6 +46,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["named"]:
             with self.subTest(aa=v["aa"], name=v["name"]):
                 self.assertEqual(trevokeyless.encode_named_address(v["aa"], v["name"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.address_type, trevokeyless.AddressType.Named)
@@ -63,6 +66,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["ss58_formats"]:
             with self.subTest(hex=v["hex"], ss58_format=v["format"]):
                 self.assertEqual(ss58_encode(bytes.fromhex(v["hex"]), v["format"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"], v["format"]), v["ss58"])
                 self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
@@ -74,9 +78,7 @@ class TestConformanceVectors(unittest.TestCase):
         # Ss58DecodeError.kind), so the error taxonomy cannot drift apart unnoticed.
         for v in _VECTORS["ss58_invalid"]:
             with self.subTest(ss58=v["ss58"], reason=v["reason"]):
-                with self.assertRaises(
-                    Ss58DecodeError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}"
-                ) as ctx:
+                with self.assertRaises(Ss58DecodeError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}") as ctx:
                     trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(
                     ctx.exception.kind,
@@ -97,11 +99,12 @@ class TestConformanceVectors(unittest.TestCase):
         # Raw account id strings that violate the "0x" + 64 hex contract of
         # decode_account_id.
         for v in _VECTORS["hex_invalid"]:
-            with (
-                self.subTest(hex=v["hex"], reason=v["reason"]),
-                self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"),
-            ):
-                trevokeyless.decode_account_id(v["hex"])
+            with self.subTest(hex=v["hex"], reason=v["reason"]):
+                with self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"):
+                    trevokeyless.decode_account_id(v["hex"])
+                # encode_address shares the input contract of decode_account_id.
+                with self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"):
+                    trevokeyless.encode_address(v["hex"])
 
     def test_hex_valid_vectors(self: "TestConformanceVectors") -> None:
         # Mixed-case spellings of valid raw account ids: the "0x" + 64 hex contract
@@ -116,6 +119,11 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
                 self.assertEqual(info.ta_id, expected.get("ta_id"))
                 self.assertEqual(info.address_name, expected.get("name"))
+                # encode_address accepts both spellings and produces the same address.
+                self.assertEqual(
+                    trevokeyless.encode_address(v["hex"]),
+                    trevokeyless.encode_address(v["account_id"]),
+                )
 
 
 if __name__ == "__main__":

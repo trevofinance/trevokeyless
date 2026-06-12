@@ -34,6 +34,7 @@ const {
   decodeNamedAddress,
   decodeAddress,
   decodeAccountId,
+  encodeAddress,
   isKeylessAddress,
 } = require("@trevofinance/trevo-keyless");
 ```
@@ -106,6 +107,16 @@ console.log(info.addressType === AddressType.AppAgent); // true
 console.log(info.appAgentId); // 123
 ```
 
+Encode a raw account id as an address (the reverse direction: render an account id,
+e.g. from chain state, as its canonical SS58 address, in the Trevo format by default)
+
+```javascript
+const address = encodeAddress(
+  "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2",
+);
+console.log(address); // ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp
+```
+
 Check whether an address is keyless
 
 ```javascript
@@ -125,8 +136,10 @@ string of a 32-byte account id in the expected SS58 format (5335, the Trevo asse
 by default). A raw account id (`0x` followed by exactly 64 hex characters) is
 classified with `decodeAccountId` instead; raw account bytes carry no SS58 format, so
 that function takes no `ss58Format` argument, and `decodeAddress` rejects `0x` input
-outright. The `address` field of the returned `BlockchainAddressInfo` always holds the
-input verbatim; `accountId` is normalized `0x` + lowercase hex.
+outright. `encodeAddress` is the reverse direction: it takes the same raw account id
+form and renders the SS58 address for the given format. The `address` field of the
+returned `BlockchainAddressInfo` always holds the input verbatim; `accountId` is
+normalized `0x` + lowercase hex.
 
 Only the canonical spelling of an address is accepted: wrong-length checksums,
 surrounding whitespace, case variations, characters outside the base58 alphabet, and

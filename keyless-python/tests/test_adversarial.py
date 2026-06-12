@@ -400,6 +400,49 @@ class TestHexAccountIdContract(unittest.TestCase):
             trevokeyless.is_keyless_address("0x" + APP_AGENT_123.hex(), SS58_FORMAT)
 
 
+class TestEncodeAddress(unittest.TestCase):
+    """encode_address renders a raw account id ("0x" + exactly 64 hex chars) as its
+    canonical SS58 address, mirroring AccountId32::to_ss58check_with_version."""
+
+    def test_round_trips_with_decode_address(self: "TestEncodeAddress") -> None:
+        hex_account = "0x" + APP_AGENT_123.hex()
+        address = trevokeyless.encode_address(hex_account, SS58_FORMAT)
+        self.assertEqual(address, trevokeyless.encode_app_agent_address(123, SS58_FORMAT))
+        self.assertEqual(trevokeyless.decode_address(address, SS58_FORMAT).account_id, hex_account)
+
+    def test_default_format_is_trevo(self: "TestEncodeAddress") -> None:
+        hex_account = "0x" + APP_AGENT_123.hex()
+        self.assertEqual(trevokeyless.encode_address(hex_account), trevokeyless.encode_app_agent_address(123))
+
+    def test_rejects_invalid_hex(self: "TestEncodeAddress") -> None:
+        clean = APP_AGENT_123.hex()
+        for bad_hex in [
+            "",
+            "0x",
+            "0x" + clean[:62],
+            "0x" + clean + "00",
+            "0X" + clean,
+            clean,
+            "0x" + clean[:62] + "zz",
+        ]:
+            with self.subTest(bad_hex=bad_hex), self.assertRaisesRegex(ValueError, "^Invalid hex account id"):
+                trevokeyless.encode_address(bad_hex)
+
+    def test_rejects_invalid_formats(self: "TestEncodeAddress") -> None:
+        hex_account = "0x" + APP_AGENT_123.hex()
+        for bad_format in [-1, 16384, True, 5335.0, None]:
+            with (
+                self.subTest(bad_format=bad_format),
+                self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
+            ):
+                trevokeyless.encode_address(hex_account, bad_format)  # type: ignore[arg-type]
+        for reserved in [46, 47]:
+            with self.subTest(reserved=reserved):
+                with self.assertRaises(Ss58DecodeError) as ctx:
+                    trevokeyless.encode_address(hex_account, reserved)
+                self.assertEqual(ctx.exception.kind, "InvalidFormat")
+
+
 class TestIsKeylessAddress(unittest.TestCase):
     """Mirrors the Rust `test_is_keyless_account` test."""
 

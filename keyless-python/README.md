@@ -103,6 +103,17 @@ assert info.address_type is trevokeyless.AddressType.AppAgent
 assert info.app_agent_id == 123
 ```
 
+### Encode a raw account id as an address
+
+``` python3
+import trevokeyless
+
+# The reverse direction: render an account id (e.g. from chain state) as its
+# canonical SS58 address, in the Trevo format by default.
+address = trevokeyless.encode_address("0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2")
+assert address == "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp"
+```
+
 ### Check whether an address is keyless
 
 ``` python3
@@ -125,8 +136,10 @@ address string of a 32-byte account id in the expected SS58 format (5335, the Tr
 asset hub, by default). A raw account id (`0x` followed by exactly 64 hex characters)
 is classified with `decode_account_id` instead; raw account bytes carry no SS58 format,
 so that function takes no `ss58_format` argument, and `decode_address` rejects `0x`
-input outright. The `address` field of the returned `BlockchainAddressInfo` always
-holds the input verbatim; `account_id` is normalized `0x` + lowercase hex.
+input outright. `encode_address` is the reverse direction: it takes the same raw
+account id form and renders the SS58 address for the given format. The `address` field
+of the returned `BlockchainAddressInfo` always holds the input verbatim; `account_id`
+is normalized `0x` + lowercase hex.
 
 Only the canonical spelling of an address is accepted: wrong-length checksums,
 surrounding whitespace, case variations, characters outside the base58 alphabet, and

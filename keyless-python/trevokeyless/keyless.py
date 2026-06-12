@@ -507,6 +507,37 @@ def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
     return _classify_account_id(account_id, bytes.fromhex(account_id[2:]))
 
 
+def encode_address(
+    account_id: BlockchainAccountId, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
+) -> BlockchainAddress:
+    """
+    Encode a raw 32-byte account id as an SS58 address.
+
+    The counterpart of `decode_address`: any account id obtained from
+    `BlockchainAddressInfo.account_id` (or from chain state) renders as its canonical
+    address string. Mirrors `AccountId32::to_ss58check_with_version` of the Rust
+    implementation. The input contract is `decode_account_id`'s: `0x` followed by
+    exactly 64 hex characters (both digit cases accepted).
+
+    Args:
+        account_id (str): The account id: `0x` followed by exactly 64 hex characters.
+        ss58_format (int): SS58 format (network prefix) to use for the address.
+
+    Returns:
+        str: The SS58 address.
+
+    Raises:
+        ValueError: If the input is not `0x` followed by exactly 64 hex characters, or
+            ss58_format is not an integer in [0, 16383].
+        Ss58DecodeError: kind ``"InvalidFormat"`` if ss58_format is reserved (46, 47).
+    """
+    if _HEX_ACCOUNT_ID.fullmatch(account_id) is None:
+        msg = "Invalid hex account id: expected 0x followed by 64 hex characters"
+        raise ValueError(msg)
+    _validate_ss58_format(ss58_format)
+    return ss58_encode(bytes.fromhex(account_id[2:]), ss58_format)
+
+
 def _classify_account_id(blockchain_address: BlockchainAddress, account_id_bytes: bytes) -> BlockchainAddressInfo:
     """
     Classifies a 32-byte account id and extracts any embedded keyless identifiers.

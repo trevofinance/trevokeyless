@@ -446,6 +446,36 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
 }
 
 /**
+ * Encodes a raw 32-byte account id as an SS58 address.
+ *
+ * The counterpart of `decodeAddress`: any account id obtained from
+ * `BlockchainAddressInfo.accountId` (or from chain state) renders as its canonical
+ * address string. Mirrors `AccountId32::to_ss58check_with_version` of the Rust
+ * implementation. The input contract is `decodeAccountId`'s: `0x` followed by exactly
+ * 64 hex characters (both digit cases accepted).
+ *
+ * @param {string} accountId - The account id: `0x` followed by exactly 64 hex
+ *   characters.
+ * @param {number} ss58Format - SS58 format (network prefix) to use for the address.
+ * @returns {string} - The SS58 address.
+ * @throws {Error} - Thrown if the input is not `0x` followed by exactly 64 hex
+ *   characters, or ss58Format is not an integer in [0, 16383].
+ * @throws {Ss58Error} - Kind `InvalidFormat` if ss58Format is reserved (46, 47).
+ */
+function encodeAddress(
+  accountId: string,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
+): string {
+  if (!HEX_ACCOUNT_ID.test(accountId)) {
+    throw new Error(
+      "Invalid hex account id: expected 0x followed by 64 hex characters",
+    );
+  }
+  validateSs58Format(ss58Format);
+  return ss58Encode(hexToBytes(accountId.slice(2)), ss58Format);
+}
+
+/**
  * Decodes an application agent address.
  *
  * @param {string} address - The SS58 address to decode.
@@ -611,6 +641,7 @@ export {
   decodeNamedAddress,
   decodeAddress,
   decodeAccountId,
+  encodeAddress,
   isKeylessAddress,
   ACCOUNT_ID_BYTES_LENGTH,
   NAMED_ADDRESS_BYTES_LENGTH,

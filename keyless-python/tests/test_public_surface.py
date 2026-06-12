@@ -35,6 +35,7 @@ class TestPublicSurface(unittest.TestCase):
             "decode_app_agent_address",
             "decode_named_address",
             "decode_transactional_address",
+            "encode_address",
             "encode_app_agent_address",
             "encode_named_address",
             "encode_transactional_address",
