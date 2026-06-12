@@ -72,5 +72,6 @@ assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
   dependencies because every public type is meant to be usable directly inside a Substrate
   runtime (`Encode`/`Decode`/`TypeInfo`/`MaxEncodedLen`). Note that SCALE `Decode` of
   `BlockchainAccountInfo` performs no consistency validation — see the type documentation.
-- **Hex rendering.** `AccountId32`'s `Display` prints bare lowercase hex without a `0x`
-  prefix; the Python and TypeScript libraries render account ids as `0x` + hex.
+- **Hex rendering.** `AccountId32`'s `Display` prints the cross-language raw interchange
+  form `0x` + 64 lowercase hex characters — the exact string the Python
+  `decode_account_id` and TypeScript `decodeAccountId` entry points accept.

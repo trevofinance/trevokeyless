@@ -72,9 +72,9 @@ See [SECURITY.md](./SECURITY.md) for how to report a vulnerability.
 Only two representations are cross-language interchange formats:
 
 - the SS58 address string (e.g. `ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp`);
-- the raw 32-byte account id (rendered as `0x` + 64 lowercase hex characters by the
-  Python and TypeScript libraries; the Rust `AccountId32` `Display` prints bare hex
-  without the `0x` prefix).
+- the raw 32-byte account id, rendered as `0x` + 64 lowercase hex characters by all
+  three libraries (the Rust `AccountId32` `Display`, the Python `account_id` field,
+  the TypeScript `accountId` field).
 
 Each library converts between the two in both directions: Rust with
 `AccountId32::to_ss58check*` / `from_ss58check*`, Python with `encode_address` /

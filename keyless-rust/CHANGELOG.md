@@ -8,6 +8,10 @@ packages.
 
 First public release line. Changes from 0.8.0:
 
+- **Breaking:** `AccountId32`'s `Display` now prints the cross-language raw
+  interchange form `0x` + 64 lowercase hex characters (previously bare hex without
+  the prefix), so a Rust-rendered account id is accepted verbatim by the Python
+  `decode_account_id` and TypeScript `decodeAccountId` entry points.
 - The SCALE `Decode` error message for `AccountName` now reads
   `Account name contains invalid characters`, matching the `Display` wording of
   `AccountNameError::InvalidCharacter`.

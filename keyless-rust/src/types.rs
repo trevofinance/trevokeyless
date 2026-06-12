@@ -75,8 +75,12 @@ impl AsRef<[u8]> for AccountId32 {
     }
 }
 
+/// Renders the account id in the cross-language raw interchange form: `0x` followed by
+/// 64 lowercase hex characters — the exact string accepted by the Python
+/// `decode_account_id` and TypeScript `decodeAccountId` entry points.
 impl core::fmt::Display for AccountId32 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("0x")?;
         for b in &self.0 {
             write!(f, "{:02x}", b)?;
         }
@@ -642,16 +646,19 @@ mod tests_display_and_codec {
 
     #[test]
     fn test_account_id32_display() {
+        // The Display form is the cross-language raw interchange form: "0x" + 64
+        // lowercase hex characters, accepted verbatim by the Python decode_account_id
+        // and TypeScript decodeAccountId entry points.
         let account = AccountId32::new([0u8; 32]);
-        assert_eq!(format!("{}", account), "0".repeat(64));
+        assert_eq!(format!("{}", account), format!("0x{}", "0".repeat(64)));
 
         let mut bytes = [0u8; 32];
         bytes[0] = 0xAB;
         bytes[31] = 0xCD;
         let s = format!("{}", AccountId32::new(bytes));
-        assert!(s.starts_with("ab"));
+        assert!(s.starts_with("0xab"));
         assert!(s.ends_with("cd"));
-        assert_eq!(s.len(), 64);
+        assert_eq!(s.len(), 66);
     }
 
     #[test]
