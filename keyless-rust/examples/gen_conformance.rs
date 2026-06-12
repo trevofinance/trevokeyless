@@ -90,9 +90,12 @@ fn random_name(rng: &mut Rng) -> AccountName {
     AccountName::new(&bytes).expect("generated from the allowed charset")
 }
 
-/// Lowercase hex of the raw account bytes (no `0x` prefix).
+/// Lowercase hex of the raw account bytes (no `0x` prefix). Formats the bytes
+/// explicitly rather than via `Display`, so the committed fixture is independent of the
+/// crate's rendering choices.
 fn hex(account: &AccountId32) -> String {
-    format!("{account}")
+    let bytes: &[u8; 32] = account.as_ref();
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// JSON string literal for `s`. Routing every string field through serde_json keeps the

@@ -25,6 +25,14 @@ mod tests {
         AccountId32::from(bytes)
     }
 
+    /// Lowercase hex of the raw account bytes, matching the fixture's `hex` fields
+    /// (which are formatted from the bytes directly, independent of the crate's
+    /// `Display` rendering).
+    fn account_hex(account: &AccountId32) -> String {
+        let bytes: &[u8; 32] = account.as_ref();
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
     /// Decodes with an expected format, mirroring the decode entry points of the Python
     /// and TypeScript implementations (and `from_ss58check`, which is fixed to the
     /// Trevo format): full validation first, then the format comparison. The same
@@ -89,7 +97,7 @@ mod tests {
         for v in vectors["app_agent"].as_array().unwrap() {
             let id = v["id"].as_u64().unwrap() as u32;
             let account = encode_app_agent_account(id);
-            assert_eq!(format!("{account}"), v["hex"].as_str().unwrap());
+            assert_eq!(account_hex(&account), v["hex"].as_str().unwrap());
             assert_eq!(decode_app_agent_account(&account), Ok(id));
             #[cfg(feature = "ss58")]
             assert_eq!(account.to_ss58check(), v["ss58"].as_str().unwrap());
@@ -99,7 +107,7 @@ mod tests {
             let aa = v["aa"].as_u64().unwrap() as u32;
             let ta = v["ta"].as_u64().unwrap() as u32;
             let account = encode_transactional_account(aa, ta);
-            assert_eq!(format!("{account}"), v["hex"].as_str().unwrap());
+            assert_eq!(account_hex(&account), v["hex"].as_str().unwrap());
             assert_eq!(decode_transactional_account(&account), Ok((aa, ta)));
             #[cfg(feature = "ss58")]
             assert_eq!(account.to_ss58check(), v["ss58"].as_str().unwrap());
@@ -109,7 +117,7 @@ mod tests {
             let aa = v["aa"].as_u64().unwrap() as u32;
             let name = AccountName::try_from(v["name"].as_str().unwrap()).unwrap();
             let account = encode_named_account(aa, name);
-            assert_eq!(format!("{account}"), v["hex"].as_str().unwrap());
+            assert_eq!(account_hex(&account), v["hex"].as_str().unwrap());
             assert_eq!(decode_named_account(&account), Ok((aa, name)));
             #[cfg(feature = "ss58")]
             assert_eq!(account.to_ss58check(), v["ss58"].as_str().unwrap());
