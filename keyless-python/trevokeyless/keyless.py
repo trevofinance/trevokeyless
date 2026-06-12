@@ -22,7 +22,7 @@ from enum import Enum
 from hashlib import blake2b
 from typing import TypeAlias
 
-from ._ss58 import ss58_decode, ss58_encode
+from ._ss58 import get_ss58_format, ss58_decode, ss58_encode
 
 # Constants
 NAMED_ADDRESS_LENGTH = 10
@@ -88,6 +88,24 @@ class AddressTypeMismatchError(ValueError):
         self.found = found
         article = "an" if expected is AddressType.AppAgent else "a"
         super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}.")
+
+
+class Ss58FormatMismatchError(ValueError):
+    """Raised when an address is a valid SS58 string but uses a different format than expected.
+
+    Mirrors the ``Ss58Error::UnexpectedFormat`` variant of the Rust implementation (the
+    TypeScript implementation reports the same pair). Subclasses ``ValueError`` so
+    ``except ValueError`` handlers treat it like any other decoding failure.
+
+    Attributes:
+        expected (SS58Format): The SS58 format required by the caller.
+        found (SS58Format): The format embedded in the address.
+    """
+
+    def __init__(self, expected: SS58Format, found: SS58Format) -> None:
+        self.expected = expected
+        self.found = found
+        super().__init__(f"Expected SS58 format {expected} but found {found}")
 
 
 @dataclass(frozen=True)
@@ -437,7 +455,17 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
         # the cost of base58-decoding untrusted input bounded.
         msg = "Invalid address length"
         raise ValueError(msg)
-    account_id = ss58_decode(blockchain_address, ss58_format)
+    try:
+        account_id = ss58_decode(blockchain_address, ss58_format)
+    except ValueError as error:
+        if str(error) == "Invalid SS58 format":
+            # The vendored decoder raises this message only on its expected-format
+            # comparison: the address itself decoded successfully (checksum and
+            # reserved-format checks passed) but carries a different format. Re-raise
+            # with the expected and found formats, mirroring the Rust UnexpectedFormat
+            # error.
+            raise Ss58FormatMismatchError(ss58_format, get_ss58_format(blockchain_address)) from error
+        raise
     account_id_bytes = bytes.fromhex(account_id[2:])
 
     if len(account_id_bytes) != ACCOUNT_ID_LENGTH:

@@ -39,7 +39,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of AppAgent address to AppAgent ID doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_app_agent_address(blockchain_address, 42)
@@ -63,7 +63,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of AppAgent address to address info doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_address(blockchain_address, 42)
@@ -102,7 +102,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of Transactional address to Transactional address ID doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_transactional_address(blockchain_address, 42)
@@ -126,7 +126,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of Transactional address to address info doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_address(blockchain_address, 42)
@@ -165,7 +165,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of Transactional address to Transactional address ID doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_transactional_address(blockchain_address, 42)
@@ -189,7 +189,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Invalid SS58 format$",
+            "^Expected SS58 format 42 but found 5335$",
             msg="Decoding of Named address to address info doesn't take into account SS58 format.",
         ):
             trevokeyless.decode_address(blockchain_address, 42)

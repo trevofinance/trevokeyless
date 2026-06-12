@@ -447,6 +447,27 @@ class TestBlockchainAddressInfoValueSemantics(unittest.TestCase):
         self.assertEqual(len({info_a, info_b}), 1)
 
 
+class TestSs58FormatMismatchError(unittest.TestCase):
+    """The wrong-format error carries the expected and the found format, mirroring the
+    Rust ``Ss58Error::UnexpectedFormat`` variant."""
+
+    def test_carries_expected_and_found(self: "TestSs58FormatMismatchError") -> None:
+        substrate_generic = trevokeyless.encode_app_agent_address(123, 42)
+        with self.assertRaises(trevokeyless.Ss58FormatMismatchError) as ctx:
+            trevokeyless.decode_address(substrate_generic, SS58_FORMAT)
+        self.assertEqual(ctx.exception.expected, SS58_FORMAT)
+        self.assertEqual(ctx.exception.found, 42)
+        # Remains a ValueError, like every other decoding failure.
+        self.assertIsInstance(ctx.exception, ValueError)
+        self.assertEqual(str(ctx.exception), "Expected SS58 format 5335 but found 42")
+
+    def test_raised_for_two_byte_prefix_addresses(self: "TestSs58FormatMismatchError") -> None:
+        trevo_address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        with self.assertRaises(trevokeyless.Ss58FormatMismatchError) as ctx:
+            trevokeyless.decode_address(trevo_address, 16383)
+        self.assertEqual((ctx.exception.expected, ctx.exception.found), (16383, SS58_FORMAT))
+
+
 class TestAddressTypeMismatchError(unittest.TestCase):
     def test_carries_expected_and_found(self: "TestAddressTypeMismatchError") -> None:
         named_address = trevokeyless.encode_named_address(1, "test123456", SS58_FORMAT)

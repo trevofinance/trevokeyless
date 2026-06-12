@@ -26,6 +26,7 @@ class TestPublicSurface(unittest.TestCase):
             "BlockchainAddress",
             "BlockchainAddressInfo",
             "SS58Format",
+            "Ss58FormatMismatchError",
             "TransactionalAddressId",
             "decode_account_id",
             "decode_address",
