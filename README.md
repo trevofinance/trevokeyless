@@ -22,8 +22,10 @@ For more detailed docs, visit the README of the specific library:
 
 The Rust implementation is the source of truth for the encoding. The shared fixture
 [`conformance/vectors.json`](./conformance/vectors.json) is generated from it
-(`keyless-rust/examples/gen_conformance.rs`) and verified by the test suites of all three
-libraries, so the implementations cannot drift apart unnoticed.
+(`keyless-rust/examples/gen_conformance.rs`) and verified by the test suites of all
+three libraries — covering the encoding, the classification, the accepted and rejected
+SS58 spellings, and the error classification of every rejection (`error_kind`, the
+Rust `Ss58Error` variant names) — so the implementations cannot drift apart unnoticed.
 
 ## Security model
 
@@ -73,6 +75,10 @@ Only two representations are cross-language interchange formats:
 - the raw 32-byte account id (rendered as `0x` + 64 lowercase hex characters by the
   Python and TypeScript libraries; the Rust `AccountId32` `Display` prints bare hex
   without the `0x` prefix).
+
+Each library converts between the two in both directions: Rust with
+`AccountId32::to_ss58check*` / `from_ss58check*`, Python with `encode_address` /
+`decode_address`, TypeScript with `encodeAddress` / `decodeAddress`.
 
 The decoded info objects are *per-language* shapes: the Rust serde representation of
 `BlockchainAccountInfo` is an externally tagged enum and is **not** interchangeable

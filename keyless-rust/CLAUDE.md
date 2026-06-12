@@ -17,81 +17,25 @@ see Cargo features below).
   `account_id` (SCALE `Decode` performs no such validation). Its serde shape is the externally
   tagged Rust enum — not interchangeable with the Python/TS info objects.
 
-## What is a keyless account?
+## Encoding semantics
 
-A **keyless account** is a 32-byte on-chain identifier whose private key is deliberately unknown.
-Its bytes are derived deterministically from a set of logical identifiers, so:
-- Anyone can compute the address from the identifiers (no key generation).
-- Anyone can identify the controlling App Agent by inspecting the bytes.
-
-Because no private key exists, keyless accounts cannot sign transactions. In the Trevo chain, an
-App Agent acts on behalf of its keyless accounts by submitting **App Transactions**.
-
-## Three account types
-
-| Type | Constant (byte [4]) | Identifiers embedded |
-|------|---------------------|----------------------|
-| App Agent root | `APP_AGENT_ACCOUNT_IDENTIFIER = 1` | `AppAgentId` |
-| Transactional  | `TRANSACTIONAL_ACCOUNT_IDENTIFIER = 2` | `AppAgentId`, `TransactionalId` |
-| Named          | `NAMED_ACCOUNT_IDENTIFIER = 3` | `AppAgentId`, `AccountName` (10 bytes) |
-
-## Encoding scheme
-
-Every keyless account is 32 bytes, divided into an **open part** (plain-text identifiers) and a
-**checksum** (trailing bytes of a Blake2-256 hash):
+The authoritative description of the keyless encoding — what a keyless account is, the
+three account types, decoding/validation rules, `AccountName` constraints, the SS58
+codec — lives in the crate documentation (`src/lib.rs`, rendered on docs.rs) and is
+deliberately not duplicated here. The quick reference:
 
 ```
-final_account[0..N]    = open_part              (N = open part length)
-final_account[N..32]   = blake2_256(open_part)[N..32]
+final_account[0..N]  = open_part               final_account[N..32] = blake2_256(open_part)[N..32]
+
+AppAgent root  (N=5):  [0..=3] AppAgentId LE | [4]=1
+Transactional  (N=9):  [0..=3] AppAgentId LE | [4]=2 | [5..=8] TransactionalId LE
+Named          (N=15): [0..=3] AppAgentId LE | [4]=3 | [5..=14] AccountName (0-9 a-z A-Z - #)
 ```
 
-Concretely:
-
-```
-AppAgent root (N=5):
-  [0..=3]   AppAgentId          (little-endian u32)
-  [4]       type discriminant = 1
-  [5..=31]  blake2_256(open_part)[5..=31]
-
-Transactional (N=9):
-  [0..=3]   AppAgentId          (little-endian u32)
-  [4]       type discriminant = 2
-  [5..=8]   TransactionalId     (little-endian u32)
-  [9..=31]  blake2_256(open_part)[9..=31]
-
-Named (N=15):
-  [0..=3]   AppAgentId          (little-endian u32)
-  [4]       type discriminant = 3
-  [5..=14]  AccountName         (10 bytes, charset: 0-9 a-z A-Z - #)
-  [15..=31] blake2_256(open_part)[15..=31]
-```
-
-Implementation: `encode_account(open_part)` computes `hash = blake2_256(open_part)` (32 bytes)
-then overwrites `hash[0..N]` with the open part, leaving `hash[N..]` as the stored checksum.
-
-## Decoding / validation
-
-`decode_account_info(account: &AccountId32)` reads byte [4] as the type discriminant, reads the
-open part for that type, recomputes the expected checksum, and compares it to the stored bytes. If
-the checksum matches, the account is decoded into the appropriate `BlockchainAccountInfo` variant.
-Any mismatch or unknown discriminant → `BlockchainAccountInfo::Regular`.
-
-For Named accounts the name bytes must additionally pass charset validation. Anyone can construct
-an account that carries a valid checksum over out-of-charset name bytes (no private key is
-needed); such an account decodes as `Regular`. The Python and TypeScript implementations apply
-the same rule.
-
-## AccountName
-
-10-byte fixed array. Allowed characters: `0-9 a-z A-Z - #` (64 total).
-`AccountName::new(&[u8])` validates length (exactly 10) and character set; invalid input returns
-`AccountNameError::{InvalidLength, InvalidCharacter}`.
-
-## SS58 (feature `ss58`)
-
-`AccountId32::to_ss58check()` / `from_ss58check(&str)` use the Trevo format
-(`SS58_FORMAT_TREVO_ASSET_HUB = 5335`); the `*_with_version` variants take/return an explicit
-format. Decoding failures return `Ss58Error`.
+Decoding (`decode_account_info`) recomputes the checksum for the discriminant at byte
+[4]; any mismatch, unknown discriminant, or out-of-charset Named name bytes →
+`BlockchainAccountInfo::Regular`. The Python and TypeScript implementations apply the
+same rules.
 
 ## File layout
 

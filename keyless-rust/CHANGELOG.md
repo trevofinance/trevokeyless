@@ -13,8 +13,11 @@ First public release line. Changes from 0.8.0:
   `AccountNameError::InvalidCharacter`.
 - New cargo-fuzz target (`fuzz/fuzz_targets/ss58_decode.rs`) for the SS58 decoder;
   excluded from the published crate.
-- The cross-language conformance fixture gained two additive groups
-  (`named_invalid_encode`, `hex_invalid`); no existing vector changed.
+- The cross-language conformance fixture gained additive groups and fields:
+  `named_invalid_encode`, `hex_invalid`, `hex_valid` (mixed-case raw account id
+  acceptance), and an `error_kind` on every `ss58_invalid` vector pinning the
+  `Ss58Error` variant each rejection must produce in all three languages. No value
+  field of any existing vector changed.
 - README design notes: account-vs-address API rationale, unconditional SCALE
   dependencies, bare-hex `Display`.
 

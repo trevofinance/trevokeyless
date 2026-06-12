@@ -16,6 +16,15 @@ First public release line. Breaking changes from 0.6.0 (pre-1.0 API freeze):
   (`0x` + exactly 64 hex characters) are classified with the new `decodeAccountId`,
   which takes no `ss58Format` parameter — raw bytes carry no format, and the old
   passthrough silently bypassed the expected-format check.
+- **New `encodeAddress`**: renders a raw account id (`0x` + exactly 64 hex characters,
+  the `decodeAccountId` input contract) as its canonical SS58 address, in the Trevo
+  format by default — the previously missing reverse direction between the two
+  interchange formats.
+- **`decodeAccountId` results carry `address: null`**: raw account bytes have no SS58
+  format, so there is no address to report (previously the field held the raw input
+  verbatim); render one explicitly with `encodeAddress`.
+- **The `Ss58ErrorKind` type is exported** (the type of `Ss58Error.kind`), matching
+  the Python package's public `Ss58ErrorKind` alias.
 - **`@polkadot/util` and `@polkadot/util-crypto` are gone.** The SS58 codec is now a
   direct port of the Rust reference on `@noble/hashes` + `@scure/base` (the only two
   production dependencies, both audited and zero-dependency). Address output is

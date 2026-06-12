@@ -51,11 +51,16 @@ npm run build && npm run test
 
 Cross-language conventions:
 
-- Error wording is part of the contract where the READMEs say so (name validation, the
-  SS58 format mismatch); change it in all three implementations and their tests at once.
-- The Python package keeps the vendored generic SS58 codec private
-  (`trevokeyless._ss58`); do not re-export it. The TypeScript equivalent
-  (`src/ss58.ts`) is likewise internal — only `src/keyless.ts` is the public module.
+- Error classification is part of the contract: every `ss58_invalid` vector pins its
+  `error_kind` (the Rust `Ss58Error` variant name, the TypeScript `Ss58Error.kind`,
+  the Python `Ss58DecodeError.kind`), and all three suites assert it. Error wording is
+  additionally contractual where the READMEs say so (name validation, the SS58
+  messages mirroring the Rust `Display` output); change it in all three
+  implementations and their tests at once.
+- The Python package keeps its SS58 codec private (`trevokeyless._ss58`, a strict port
+  of the Rust decoder); only its error types (`Ss58DecodeError`, `Ss58ErrorKind`) are
+  re-exported. The TypeScript equivalent (`src/ss58.ts`) is likewise internal — only
+  `src/keyless.ts` is the public module.
 - New public API needs: Rust-first design, the Python `__all__` + the
   `test_public_surface` pin updated, and conformance vectors when the behavior is
   externally visible.
