@@ -19,8 +19,3 @@ updates:
     directory: "/keyless-ts"
     schedule:
       interval: monthly
-    # The @polkadot packages release very frequently; group them to keep the noise down.
-    groups:
-      polkadot:
-        patterns:
-          - "@polkadot/*"

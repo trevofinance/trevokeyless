@@ -257,8 +257,8 @@ describe("Malformed SS58 input", () => {
   });
 
   it("rejects two-byte-prefix encodings of the reserved formats 46 and 47", () => {
-    // The underlying @polkadot decoder accepts these; the Rust and Python
-    // implementations reject reserved formats in any prefix encoding.
+    // Permissive Substrate decoders (e.g. @polkadot) accept these; like the Rust and
+    // Python implementations, reserved formats are rejected in any prefix encoding.
     [46, 47].forEach((reserved) => {
       const prefix = Uint8Array.of(
         ((reserved & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
@@ -272,9 +272,10 @@ describe("Malformed SS58 input", () => {
   });
 
   it("rejects a one-byte-checksum spelling of a canonical address", () => {
-    // The underlying @polkadot decoder accepts a 35-byte decoded payload (two-byte
-    // prefix + 32-byte account + one-byte checksum), which would give every account a
-    // second, shorter address string; the Rust and Python implementations reject it.
+    // Permissive Substrate decoders accept a 35-byte decoded payload (two-byte prefix
+    // + 32-byte account + one-byte checksum), which would give every account a second,
+    // shorter address string; like Rust and Python, only the full two-byte checksum
+    // structure decodes.
     const address = rawSs58(
       concatBytes(formatPrefix(ss58Format), appAgent123),
       1,
