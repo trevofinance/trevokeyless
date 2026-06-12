@@ -761,5 +761,11 @@
 {"hex":"0x7b00000002C801000033399aEb61B087F1A20a58C41eA5Ff1b7bFb2fDa27BfC0","account_id":"0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0","expected":{"type":"Transactional","app_agent_id":123,"ta_id":456}},
 {"hex":"0x7B000000036578616D706C653132330A72315ABA532DE9903C05A71E7D2D0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}},
 {"hex":"0x7b000000036578616d706c653132330a72315aBa532dE9903c05A71e7d2d0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}}
+],
+"hex_not_an_address": [
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"the canonical raw account id of AppAgent(123)"},
+{"input":"0x7B00000001293833058FC7DB52FC03F6CE344BCA98BD7825FF747743F1FF63E2","reason":"uppercase-digit spelling of the same account id"},
+{"input":"0xdeadbeef","reason":"0x-prefixed short hex"},
+{"input":"0x","reason":"bare 0x prefix"}
 ]
 }

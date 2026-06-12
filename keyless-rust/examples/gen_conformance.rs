@@ -775,6 +775,40 @@ fn main() {
         }
     }
 
+    // 11. Raw account id hex strings fed to the *SS58 address* entry points: SS58
+    // addresses and raw account ids are separate input classes (a raw account id
+    // carries no SS58 format), so the Python decode_address and TypeScript
+    // decodeAddress reject any "0x"-prefixed input outright, steering the caller to
+    // decode_account_id / decodeAccountId; this crate's from_ss58check_expecting
+    // rejects the same strings structurally (never valid base58 of an SS58 payload,
+    // or over the length bound). The group pins the rejection only — the error
+    // classification is per-language (a kind-less guidance error in Python and
+    // TypeScript, an Ss58Error in this crate).
+    let hex_not_an_address: Vec<(String, &str)> = vec![
+        (
+            format!("0x{h}"),
+            "the canonical raw account id of AppAgent(123)",
+        ),
+        (
+            format!("0x{}", h.to_uppercase()),
+            "uppercase-digit spelling of the same account id",
+        ),
+        ("0xdeadbeef".to_string(), "0x-prefixed short hex"),
+        ("0x".to_string(), "bare 0x prefix"),
+    ];
+    let hex_not_an_address: Vec<String> = hex_not_an_address
+        .into_iter()
+        .map(|(input, reason)| {
+            // The generator must never emit a string this crate's SS58 decode entry
+            // point accepts.
+            assert!(
+                AccountId32::from_ss58check_expecting(&input, SS58_FORMAT_TREVO_ASSET_HUB).is_err(),
+                "self check: {reason:?} must not decode as an SS58 address"
+            );
+            format!(r#"{{"input":{},"reason":{}}}"#, js(&input), js(reason))
+        })
+        .collect();
+
     println!("{{");
     print_group("app_agent", &app_agent, false);
     print_group("transactional", &transactional, false);
@@ -785,6 +819,7 @@ fn main() {
     print_group("ss58_invalid", &ss58_invalid, false);
     print_group("named_invalid_encode", &named_invalid_encode, false);
     print_group("hex_invalid", &hex_invalid, false);
-    print_group("hex_valid", &hex_valid, true);
+    print_group("hex_valid", &hex_valid, false);
+    print_group("hex_not_an_address", &hex_not_an_address, true);
     println!("}}");
 }

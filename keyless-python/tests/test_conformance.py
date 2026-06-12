@@ -131,6 +131,23 @@ class TestConformanceVectors(unittest.TestCase):
                 with self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"):
                     trevokeyless.encode_address(v["hex"])
 
+    def test_hex_not_an_address_vectors(self: "TestConformanceVectors") -> None:
+        # Raw account id hex strings fed to the SS58 address entry point: SS58
+        # addresses and raw account ids are separate input classes, so decode_address
+        # rejects any "0x"-prefixed input outright (use decode_account_id). The group
+        # pins the rejection only - the error classification is per-language (here a
+        # kind-less guidance ValueError).
+        for v in _VECTORS["hex_not_an_address"]:
+            with self.subTest(input=v["input"], reason=v["reason"]):
+                with self.assertRaises(
+                    ValueError, msg=f"{v['input']!r} must be rejected by decode_address: {v['reason']}"
+                ):
+                    trevokeyless.decode_address(v["input"])
+                with self.assertRaises(
+                    ValueError, msg=f"{v['input']!r} must be rejected by is_keyless_address: {v['reason']}"
+                ):
+                    trevokeyless.is_keyless_address(v["input"])
+
     def test_hex_valid_vectors(self: "TestConformanceVectors") -> None:
         # Mixed-case spellings of valid raw account ids: the "0x" + 64 hex contract
         # accepts both hex digit cases; the account_id of the result is normalized to

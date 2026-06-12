@@ -220,5 +220,20 @@ mod tests {
             );
             assert_classification(&account, &v["expected"]);
         }
+
+        // Raw account id hex strings must be rejected by the SS58 address entry
+        // points: the Python decode_address and TypeScript decodeAddress reject
+        // "0x"-prefixed input outright; this crate's SS58 decode rejects the same
+        // strings structurally. The group pins the rejection only - the error
+        // classification is per-language.
+        #[cfg(feature = "ss58")]
+        for v in vectors["hex_not_an_address"].as_array().unwrap() {
+            let input = v["input"].as_str().unwrap();
+            let reason = v["reason"].as_str().unwrap();
+            assert!(
+                AccountId32::from_ss58check_expecting(input, 5335).is_err(),
+                "{input:?} must not decode as an SS58 address: {reason}"
+            );
+        }
     }
 }

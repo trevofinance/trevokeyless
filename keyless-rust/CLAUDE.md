@@ -85,7 +85,11 @@ documented malleability exception),
 Rust `AccountId32` `FromStr` and the Python `decode_account_id` / TypeScript
 `decodeAccountId` entry points), and
 `hex_valid` (mixed-case raw account id strings those entry points must accept, with the
-normalized lowercase `account_id`). The Rust, Python, and TypeScript test suites all
+normalized lowercase `account_id`), and `hex_not_an_address` (raw account id hex strings
+that the SS58 *address* entry points must reject — the Python `decode_address` and
+TypeScript `decodeAddress` refuse "0x" input outright, this crate's
+`from_ss58check_expecting` rejects it structurally; rejection only, the error
+classification is per-language). The Rust, Python, and TypeScript test suites all
 verify against the committed fixture, and CI checks that the fixture matches the
 generator output. After an intentional change to the encoding semantics,
 regenerate with:
