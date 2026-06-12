@@ -137,7 +137,6 @@ function ss58Encode(accountId: Uint8Array, format: number): string {
   if (accountId.length !== ACCOUNT_ID_BYTES_LENGTH) {
     throw Ss58Error.invalidLength();
   }
-  /* eslint-disable no-bitwise */
   const prefix =
     format < 64
       ? Uint8Array.of(format)
@@ -148,7 +147,6 @@ function ss58Encode(accountId: Uint8Array, format: number): string {
           ((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
           (format >> 8) | ((format & 0b0000_0000_0000_0011) << 6),
         );
-  /* eslint-enable no-bitwise */
   const payload = concatBytes(prefix, accountId);
   return base58.encode(
     concatBytes(payload, ss58Hash(payload).slice(0, SS58_CHECKSUM_LENGTH)),
@@ -182,7 +180,6 @@ function ss58Decode(address: string): {
     throw Ss58Error.invalidLength();
   }
 
-  /* eslint-disable no-bitwise */
   let prefixLength: number;
   let format: number;
   if (data[0] <= 63) {
@@ -201,7 +198,6 @@ function ss58Decode(address: string): {
     // First bytes 128..=255 are not a valid SS58 prefix encoding.
     throw Ss58Error.invalidFormat();
   }
-  /* eslint-enable no-bitwise */
   if (formatInvalid(format)) {
     throw Ss58Error.invalidFormat();
   }

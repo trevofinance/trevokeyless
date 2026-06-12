@@ -53,12 +53,10 @@ function formatPrefix(format: number): Uint8Array {
   if (format < 64) {
     return Uint8Array.of(format);
   }
-  /* eslint-disable no-bitwise */
   return Uint8Array.of(
     ((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
     (format >> 8) | ((format & 0b0000_0000_0000_0011) << 6),
   );
-  /* eslint-enable no-bitwise */
 }
 
 /** 32-byte keyless account id: open part + trailing bytes of its blake2b-256 hash. */
@@ -234,9 +232,7 @@ describe("Malformed SS58 input", () => {
   it("rejects a tampered SS58 checksum", () => {
     const address = encodeAppAgentAddress(123, ss58Format);
     const payload = base58.decode(address);
-    /* eslint-disable no-bitwise */
     payload[payload.length - 1] ^= 0xff;
-    /* eslint-enable no-bitwise */
     const tampered = base58.encode(payload);
     expect(() => decodeAddress(tampered, ss58Format)).toThrow(
       new Error("Address has an invalid checksum"),
@@ -248,9 +244,7 @@ describe("Malformed SS58 input", () => {
     // is bytes [0..5]) and rewrap in a valid SS58 envelope: the SS58 layer accepts it,
     // the keyless layer must demote it to Regular.
     const account = Uint8Array.from(appAgent123);
-    /* eslint-disable no-bitwise */
     account[10] ^= 0xff;
-    /* eslint-enable no-bitwise */
     const address = ss58Encode(account, ss58Format);
     const info = decodeAddress(address, ss58Format);
     expect(info.addressType).toEqual(AddressType.Regular);
@@ -265,7 +259,6 @@ describe("Malformed SS58 input", () => {
   it("rejects two-byte-prefix encodings of the reserved formats 46 and 47", () => {
     // The underlying @polkadot decoder accepts these; the Rust and Python
     // implementations reject reserved formats in any prefix encoding.
-    /* eslint-disable no-bitwise */
     [46, 47].forEach((reserved) => {
       const prefix = Uint8Array.of(
         ((reserved & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
@@ -276,7 +269,6 @@ describe("Malformed SS58 input", () => {
         new Error("SS58 format is invalid or reserved"),
       );
     });
-    /* eslint-enable no-bitwise */
   });
 
   it("rejects a one-byte-checksum spelling of a canonical address", () => {
@@ -302,12 +294,10 @@ describe("Malformed SS58 input", () => {
     // The two-byte SS58 prefix can also (non-canonically) encode formats below 64.
     // Like the Rust and upstream Substrate codecs, decoding accepts such addresses.
     const smallFormat = 42;
-    /* eslint-disable no-bitwise */
     const nonCanonicalPrefix = Uint8Array.of(
       ((smallFormat & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
       (smallFormat >> 8) | ((smallFormat & 0b0000_0000_0000_0011) << 6),
     );
-    /* eslint-enable no-bitwise */
     const address = rawSs58(concatBytes(nonCanonicalPrefix, appAgent123));
     const info = decodeAddress(address, smallFormat);
     expect(info.addressType).toEqual(AddressType.AppAgent);
