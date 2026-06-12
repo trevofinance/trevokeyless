@@ -302,6 +302,40 @@ fn main() {
         }
     }
 
+    // 4d. Valid accounts of each keyless type with the discriminant byte rewritten to
+    // every other known discriminant (and 0). The stored checksum was computed for the
+    // original open-part length, so every rewrite must classify as Regular — pinning
+    // that a valid account of one type can never be read as another type. (The 4b
+    // corruption cycle XORs position 4 with 0x80 only, so it never produces a
+    // different *valid* discriminant.)
+    let mut rng = Rng(0xC0DE_0008);
+    let accounts = [
+        encode_app_agent_account(rng.next_u32()),
+        encode_transactional_account(rng.next_u32(), rng.next_u32()),
+        encode_named_account(rng.next_u32(), random_name(&mut rng)),
+    ];
+    for account in accounts {
+        let original: [u8; 32] = account.into();
+        for discriminant in [
+            0u8,
+            APP_AGENT_ACCOUNT_IDENTIFIER,
+            TRANSACTIONAL_ACCOUNT_IDENTIFIER,
+            NAMED_ACCOUNT_IDENTIFIER,
+        ] {
+            if discriminant == original[4] {
+                continue;
+            }
+            let mut rewritten = original;
+            rewritten[4] = discriminant;
+            let rewritten = AccountId32::from(rewritten);
+            classify.push(format!(
+                r#"{{"hex":"{}","expected":{}}}"#,
+                hex(&rewritten),
+                classification_json(&rewritten)
+            ));
+        }
+    }
+
     // 5. SS58 encoding of fixed accounts across single-byte and two-byte prefix formats
     // (45 and 48 are the neighbors of the reserved formats 46 and 47).
     let mut rng = Rng(0xC0DE_0007);
@@ -341,7 +375,45 @@ fn main() {
         js(&boundary_address)
     ));
 
-    // 6. SS58 address strings that every implementation must reject when decoding with
+    // 6. SS58 address spellings that decode but are *not* the canonical encoding: the
+    // two-byte-prefix form of formats below 64 — the one documented,
+    // Substrate-compatible malleability exception (see the Security model section of
+    // the repository README). Every implementation must decode these to the same
+    // account id and format, while its encoder keeps producing the canonical one-byte
+    // form, so the vectors are decode-only. Formats >= 64 have no second spelling (the
+    // two-byte prefix is their canonical form), so the Trevo format is unaffected.
+    let mut rng = Rng(0xC0DE_0009);
+    let mut ss58_decode_only: Vec<String> = Vec::new();
+    for format in [0u16, 1, 42, 45, 63] {
+        let mut bytes = [0u8; 32];
+        rng.fill(&mut bytes);
+        let account = AccountId32::from(bytes);
+        let noncanonical = raw_ss58(&[two_byte_prefix(format), bytes.to_vec()].concat(), 2);
+        // The generator must never emit a spelling this crate itself rejects, decodes
+        // differently, or — worse — considers canonical.
+        assert_eq!(
+            AccountId32::from_ss58check_with_version(&noncanonical).expect("self check: decodes"),
+            (account, format),
+            "self check: the non-canonical spelling must decode to the same account and format"
+        );
+        assert_ne!(
+            account
+                .to_ss58check_with_version(format)
+                .expect("valid format"),
+            noncanonical,
+            "self check: encoding must stay canonical (one-byte prefix)"
+        );
+        ss58_decode_only.push(format!(
+            r#"{{"ss58":{},"hex":{},"format":{format},"reason":{}}}"#,
+            js(&noncanonical),
+            js(&hex(&account)),
+            js(&format!(
+                "non-canonical two-byte-prefix spelling of format {format}"
+            ))
+        ));
+    }
+
+    // 7. SS58 address strings that every implementation must reject when decoding with
     // the accompanying expected format. These pin the *rejection* side of the SS58
     // contract — non-canonical shapes that permissive decoders historically accepted
     // (e.g. one-byte checksums) must fail in every language, exactly like in this
@@ -607,7 +679,7 @@ fn main() {
         })
         .collect();
 
-    // 7. Names every implementation must reject at *encode* time (wrong length or
+    // 8. Names every implementation must reject at *encode* time (wrong length or
     // characters outside the charset). The tab, NUL, and non-ASCII entries deliberately
     // exercise the JSON escaping of the generator and the parsers of the consuming
     // suites. Note "héllo12345": 10 code points but 11 UTF-8 bytes — the byte-level
@@ -641,7 +713,7 @@ fn main() {
         })
         .collect();
 
-    // 8. Raw account id strings that must be rejected: the contract of the Python
+    // 9. Raw account id strings that must be rejected: the contract of the Python
     // `decode_account_id` and TypeScript `decodeAccountId` entry points is exactly
     // "0x" + 64 hex characters. This crate has no string form of an account id
     // (`AccountId32` is constructed from bytes), so the Rust suite does not consume
@@ -680,7 +752,7 @@ fn main() {
         })
         .collect();
 
-    // 9. Raw account id strings that must be *accepted*: the "0x" + 64 hex contract
+    // 10. Raw account id strings that must be *accepted*: the "0x" + 64 hex contract
     // allows both hex digit cases ([0-9a-fA-F]), and the normalized `account_id` of the
     // result is always "0x" + lowercase hex. Pinning the acceptance keeps a future
     // "strictness fix" in one implementation from silently diverging. Like
@@ -728,6 +800,7 @@ fn main() {
     print_group("named", &named, false);
     print_group("classify", &classify, false);
     print_group("ss58_formats", &ss58_formats, false);
+    print_group("ss58_decode_only", &ss58_decode_only, false);
     print_group("ss58_invalid", &ss58_invalid, false);
     print_group("named_invalid_encode", &named_invalid_encode, false);
     print_group("hex_invalid", &hex_invalid, false);

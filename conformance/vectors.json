@@ -575,7 +575,16 @@
 {"hex":"6a3bd2110376616c6964313233342d771c8a7538d60490be4673a95c3926da95","expected":{"type":"Named","app_agent_id":298990442,"name":"valid1234-"}},
 {"hex":"07af62620323616c696431323334358191f8832fbe7f73f03a543f1606349f7e","expected":{"type":"Named","app_agent_id":1650634503,"name":"#alid12345"}},
 {"hex":"3db275080376616c69233132333435d876d4caca0f43dd13f5bc4b2df981a3cb","expected":{"type":"Named","app_agent_id":141931069,"name":"vali#12345"}},
-{"hex":"351c63f40376616c696431323334239ed5961edc4510336f4cbe1c8be875b83d","expected":{"type":"Named","app_agent_id":4100135989,"name":"valid1234#"}}
+{"hex":"351c63f40376616c696431323334239ed5961edc4510336f4cbe1c8be875b83d","expected":{"type":"Named","app_agent_id":4100135989,"name":"valid1234#"}},
+{"hex":"e44d9870002f851e7b1179c7bc154171f3f78a86cd0945544eb7c3673b61c05c","expected":{"type":"Regular"}},
+{"hex":"e44d9870022f851e7b1179c7bc154171f3f78a86cd0945544eb7c3673b61c05c","expected":{"type":"Regular"}},
+{"hex":"e44d9870032f851e7b1179c7bc154171f3f78a86cd0945544eb7c3673b61c05c","expected":{"type":"Regular"}},
+{"hex":"967cc6a600318519e89babc25a31e424b63027aaa75a2258c0ae272de575182a","expected":{"type":"Regular"}},
+{"hex":"967cc6a601318519e89babc25a31e424b63027aaa75a2258c0ae272de575182a","expected":{"type":"Regular"}},
+{"hex":"967cc6a603318519e89babc25a31e424b63027aaa75a2258c0ae272de575182a","expected":{"type":"Regular"}},
+{"hex":"929b3c39004a56583748526b4b5243e97513f36445d5f6c601361e7020b4733b","expected":{"type":"Regular"}},
+{"hex":"929b3c39014a56583748526b4b5243e97513f36445d5f6c601361e7020b4733b","expected":{"type":"Regular"}},
+{"hex":"929b3c39024a56583748526b4b5243e97513f36445d5f6c601361e7020b4733b","expected":{"type":"Regular"}}
 ],
 "ss58_formats": [
 {"hex":"2ed3afa3883dcfe252c6f7fac2214d42a1ef46ec0357507b31ab3045532c034f","format":0,"ss58":"124Q62KgTEv8RmHQBvTHkvakpSx28c9oVnAXWyWzDeCbyAFH"},
@@ -679,6 +688,13 @@
 {"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":5335,"ss58":"ttmYBFqTgxMcQuAQ7ifeUk2c9MVkGF184f8h6TZHUzr5YF9em"},
 {"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":16383,"ss58":"yNViC6FpAMgCMSxSdLXZJegsFfXyg748ufUiruiLDEcrnp5Fe"},
 {"hex":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","format":16383,"ss58":"yNb7j1viLcZunrTHozyfJPTZJrprRSPpY485Lwzq1CFK2z3Nk"}
+],
+"ss58_decode_only": [
+{"ss58":"VBsNz6CLgwAUUUgN2cYzYAtMKRiZzp2WjapUgTfDbCxQyXm9a","hex":"bf24d004301c7db8fb3e907464cf71d55d813839b515afa8c2cf2a5312a0913b","format":0,"reason":"non-canonical two-byte-prefix spelling of format 0"},
+{"ss58":"VJGp38gEAS8vCqYMedDFVNf4tdtTjMFcZ4M29RWsbgp8vhM8t","hex":"ed8acd369a7cdfc6a04c7d83e0514387fa43ecd8e07df24b3a2c20faa54f4620","format":1,"reason":"non-canonical two-byte-prefix spelling of format 1"},
+{"ss58":"Zp6HrWGuLNmK3d5qFmUZMHsEPncMDGc1PqGhhw9Pgvbjmnoin","hex":"e396e17305f35833e00ff37dc7627aa3cae95d96b5d4a706a2df09dee876f7ed","format":42,"reason":"non-canonical two-byte-prefix spelling of format 42"},
+{"ss58":"a9E2r2cRuRWay9j7D9UgXSFVYCrUzNwVu33h9qNbppRKSimGp","hex":"a54fba11be00c745a1648c967f517a950fa3b96ef9676834e64bae40bc3d9154","format":45,"reason":"non-canonical two-byte-prefix spelling of format 45"},
+{"ss58":"c88ZNdb24vJS1fDVnLWFamsotuFjoFX9SW7rM3L2UBDSAy2SN","hex":"3c8bd6ae583a950e3f19fd3fa301b5ee0fed5c01ea8fe326521928e73516ae38","format":63,"reason":"non-canonical two-byte-prefix spelling of format 63"}
 ],
 "ss58_invalid": [
 {"ss58":"Ckumw79RR7Ke5fZEXknYgLB6JAoBojh1Je5FUV1oj4hDP6AP","format":5335,"error_kind":"InvalidLength","reason":"canonical account with a truncated one-byte checksum (decoded length 35)"},

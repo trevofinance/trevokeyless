@@ -71,6 +71,18 @@ class TestConformanceVectors(unittest.TestCase):
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
 
+    def test_ss58_decode_only_vectors(self: "TestConformanceVectors") -> None:
+        # Non-canonical two-byte-prefix spellings of formats below 64: the one
+        # documented malleability exception. Every implementation must decode the
+        # spelling (to the pinned account id and format) while its encoder keeps
+        # producing the canonical form, so re-encoding must not reproduce the input.
+        for v in _VECTORS["ss58_decode_only"]:
+            with self.subTest(ss58=v["ss58"], reason=v["reason"]):
+                self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
+                info = trevokeyless.decode_address(v["ss58"], v["format"])
+                self.assertEqual(info.account_id, "0x" + v["hex"])
+                self.assertNotEqual(trevokeyless.encode_address("0x" + v["hex"], v["format"]), v["ss58"])
+
     def test_ss58_invalid_vectors(self: "TestConformanceVectors") -> None:
         # Rejection vectors: address strings that must not decode in any implementation
         # when the accompanying format is expected. The error_kind field pins the

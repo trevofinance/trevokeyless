@@ -145,6 +145,29 @@ mod tests {
             );
         }
 
+        // Decode-only vectors: the non-canonical two-byte-prefix spelling of formats
+        // below 64 — the one documented malleability exception. Every implementation
+        // must decode the spelling (to the pinned account id and format) while its
+        // encoder keeps producing the canonical form, so re-encoding must NOT
+        // reproduce the input spelling.
+        #[cfg(feature = "ss58")]
+        for v in vectors["ss58_decode_only"].as_array().unwrap() {
+            let address = v["ss58"].as_str().unwrap();
+            let format = v["format"].as_u64().unwrap() as u16;
+            let account = account_from_hex(v["hex"].as_str().unwrap());
+            let reason = v["reason"].as_str().unwrap();
+            assert_eq!(
+                decode_expecting(address, format),
+                Ok(account),
+                "{address:?} must decode: {reason}"
+            );
+            assert_ne!(
+                account.to_ss58check_with_version(format).unwrap(),
+                address,
+                "re-encoding {address:?} must stay canonical: {reason}"
+            );
+        }
+
         // Rejection vectors: address strings that every implementation must reject when
         // decoding with the accompanying expected format, with the failure
         // classification pinned by `error_kind` (the `Ss58Error` variant name). All

@@ -77,6 +77,9 @@ with the accompanying expected format: non-canonical shapes such as one-byte che
 reserved formats, corrupted checksums, surrounding whitespace; each vector's
 `error_kind` pins the failure classification — the Rust `Ss58Error` variant name,
 matched by the TypeScript `Ss58Error.kind` and the Python `Ss58DecodeError.kind`),
+`ss58_decode_only` (non-canonical two-byte-prefix spellings of formats below 64 that
+every implementation must accept on decode while re-encoding canonically — the
+documented malleability exception),
 `named_invalid_encode` (names every implementation must reject at encode time),
 `hex_invalid` (raw account id strings violating the "0x" + 64 hex contract of the
 Python `decode_account_id` / TypeScript `decodeAccountId` entry points), and
