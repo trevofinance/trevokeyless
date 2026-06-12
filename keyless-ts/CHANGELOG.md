@@ -25,6 +25,11 @@ First public release line. Breaking changes from 0.6.0 (pre-1.0 API freeze):
   verbatim); render one explicitly with `encodeAddress`.
 - **The `Ss58ErrorKind` type is exported** (the type of `Ss58Error.kind`), matching
   the Python package's public `Ss58ErrorKind` alias.
+- **`AddressType` is an erasable `const` object + union type, not a TS `enum`.** The
+  values (0–3) and `AddressType.AppAgent`-style usage are unchanged; the numeric
+  reverse lookup (`AddressType[1] === "AppAgent"`) no longer exists — derive names
+  via `Object.entries(AddressType)` if needed. The values still match the Python
+  `AddressType` and the Rust `AccountType` SCALE indices.
 - **`@polkadot/util` and `@polkadot/util-crypto` are gone.** The SS58 codec is now a
   direct port of the Rust reference on `@noble/hashes` + `@scure/base` (the only two
   production dependencies, both audited and zero-dependency). Address output is

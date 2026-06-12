@@ -29,12 +29,32 @@ const U32_MAX = 4294967295;
 // bound of the Rust implementation.
 const SS58_FORMAT_MAX = 16383;
 
-enum AddressType {
-  Regular = 0,
-  AppAgent = 1,
-  Transactional = 2,
-  Named = 3,
-}
+/**
+ * Classification of a blockchain address, as returned by `decodeAddress` and
+ * `decodeAccountId`.
+ *
+ * An erasable `const` object plus union type rather than a TS `enum`, so the package
+ * contains no non-erasable syntax. The numeric values match the Python `AddressType`
+ * enum and the SCALE variant indices of the Rust `AccountType`; for the keyless
+ * variants they coincide with the type discriminant stored at byte [4] of a keyless
+ * account id. There is no numeric reverse lookup (`AddressType[1]`); derive names via
+ * `Object.entries(AddressType)` if needed.
+ */
+const AddressType = {
+  Regular: 0,
+  AppAgent: 1,
+  Transactional: 2,
+  Named: 3,
+} as const;
+type AddressType = (typeof AddressType)[keyof typeof AddressType];
+
+/** Name of each `AddressType` value, for error messages. */
+const ADDRESS_TYPE_NAMES: Record<AddressType, keyof typeof AddressType> = {
+  [AddressType.Regular]: "Regular",
+  [AddressType.AppAgent]: "AppAgent",
+  [AddressType.Transactional]: "Transactional",
+  [AddressType.Named]: "Named",
+};
 
 /**
  * Thrown by the typed decode functions when the address is of a different type.
@@ -51,7 +71,7 @@ class AddressTypeMismatchError extends Error {
   constructor(expected: AddressType, found: AddressType) {
     const article = expected === AddressType.AppAgent ? "an" : "a";
     super(
-      `Provided address is not ${article} ${AddressType[expected]} address but is instance of ${AddressType[found]}`,
+      `Provided address is not ${article} ${ADDRESS_TYPE_NAMES[expected]} address but is instance of ${ADDRESS_TYPE_NAMES[found]}`,
     );
     this.name = "AddressTypeMismatchError";
     this.expected = expected;
