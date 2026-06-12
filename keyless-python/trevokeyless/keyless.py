@@ -136,6 +136,28 @@ def _blake2_256(data: bytes) -> bytes:
     return blake2b(data, digest_size=32).digest()
 
 
+def _require_str(value: object, label: str) -> None:
+    """
+    Validates that a string parameter actually is a str.
+
+    Public entry points raise TypeError - rather than leaking an AttributeError from a
+    string method lookup - when a string parameter has the wrong type. (The TypeScript
+    implementation surfaces a native TypeError the same way; the Rust implementation
+    enforces the types at compile time.) mypy enforces the type for annotated callers;
+    the guard serves untyped ones.
+
+    Args:
+        value (object): The value to validate.
+        label (str): Name of the parameter, used in the error message.
+
+    Raises:
+        TypeError: If the value is not a str.
+    """
+    if not isinstance(value, str):
+        msg = f"{label} must be a str, got {type(value).__name__}"
+        raise TypeError(msg)
+
+
 def _validate_u32(value: int, label: str) -> None:
     """
     Validates that a value is an integer in the u32 range [0, 4294967295].
@@ -191,8 +213,10 @@ def _validate_address_name(name: str) -> None:
         name (str): The name to validate.
 
     Raises:
+        TypeError: If the name is not a str.
         ValueError: If the name has a wrong length or contains invalid characters.
     """
+    _require_str(name, "name")
     if len(name) != NAMED_ADDRESS_LENGTH:
         msg = "Address name must be exactly 10 characters long"
         raise ValueError(msg)
@@ -438,11 +462,13 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
         bytes: The 32-byte account id.
 
     Raises:
+        TypeError: If blockchain_address is not a str.
         Ss58DecodeError: If the input is not a valid SS58 address of a 32-byte account
             id (``Ss58FormatMismatchError`` if it is valid but uses a different format
             than expected).
         ValueError: If ss58_format is not an integer in [0, 16383].
     """
+    _require_str(blockchain_address, "blockchain_address")
     _validate_ss58_format(ss58_format)
 
     if blockchain_address.startswith("0x"):
@@ -479,6 +505,7 @@ def decode_address(
         BlockchainAddressInfo: an object with info about the address.
 
     Raises:
+        TypeError: If blockchain_address is not a str.
         Ss58DecodeError: If the address is not a valid SS58 string of a 32-byte account
             id; its ``kind`` carries the failure classification
             (``Ss58FormatMismatchError`` if the address is valid but uses a different
@@ -506,8 +533,10 @@ def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
             `encode_address`).
 
     Raises:
+        TypeError: If account_id is not a str.
         ValueError: If the input is not `0x` followed by exactly 64 hex characters.
     """
+    _require_str(account_id, "account_id")
     if _HEX_ACCOUNT_ID.fullmatch(account_id) is None:
         msg = "Invalid hex account id: expected 0x followed by 64 hex characters"
         raise ValueError(msg)
@@ -534,10 +563,12 @@ def encode_address(
         str: The SS58 address.
 
     Raises:
+        TypeError: If account_id is not a str.
         ValueError: If the input is not `0x` followed by exactly 64 hex characters, or
             ss58_format is not an integer in [0, 16383].
         Ss58DecodeError: kind ``"InvalidFormat"`` if ss58_format is reserved (46, 47).
     """
+    _require_str(account_id, "account_id")
     if _HEX_ACCOUNT_ID.fullmatch(account_id) is None:
         msg = "Invalid hex account id: expected 0x followed by 64 hex characters"
         raise ValueError(msg)

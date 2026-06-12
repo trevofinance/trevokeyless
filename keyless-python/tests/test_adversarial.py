@@ -443,6 +443,45 @@ class TestEncodeAddress(unittest.TestCase):
                 self.assertEqual(ctx.exception.kind, "InvalidFormat")
 
 
+class TestStringParameterTypes(unittest.TestCase):
+    """Public entry points raise TypeError - not an AttributeError leaked from a string
+    method lookup - when a string parameter has the wrong type. (The TypeScript
+    implementation surfaces a native TypeError the same way; the Rust implementation
+    enforces the types at compile time.)"""
+
+    def test_decode_address_rejects_non_str(self: "TestStringParameterTypes") -> None:
+        for bad in [None, 123, b"ttowKp8Am", ["x"]]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(TypeError, "^blockchain_address must be a str"):
+                trevokeyless.decode_address(bad)  # type: ignore[arg-type]
+
+    def test_delegating_decoders_reject_non_str(self: "TestStringParameterTypes") -> None:
+        delegating = [
+            trevokeyless.is_keyless_address,
+            trevokeyless.decode_app_agent_address,
+            trevokeyless.decode_transactional_address,
+            trevokeyless.decode_named_address,
+        ]
+        for fn in delegating:
+            with self.subTest(fn=fn.__name__), self.assertRaisesRegex(TypeError, "^blockchain_address must be a str"):
+                fn(None)  # type: ignore[arg-type]
+
+    def test_decode_account_id_rejects_non_str(self: "TestStringParameterTypes") -> None:
+        for bad in [None, 123, b"0x" + b"00" * 32]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(TypeError, "^account_id must be a str"):
+                trevokeyless.decode_account_id(bad)  # type: ignore[arg-type]
+
+    def test_encode_address_rejects_non_str(self: "TestStringParameterTypes") -> None:
+        with self.assertRaisesRegex(TypeError, "^account_id must be a str"):
+            trevokeyless.encode_address(None)  # type: ignore[arg-type]
+
+    def test_encode_named_address_rejects_non_str_name(self: "TestStringParameterTypes") -> None:
+        # bytes previously fell through to the charset check and raised ValueError;
+        # a non-str name is a type error, not a charset error.
+        for bad in [None, b"hot-wallet", 123]:
+            with self.subTest(bad=bad), self.assertRaisesRegex(TypeError, "^name must be a str"):
+                trevokeyless.encode_named_address(1, bad)  # type: ignore[arg-type]
+
+
 class TestIsKeylessAddress(unittest.TestCase):
     """Mirrors the Rust `test_is_keyless_account` test."""
 
