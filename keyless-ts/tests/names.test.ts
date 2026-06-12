@@ -1,4 +1,4 @@
-import { encodeNamed } from "../src/keyless";
+import { encodeNamedAddress } from "../src/keyless";
 
 describe("Address name", () => {
   const ss58_format = 5335;
@@ -11,7 +11,9 @@ describe("Address name", () => {
       "name-#test",
     ];
     for (let i = 0; i < valid_names.length; i++) {
-      expect(() => encodeNamed(123, valid_names[i], ss58_format)).not.toThrow();
+      expect(() =>
+        encodeNamedAddress(123, valid_names[i], ss58_format),
+      ).not.toThrow();
     }
   });
 
@@ -24,15 +26,15 @@ describe("Address name", () => {
       "with_under",
     ];
     for (let i = 0; i < invalid_names.length; i++) {
-      expect(() => encodeNamed(123, invalid_names[i], ss58_format)).toThrow(
-        new Error("Address name contains invalid characters"),
-      );
+      expect(() =>
+        encodeNamedAddress(123, invalid_names[i], ss58_format),
+      ).toThrow(new Error("Address name contains invalid characters"));
     }
 
     const invalidLengthNames = ["short", "veeeerrrrryyyyloooongg"];
     for (let i = 0; i < invalidLengthNames.length; i++) {
       expect(() =>
-        encodeNamed(123, invalidLengthNames[i], ss58_format),
+        encodeNamedAddress(123, invalidLengthNames[i], ss58_format),
       ).toThrow(new Error("Address name must be exactly 10 characters long"));
     }
   });

@@ -217,7 +217,7 @@ function encodeKeylessAccount(
  * @param {number} appAgentId - The ID of the application agent.
  * @returns {string} - The encoded application agent address.
  */
-function encodeAppAgent(
+function encodeAppAgentAddress(
   appAgentId: number,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
@@ -235,7 +235,7 @@ function encodeAppAgent(
  * @param {number} taId - The ID of the transactional address.
  * @returns {string} - The encoded transactional address.
  */
-function encodeTransactional(
+function encodeTransactionalAddress(
   appAgentId: number,
   taId: number,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
@@ -255,7 +255,7 @@ function encodeTransactional(
  * @param {string} name - The name of the address.
  * @returns {string} - The encoded named address.
  */
-function encodeNamed(
+function encodeNamedAddress(
   appAgentId: number,
   name: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
@@ -452,7 +452,7 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
  * @returns {number} - The ID of the application agent.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not an AppAgent address.
  */
-function decodeAppAgent(
+function decodeAppAgentAddress(
   address: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): number {
@@ -478,7 +478,7 @@ function decodeAppAgent(
 
 /**
  * The identifiers embedded in a Transactional address, as returned by
- * `decodeTransactional`. (The Python implementation returns the same pair as a tuple;
+ * `decodeTransactionalAddress`. (The Python implementation returns the same pair as a tuple;
  * its `TransactionalAddressId` type alias is the plain `taId` integer instead.)
  */
 interface DecodedTransactionalAddress {
@@ -494,7 +494,7 @@ interface DecodedTransactionalAddress {
  *   and transactional address.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Transactional address.
  */
-function decodeTransactional(
+function decodeTransactionalAddress(
   address: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): DecodedTransactionalAddress {
@@ -527,7 +527,7 @@ function decodeTransactional(
 }
 
 /**
- * The identifiers embedded in a Named address, as returned by `decodeNamed`. (The
+ * The identifiers embedded in a Named address, as returned by `decodeNamedAddress`. (The
  * Python implementation returns the same pair as a tuple.)
  */
 interface DecodedNamedAddress {
@@ -543,7 +543,7 @@ interface DecodedNamedAddress {
  *   and the address name.
  * @throws {AddressTypeMismatchError} - Thrown if the address is not a Named address.
  */
-function decodeNamed(
+function decodeNamedAddress(
   address: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): DecodedNamedAddress {
@@ -603,12 +603,12 @@ export {
   BlockchainAddressInfo,
   DecodedTransactionalAddress,
   DecodedNamedAddress,
-  encodeAppAgent,
-  encodeTransactional,
-  encodeNamed,
-  decodeAppAgent,
-  decodeTransactional,
-  decodeNamed,
+  encodeAppAgentAddress,
+  encodeTransactionalAddress,
+  encodeNamedAddress,
+  decodeAppAgentAddress,
+  decodeTransactionalAddress,
+  decodeNamedAddress,
   decodeAddress,
   decodeAccountId,
   isKeylessAddress,

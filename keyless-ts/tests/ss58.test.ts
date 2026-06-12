@@ -1,11 +1,11 @@
 import {
-  encodeAppAgent,
-  encodeTransactional,
-  encodeNamed,
+  encodeAppAgentAddress,
+  encodeTransactionalAddress,
+  encodeNamedAddress,
   AddressType,
-  decodeAppAgent,
-  decodeTransactional,
-  decodeNamed,
+  decodeAppAgentAddress,
+  decodeTransactionalAddress,
+  decodeNamedAddress,
   decodeAddress,
 } from "../src/keyless";
 
@@ -19,22 +19,22 @@ describe("AppAgent", () => {
     "5EqykH6EjAZ513RNK37NMagT2KPL4xr2vJXxGCRucbXqBSA7";
 
   it("Default SS58 format for encoding of AppAgent address is set to correct value.", () => {
-    const encoded_address = encodeAppAgent(app_agent_id);
+    const encoded_address = encodeAppAgentAddress(app_agent_id);
     expect(encoded_address).toEqual(blockchain_address);
   });
 
   it("Encoding of AppAgent ID to AppAgent address takes into account SS58 format.", () => {
-    const encoded_address = encodeAppAgent(app_agent_id, 42);
+    const encoded_address = encodeAppAgentAddress(app_agent_id, 42);
     expect(encoded_address).toEqual(blockchain_address_ss58_42);
   });
 
   it("Default SS58 format for decoding of AppAgent address is set to correct value.", () => {
-    const decoded_app_agent_id = decodeAppAgent(blockchain_address);
+    const decoded_app_agent_id = decodeAppAgentAddress(blockchain_address);
     expect(decoded_app_agent_id).toEqual(app_agent_id);
   });
 
   it("Decoding of AppAgent address to AppAgent ID takes into account SS58 format.", () => {
-    expect(() => decodeAppAgent(blockchain_address, 42)).toThrow(
+    expect(() => decodeAppAgentAddress(blockchain_address, 42)).toThrow(
       new Error("Expected SS58 format 42 but found 5335"),
     );
   });
@@ -70,7 +70,7 @@ describe("Transactional", () => {
     "5EqykH6F3zh6U8x1gjSGAU5aE4P6nwAoL6S9FW8SSNvEj5KD";
 
   it("Default SS58 format for encoding of Transactional address is set to correct value.", () => {
-    const encoded_address = encodeTransactional(
+    const encoded_address = encodeTransactionalAddress(
       app_agent_id,
       transactional_address_id,
     );
@@ -78,7 +78,7 @@ describe("Transactional", () => {
   });
 
   it("Encoding of Transactional ID to Transactional address takes into account SS58 format.", () => {
-    const encoded_address = encodeTransactional(
+    const encoded_address = encodeTransactionalAddress(
       app_agent_id,
       transactional_address_id,
       42,
@@ -87,7 +87,7 @@ describe("Transactional", () => {
   });
 
   it("Default SS58 format for decoding of Transactional address is set to correct value.", () => {
-    const decoded_ids = decodeTransactional(blockchain_address);
+    const decoded_ids = decodeTransactionalAddress(blockchain_address);
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
       taId: transactional_address_id,
@@ -95,7 +95,7 @@ describe("Transactional", () => {
   });
 
   it("Decoding of Transactional address to Transactional ID takes into account SS58 format.", () => {
-    expect(() => decodeTransactional(blockchain_address, 42)).toThrow(
+    expect(() => decodeTransactionalAddress(blockchain_address, 42)).toThrow(
       new Error("Expected SS58 format 42 but found 5335"),
     );
   });
@@ -131,17 +131,17 @@ describe("Named", () => {
     "5EqykH6FB9Jeoto2CefudTAJUimW2K99Bz4QswaAn7rLge2y";
 
   it("Default SS58 format for encoding of Named address is set to correct value.", () => {
-    const encoded_address = encodeNamed(app_agent_id, address_name);
+    const encoded_address = encodeNamedAddress(app_agent_id, address_name);
     expect(encoded_address).toEqual(blockchain_address);
   });
 
   it("Encoding of address name to Named address takes into account SS58 format.", () => {
-    const encoded_address = encodeNamed(app_agent_id, address_name, 42);
+    const encoded_address = encodeNamedAddress(app_agent_id, address_name, 42);
     expect(encoded_address).toEqual(blockchain_address_ss58_42);
   });
 
   it("Default SS58 format for decoding of Named address is set to correct value.", () => {
-    const decoded_ids = decodeNamed(blockchain_address);
+    const decoded_ids = decodeNamedAddress(blockchain_address);
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
       addressName: address_name,
@@ -149,7 +149,7 @@ describe("Named", () => {
   });
 
   it("Decoding of Named address to address name takes into account SS58 format.", () => {
-    expect(() => decodeNamed(blockchain_address, 42)).toThrow(
+    expect(() => decodeNamedAddress(blockchain_address, 42)).toThrow(
       new Error("Expected SS58 format 42 but found 5335"),
     );
   });

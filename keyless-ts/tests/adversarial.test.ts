@@ -15,12 +15,12 @@ import {
   AddressTypeMismatchError,
   decodeAccountId,
   decodeAddress,
-  decodeAppAgent,
-  decodeNamed,
-  decodeTransactional,
-  encodeAppAgent,
-  encodeNamed,
-  encodeTransactional,
+  decodeAppAgentAddress,
+  decodeNamedAddress,
+  decodeTransactionalAddress,
+  encodeAppAgentAddress,
+  encodeNamedAddress,
+  encodeTransactionalAddress,
   isKeylessAddress,
   Ss58Error,
   SS58_MAX_ADDRESS_LENGTH,
@@ -73,8 +73,8 @@ const appAgent123 = keylessAccount(Uint8Array.of(123, 0, 0, 0, 1));
 describe("Boundary values", () => {
   it("round-trips AppAgent ids 0, 1 and u32::MAX", () => {
     [0, 1, U32_MAX].forEach((appAgentId) => {
-      const address = encodeAppAgent(appAgentId, ss58Format);
-      expect(decodeAppAgent(address, ss58Format)).toEqual(appAgentId);
+      const address = encodeAppAgentAddress(appAgentId, ss58Format);
+      expect(decodeAppAgentAddress(address, ss58Format)).toEqual(appAgentId);
     });
   });
 
@@ -87,8 +87,8 @@ describe("Boundary values", () => {
         [U32_MAX, U32_MAX],
       ] as [number, number][]
     ).forEach(([appAgentId, taId]) => {
-      const address = encodeTransactional(appAgentId, taId, ss58Format);
-      expect(decodeTransactional(address, ss58Format)).toEqual({
+      const address = encodeTransactionalAddress(appAgentId, taId, ss58Format);
+      expect(decodeTransactionalAddress(address, ss58Format)).toEqual({
         appAgentId,
         taId,
       });
@@ -99,8 +99,12 @@ describe("Boundary values", () => {
     ["0000000000", "##########", "----------", "ZZZZZZZZZZ"].forEach(
       (addressName) => {
         [0, U32_MAX].forEach((appAgentId) => {
-          const address = encodeNamed(appAgentId, addressName, ss58Format);
-          expect(decodeNamed(address, ss58Format)).toEqual({
+          const address = encodeNamedAddress(
+            appAgentId,
+            addressName,
+            ss58Format,
+          );
+          expect(decodeNamedAddress(address, ss58Format)).toEqual({
             appAgentId,
             addressName,
           });
@@ -111,11 +115,13 @@ describe("Boundary values", () => {
 
   it("rejects out-of-range ids at encoding time", () => {
     [-1, U32_MAX + 1, 1.5, NaN].forEach((badId) => {
-      expect(() => encodeAppAgent(badId, ss58Format)).toThrow(RangeError);
-      expect(() => encodeTransactional(1, badId, ss58Format)).toThrow(
+      expect(() => encodeAppAgentAddress(badId, ss58Format)).toThrow(
         RangeError,
       );
-      expect(() => encodeNamed(badId, "example123", ss58Format)).toThrow(
+      expect(() => encodeTransactionalAddress(1, badId, ss58Format)).toThrow(
+        RangeError,
+      );
+      expect(() => encodeNamedAddress(badId, "example123", ss58Format)).toThrow(
         RangeError,
       );
     });
@@ -125,7 +131,7 @@ describe("Boundary values", () => {
     // The SS58 layer range-checks the format but its bitwise prefix arithmetic would
     // silently truncate fractional values to an integer format.
     [5335.5, NaN].forEach((badFormat) => {
-      expect(() => encodeAppAgent(123, badFormat)).toThrow(
+      expect(() => encodeAppAgentAddress(123, badFormat)).toThrow(
         /ss58Format must be an integer/,
       );
     });
@@ -138,7 +144,7 @@ describe("ss58Format validation", () => {
   // implementation.
 
   it("rejects out-of-range and non-integer formats at decoding time", () => {
-    const address = encodeAppAgent(123, ss58Format);
+    const address = encodeAppAgentAddress(123, ss58Format);
     [-1, 16384, 1.5, NaN].forEach((badFormat) => {
       expect(() => decodeAddress(address, badFormat)).toThrow(
         /ss58Format must be an integer in \[0, 16383\]/,
@@ -150,7 +156,7 @@ describe("ss58Format validation", () => {
     // Some Substrate decoders (e.g. @polkadot) interpret -1 as "accept any format";
     // here it must be rejected like any other out-of-range value, so an address of a
     // *different* format is never silently accepted.
-    const substrateGenericAddress = encodeAppAgent(123, 42);
+    const substrateGenericAddress = encodeAppAgentAddress(123, 42);
     expect(() => decodeAddress(substrateGenericAddress, -1)).toThrow(
       /ss58Format must be an integer in \[0, 16383\]/,
     );
@@ -172,7 +178,7 @@ describe("ss58Format validation", () => {
 
   it("rejects out-of-range formats at encoding time", () => {
     [-1, 16384].forEach((badFormat) => {
-      expect(() => encodeAppAgent(123, badFormat)).toThrow(
+      expect(() => encodeAppAgentAddress(123, badFormat)).toThrow(
         /ss58Format must be an integer in \[0, 16383\]/,
       );
     });
@@ -180,8 +186,8 @@ describe("ss58Format validation", () => {
 
   it("accepts the format boundaries 0 and 16383", () => {
     [0, 16383].forEach((goodFormat) => {
-      const address = encodeAppAgent(123, goodFormat);
-      expect(decodeAppAgent(address, goodFormat)).toEqual(123);
+      const address = encodeAppAgentAddress(123, goodFormat);
+      expect(decodeAppAgentAddress(address, goodFormat)).toEqual(123);
     });
   });
 });
@@ -226,7 +232,7 @@ describe("Account id length", () => {
 
 describe("Malformed SS58 input", () => {
   it("rejects a tampered SS58 checksum", () => {
-    const address = encodeAppAgent(123, ss58Format);
+    const address = encodeAppAgentAddress(123, ss58Format);
     const payload = base58.decode(address);
     /* eslint-disable no-bitwise */
     payload[payload.length - 1] ^= 0xff;
@@ -318,7 +324,7 @@ describe("Malformed SS58 input", () => {
     // An address with surrounding whitespace is not the canonical spelling of the
     // account; whitespace is outside the base58 alphabet (pinned cross-language by the
     // ss58_invalid conformance vectors).
-    const address = encodeAppAgent(123, ss58Format);
+    const address = encodeAppAgentAddress(123, ss58Format);
     [`${address} `, ` ${address}`, `${address}\n`, `${address}\t`].forEach(
       (spelling) => {
         expect(() => decodeAddress(spelling, ss58Format)).toThrow();
@@ -390,9 +396,9 @@ describe("isKeylessAddress", () => {
 
   it("returns true for keyless addresses", () => {
     [
-      encodeAppAgent(1, ss58Format),
-      encodeTransactional(1, 2, ss58Format),
-      encodeNamed(1, "test123456", ss58Format),
+      encodeAppAgentAddress(1, ss58Format),
+      encodeTransactionalAddress(1, 2, ss58Format),
+      encodeNamedAddress(1, "test123456", ss58Format),
     ].forEach((address) => {
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
     });
@@ -416,7 +422,7 @@ describe("Ss58Error", () => {
   // pair).
 
   it("carries the expected and found formats on a format mismatch", () => {
-    const substrateGeneric = encodeAppAgent(123, 42);
+    const substrateGeneric = encodeAppAgentAddress(123, 42);
 
     let thrown: unknown;
     try {
@@ -454,11 +460,11 @@ describe("Ss58Error", () => {
 
 describe("AddressTypeMismatchError", () => {
   it("carries the expected and found address types", () => {
-    const namedAddress = encodeNamed(1, "test123456", ss58Format);
+    const namedAddress = encodeNamedAddress(1, "test123456", ss58Format);
 
     let thrown: unknown;
     try {
-      decodeAppAgent(namedAddress, ss58Format);
+      decodeAppAgentAddress(namedAddress, ss58Format);
     } catch (error) {
       thrown = error;
     }

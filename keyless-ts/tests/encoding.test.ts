@@ -1,14 +1,14 @@
 import { blake2b } from "@noble/hashes/blake2b";
 import { ss58Encode } from "../src/ss58";
 import {
-  encodeAppAgent,
-  encodeTransactional,
-  encodeNamed,
+  encodeAppAgentAddress,
+  encodeTransactionalAddress,
+  encodeNamedAddress,
   AddressType,
   BlockchainAddressInfo,
-  decodeAppAgent,
-  decodeTransactional,
-  decodeNamed,
+  decodeAppAgentAddress,
+  decodeTransactionalAddress,
+  decodeNamedAddress,
   decodeAddress,
 } from "../src/keyless";
 
@@ -22,12 +22,12 @@ describe("AppAgent", () => {
     "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp";
 
   it("Encodes AppAgent address correctly", () => {
-    const encoded_address = encodeAppAgent(app_agent_id, ss58_format);
+    const encoded_address = encodeAppAgentAddress(app_agent_id, ss58_format);
     expect(encoded_address).toEqual(blockchain_address);
   });
 
   it("Decodes AppAgent address correctly", () => {
-    const decoded_app_agent_id = decodeAppAgent(
+    const decoded_app_agent_id = decodeAppAgentAddress(
       blockchain_address,
       ss58_format,
     );
@@ -59,7 +59,7 @@ describe("Transactional", () => {
     "ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG";
 
   it("Encodes Transactional address correctly", () => {
-    const encoded_address = encodeTransactional(
+    const encoded_address = encodeTransactionalAddress(
       app_agent_id,
       transactional_address_id,
       ss58_format,
@@ -68,7 +68,10 @@ describe("Transactional", () => {
   });
 
   it("Decodes Transactional address correctly", () => {
-    const decoded_ids = decodeTransactional(blockchain_address, ss58_format);
+    const decoded_ids = decodeTransactionalAddress(
+      blockchain_address,
+      ss58_format,
+    );
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
       taId: transactional_address_id,
@@ -100,7 +103,7 @@ describe("Named", () => {
     "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k";
 
   it("Encodes Named address correctly", () => {
-    const encoded_address = encodeNamed(
+    const encoded_address = encodeNamedAddress(
       app_agent_id,
       address_name,
       ss58_format,
@@ -109,7 +112,7 @@ describe("Named", () => {
   });
 
   it("Decodes Named address correctly", () => {
-    const decoded_ids = decodeNamed(blockchain_address, ss58_format);
+    const decoded_ids = decodeNamedAddress(blockchain_address, ss58_format);
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
       addressName: address_name,
@@ -172,7 +175,7 @@ describe("Named address with invalid name bytes", () => {
     "throws when address with %s in name bytes is decoded as Named",
     (_description, nameBytes) => {
       const address = buildNamedAddress(nameBytes);
-      expect(() => decodeNamed(address, ss58_format)).toThrow(
+      expect(() => decodeNamedAddress(address, ss58_format)).toThrow(
         new Error(
           "Provided address is not a Named address but is instance of Regular",
         ),
@@ -198,7 +201,7 @@ describe("Mismatch of address type", () => {
   const regular_address = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
 
   it("Checks that regular address can not be decoded as an AppAgent address", () => {
-    expect(() => decodeAppAgent(regular_address, ss58_format)).toThrow(
+    expect(() => decodeAppAgentAddress(regular_address, ss58_format)).toThrow(
       new Error(
         "Provided address is not an AppAgent address but is instance of Regular",
       ),
@@ -206,7 +209,9 @@ describe("Mismatch of address type", () => {
   });
 
   it("Checks that regular address can not be decoded as a Transactional address", () => {
-    expect(() => decodeTransactional(regular_address, ss58_format)).toThrow(
+    expect(() =>
+      decodeTransactionalAddress(regular_address, ss58_format),
+    ).toThrow(
       new Error(
         "Provided address is not a Transactional address but is instance of Regular",
       ),
@@ -214,7 +219,7 @@ describe("Mismatch of address type", () => {
   });
 
   it("Checks that regular address can not be decoded as a Named address", () => {
-    expect(() => decodeNamed(regular_address, ss58_format)).toThrow(
+    expect(() => decodeNamedAddress(regular_address, ss58_format)).toThrow(
       new Error(
         "Provided address is not a Named address but is instance of Regular",
       ),

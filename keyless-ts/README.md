@@ -23,14 +23,14 @@ To use this library in your project, import the necessary functions and constant
 
 ```javascript
 const {
-  encodeAppAgent,
-  encodeTransactional,
-  encodeNamed,
+  encodeAppAgentAddress,
+  encodeTransactionalAddress,
+  encodeNamedAddress,
   AddressType,
   AddressTypeMismatchError,
-  decodeAppAgent,
-  decodeTransactional,
-  decodeNamed,
+  decodeAppAgentAddress,
+  decodeTransactionalAddress,
+  decodeNamedAddress,
   decodeAddress,
   decodeAccountId,
   isKeylessAddress,
@@ -45,10 +45,10 @@ Example for AppAgent addresses:
 
 ```javascript
 const appAgentId = 123;
-const encodedAppAgentAddress = encodeAppAgent(appAgentId);
+const encodedAppAgentAddress = encodeAppAgentAddress(appAgentId);
 console.log("Encoded AppAgent address:", encodedAppAgentAddress);
 
-const decodedAppAgentId = decodeAppAgent(encodedAppAgentAddress);
+const decodedAppAgentId = decodeAppAgentAddress(encodedAppAgentAddress);
 console.log("Decoded AppAgent ID:", decodedAppAgentId);
 
 const decodedAppAgentAddress = decodeAddress(encodedAppAgentAddress);
@@ -60,10 +60,10 @@ Example for Transactional addresses
 ```javascript
 const appAgentId = 123;
 const taId = 456;
-const encodedTaAddress = encodeTransactional(appAgentId, taId);
+const encodedTaAddress = encodeTransactionalAddress(appAgentId, taId);
 console.log("Encoded Transactional address:", encodedTaAddress);
 
-const decodedTaId = decodeTransactional(encodedTaAddress);
+const decodedTaId = decodeTransactionalAddress(encodedTaAddress);
 console.log("Decoded Transactional ID:", decodedTaId);
 
 const decodedTransactionalAddress = decodeAddress(encodedTaAddress);
@@ -75,10 +75,10 @@ Example for Named addresses
 ```javascript
 const appAgentId = 123;
 const addressName = "hot-wallet";
-const encodedNamedAddress = encodeNamed(appAgentId, addressName);
+const encodedNamedAddress = encodeNamedAddress(appAgentId, addressName);
 console.log("Encoded Named address [123, 'hot-wallet']:", encodedNamedAddress);
 
-const decodedAddressName = decodeNamed(encodedNamedAddress);
+const decodedAddressName = decodeNamedAddress(encodedNamedAddress);
 console.log("Decoded address name:", decodedAddressName);
 
 const decodedNamedAddress = decodeAddress(encodedNamedAddress);
@@ -98,7 +98,7 @@ Check whether an address is keyless
 
 ```javascript
 const regularAddress = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
-console.log(isKeylessAddress(encodeAppAgent(123))); // true
+console.log(isKeylessAddress(encodeAppAgentAddress(123))); // true
 console.log(isKeylessAddress(regularAddress)); // false
 ```
 
@@ -113,7 +113,7 @@ argument.
 Any other input — wrong SS58 format or checksum, account ids that are not exactly
 32 bytes, malformed base58 or hex, surrounding whitespace — throws an `Error`; only the
 canonical spelling of an address is accepted. The typed decoders
-(`decodeAppAgent`, `decodeTransactional`, `decodeNamed`) throw
+(`decodeAppAgentAddress`, `decodeTransactionalAddress`, `decodeNamedAddress`) throw
 `AddressTypeMismatchError` (carrying the `expected` and `found` address types) when the
 address decodes to a different type.
 
