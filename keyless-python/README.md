@@ -140,7 +140,11 @@ input outright. `encode_address` is the reverse direction: it takes the same raw
 account id form and renders the SS58 address for the given format. The `address` field
 of the returned `BlockchainAddressInfo` holds the SS58 address for `decode_address`
 and is `None` for `decode_account_id` (raw account bytes carry no address; render one
-with `encode_address`); `account_id` is normalized `0x` + lowercase hex.
+with `encode_address`); `account_id` is normalized `0x` + lowercase hex. `address` is
+the input spelling verbatim: for the one accepted non-canonical spelling (the
+two-byte-prefix encoding of formats below 64, see below) it differs from the canonical
+address of the same account — key caches and lookups on `account_id`, and render the
+canonical address with `encode_address`.
 
 Only the canonical spelling of an address is accepted: wrong-length checksums,
 surrounding whitespace, case variations, characters outside the base58 alphabet, and

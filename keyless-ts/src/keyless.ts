@@ -86,6 +86,12 @@ class AddressTypeMismatchError extends Error {
  * the input was a raw account id (`decodeAccountId`): raw account bytes carry no SS58
  * format, so there is no address to report — render one explicitly with
  * `encodeAddress`. `accountId` is always the normalized `0x` + lowercase hex form.
+ *
+ * `address` is the input spelling verbatim, never re-encoded: for the one accepted
+ * non-canonical spelling (the two-byte-prefix encoding of SS58 formats below 64, see
+ * the security model) it differs from the canonical address of the same account. Key
+ * caches and lookups on `accountId` — the canonical cross-language form — and render
+ * the canonical address with `encodeAddress`.
  */
 interface BlockchainAddressInfo {
   address: string | null;

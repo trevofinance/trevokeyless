@@ -70,6 +70,8 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
+                # The address field is the input spelling verbatim.
+                self.assertEqual(info.address, v["ss58"])
 
     def test_ss58_decode_only_vectors(self: "TestConformanceVectors") -> None:
         # Non-canonical two-byte-prefix spellings of formats below 64: the one
@@ -81,6 +83,9 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
+                # The address field echoes the non-canonical input spelling verbatim;
+                # account_id is the canonical key (the canonical address differs).
+                self.assertEqual(info.address, v["ss58"])
                 self.assertNotEqual(trevokeyless.encode_address("0x" + v["hex"], v["format"]), v["ss58"])
 
     def test_ss58_invalid_vectors(self: "TestConformanceVectors") -> None:

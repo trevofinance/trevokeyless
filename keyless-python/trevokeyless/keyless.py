@@ -113,6 +113,12 @@ class BlockchainAddressInfo:
     carry no SS58 format, so there is no address to report — render one explicitly
     with ``encode_address``. ``account_id`` is always the normalized ``0x`` +
     lowercase hex form.
+
+    ``address`` is the input spelling verbatim, never re-encoded: for the one accepted
+    non-canonical spelling (the two-byte-prefix encoding of SS58 formats below 64, see
+    the security model) it differs from the canonical address of the same account. Key
+    caches and lookups on ``account_id`` — the canonical cross-language form — and
+    render the canonical address with ``encode_address``.
     """
 
     address: BlockchainAddress | None
