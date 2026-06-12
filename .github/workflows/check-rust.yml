@@ -1,12 +1,12 @@
 name: check-rust
 
+# No paths-ignore for README.md: the crate README is compiled as a doctest
+# (lib.rs ReadmeDoctests), so a README-only change can break `cargo test`.
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - 'README.md'
 
   workflow_dispatch:
 

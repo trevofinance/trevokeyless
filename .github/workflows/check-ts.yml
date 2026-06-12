@@ -1,4 +1,4 @@
-name: check-js
+name: check-ts
 
 on:
   push:
@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  js-checks:
+  ts-checks:
     concurrency:
-      group: js-checks-${{ github.ref }}-${{ matrix.node_version }}
+      group: ts-checks-${{ github.ref }}-${{ matrix.node_version }}
       cancel-in-progress: true
 
     runs-on: ubuntu-latest
@@ -50,4 +50,31 @@ jobs:
           const allowed = (f) => f.startsWith('dist/') || ['package.json', 'README.md', 'LICENSE'].includes(f);
           if (files.length === 0 || !files.every(allowed)) { console.error('unexpected package contents:', files); process.exit(1); }
           console.log('npm package contents OK:', files.length, 'files');
+          "
+
+      - name: Module interop smoke test (require and import)
+        # The package deliberately ships a single CommonJS build; the README promises
+        # it works from both require and ESM import (named imports resolve via Node's
+        # CJS interop). Prove the promise against the packed tarball, not src/.
+        run: |
+          cd keyless-ts
+          TARBALL="$PWD/$(npm pack --silent)"
+          mkdir -p /tmp/interop-smoke && cd /tmp/interop-smoke
+          npm init -y > /dev/null
+          npm install --no-save "$TARBALL"
+          node --input-type=commonjs -e "
+          const { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevo-keyless');
+          const address = encodeAppAgentAddress(123);
+          if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
+          if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
+          if (typeof Ss58Error !== 'function') process.exit(1);
+          console.log('require interop OK');
+          "
+          node --input-type=module -e "
+          import { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } from '@trevofinance/trevo-keyless';
+          const address = encodeAppAgentAddress(123);
+          if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
+          if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
+          if (typeof Ss58Error !== 'function') process.exit(1);
+          console.log('import interop OK');
           "
