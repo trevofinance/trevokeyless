@@ -190,19 +190,47 @@ impl AccountId32 {
         Ok((Self::new(account_bytes), format))
     }
 
-    /// Decodes an SS58 address with the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
+    /// Decodes an SS58 address, requiring the given expected format.
     ///
-    /// Returns [`Ss58Error::UnexpectedFormat`] if the address is valid but carries a
-    /// different format.
-    pub fn from_ss58check(address: &str) -> Result<Self, Ss58Error> {
-        let (account, format) = Self::from_ss58check_with_version(address)?;
-        if format != SS58_FORMAT_TREVO_ASSET_HUB {
+    /// The address is fully validated first — structure, length, checksum — exactly like
+    /// [`from_ss58check_with_version`](Self::from_ss58check_with_version); only then is
+    /// the embedded format compared, so an invalid address reports its validation error,
+    /// never a misleading [`Ss58Error::UnexpectedFormat`] (the format carried by an
+    /// address that fails validation is not trustworthy information). This is the
+    /// construction behind the `ss58_format` parameter of the Python and TypeScript
+    /// decode entry points and behind the conformance fixture's rejection vectors.
+    ///
+    /// An `expected_format` outside the 14-bit range returns
+    /// [`Ss58Error::InvalidFormat`] up front (the Python and TypeScript implementations
+    /// reject such parameters with their parameter-validation errors). The reserved
+    /// formats 46 and 47 are accepted as a parameter — no valid address can carry them,
+    /// so the result is the address's own validation error or an `UnexpectedFormat`,
+    /// matching the other implementations.
+    pub fn from_ss58check_expecting(
+        address: &str,
+        expected_format: u16,
+    ) -> Result<Self, Ss58Error> {
+        if expected_format > SS58_FORMAT_MAX {
+            return Err(Ss58Error::InvalidFormat);
+        }
+        let (account, found) = Self::from_ss58check_with_version(address)?;
+        if found != expected_format {
             return Err(Ss58Error::UnexpectedFormat {
-                expected: SS58_FORMAT_TREVO_ASSET_HUB,
-                found: format,
+                expected: expected_format,
+                found,
             });
         }
         Ok(account)
+    }
+
+    /// Decodes an SS58 address with the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
+    ///
+    /// Returns [`Ss58Error::UnexpectedFormat`] if the address is valid but carries a
+    /// different format. Equivalent to
+    /// [`from_ss58check_expecting`](Self::from_ss58check_expecting) with
+    /// [`SS58_FORMAT_TREVO_ASSET_HUB`].
+    pub fn from_ss58check(address: &str) -> Result<Self, Ss58Error> {
+        Self::from_ss58check_expecting(address, SS58_FORMAT_TREVO_ASSET_HUB)
     }
 }
 

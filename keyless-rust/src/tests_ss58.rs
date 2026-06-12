@@ -276,6 +276,74 @@ mod tests {
     }
 
     #[test]
+    fn test_from_ss58check_expecting() {
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(ALICE_TREVO, SS58_FORMAT_TREVO_ASSET_HUB)
+                .unwrap(),
+            alice()
+        );
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(ALICE_SUBSTRATE_GENERIC, 42).unwrap(),
+            alice()
+        );
+        // A fully valid address of another format: the one rejection that reports the
+        // expected/found pair.
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(
+                ALICE_SUBSTRATE_GENERIC,
+                SS58_FORMAT_TREVO_ASSET_HUB
+            )
+            .unwrap_err(),
+            Ss58Error::UnexpectedFormat {
+                expected: SS58_FORMAT_TREVO_ASSET_HUB,
+                found: 42
+            }
+        );
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(ALICE_TREVO, 42).unwrap_err(),
+            Ss58Error::UnexpectedFormat {
+                expected: 42,
+                found: SS58_FORMAT_TREVO_ASSET_HUB
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_ss58check_expecting_validation_wins_over_format_mismatch() {
+        // A corrupt address of a non-expected format must report its validation error,
+        // never UnexpectedFormat: the format carried by an address that fails
+        // validation is not trustworthy information (also pinned by the conformance
+        // fixture's ss58_invalid vectors).
+        let mut payload = bs58::decode(ALICE_SUBSTRATE_GENERIC).into_vec().unwrap();
+        let last = payload.len() - 1;
+        payload[last] ^= 0xFF;
+        let tampered = bs58::encode(payload).into_string();
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(&tampered, SS58_FORMAT_TREVO_ASSET_HUB)
+                .unwrap_err(),
+            Ss58Error::InvalidChecksum
+        );
+    }
+
+    #[test]
+    fn test_from_ss58check_expecting_validates_the_expected_format_parameter() {
+        // An expected format outside the 14-bit range is rejected up front; the
+        // reserved formats 46/47 are accepted as a parameter (no valid address can
+        // carry them, so a valid address of another format reports the mismatch).
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(ALICE_TREVO, 16384).unwrap_err(),
+            Ss58Error::InvalidFormat
+        );
+        assert_eq!(
+            AccountId32::from_ss58check_expecting(ALICE_TREVO, 46).unwrap_err(),
+            Ss58Error::UnexpectedFormat {
+                expected: 46,
+                found: SS58_FORMAT_TREVO_ASSET_HUB
+            }
+        );
+    }
+
+    #[test]
     fn test_ss58_error_display() {
         assert_eq!(
             format!("{}", Ss58Error::InvalidBase58),

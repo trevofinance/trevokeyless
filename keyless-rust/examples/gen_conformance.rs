@@ -113,22 +113,6 @@ fn is_valid_hex_account_id(s: &str) -> bool {
     bytes.len() == 66 && bytes.starts_with(b"0x") && bytes[2..].iter().all(u8::is_ascii_hexdigit)
 }
 
-/// Decodes with an expected format, mirroring the decode entry points of all three
-/// implementations: full validation first, then the format comparison. An address that
-/// fails validation reports its validation error, never a format mismatch.
-/// `tests_conformance.rs` uses the same construction to consume the `ss58_invalid`
-/// group.
-fn decode_expecting(address: &str, format: u16) -> Result<AccountId32, Ss58Error> {
-    let (account, found) = AccountId32::from_ss58check_with_version(address)?;
-    if found != format {
-        return Err(Ss58Error::UnexpectedFormat {
-            expected: format,
-            found,
-        });
-    }
-    Ok(account)
-}
-
 /// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
 /// `Ss58Error.kind` of the TypeScript and Python implementations.
 fn ss58_error_kind(error: &Ss58Error) -> &'static str {
@@ -654,7 +638,7 @@ fn main() {
             // The generator must never emit a vector whose declared kind differs from
             // the actual classification of this crate (decoding with the expected
             // format, exactly like the consuming suites).
-            let error = decode_expecting(&address, format)
+            let error = AccountId32::from_ss58check_expecting(&address, format)
                 .expect_err(&format!("self check: {reason:?} must not decode"));
             assert_eq!(
                 ss58_error_kind(&error),

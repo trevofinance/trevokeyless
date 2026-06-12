@@ -33,22 +33,6 @@ mod tests {
         bytes.iter().map(|b| format!("{b:02x}")).collect()
     }
 
-    /// Decodes with an expected format, mirroring the decode entry points of the Python
-    /// and TypeScript implementations (and `from_ss58check`, which is fixed to the
-    /// Trevo format): full validation first, then the format comparison. The same
-    /// construction lives in `examples/gen_conformance.rs`.
-    #[cfg(feature = "ss58")]
-    fn decode_expecting(address: &str, format: u16) -> Result<AccountId32, crate::Ss58Error> {
-        let (account, found) = AccountId32::from_ss58check_with_version(address)?;
-        if found != format {
-            return Err(crate::Ss58Error::UnexpectedFormat {
-                expected: format,
-                found,
-            });
-        }
-        Ok(account)
-    }
-
     /// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
     /// `Ss58Error.kind` of the TypeScript and Python implementations.
     #[cfg(feature = "ss58")]
@@ -157,7 +141,7 @@ mod tests {
             let account = account_from_hex(v["hex"].as_str().unwrap());
             let reason = v["reason"].as_str().unwrap();
             assert_eq!(
-                decode_expecting(address, format),
+                AccountId32::from_ss58check_expecting(address, format),
                 Ok(account),
                 "{address:?} must decode: {reason}"
             );
@@ -179,7 +163,7 @@ mod tests {
             let format = v["format"].as_u64().unwrap() as u16;
             let error_kind = v["error_kind"].as_str().unwrap();
             let reason = v["reason"].as_str().unwrap();
-            let error = decode_expecting(address, format)
+            let error = AccountId32::from_ss58check_expecting(address, format)
                 .expect_err(&format!("{address:?} must be rejected: {reason}"));
             assert_eq!(
                 ss58_error_kind(&error),
