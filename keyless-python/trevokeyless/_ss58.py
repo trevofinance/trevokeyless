@@ -20,8 +20,6 @@ This module is private to the package; only the entry points of
 from hashlib import blake2b
 from typing import Literal, TypeAlias
 
-import base58
-
 # Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
 # bound of the Rust implementation.
 SS58_FORMAT_MAX = 16383
@@ -51,12 +49,19 @@ _ACCOUNT_ID_LENGTH = 32
 # address is 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
 SS58_MAX_ADDRESS_LENGTH = 50
 
-# The 58 characters of the Bitcoin base58 alphabet used by SS58. base58.b58decode
-# right-strips whitespace from its input (str.rstrip) before decoding, which would give
-# every address additional accepted spellings such as "<address>\n"; the Rust (bs58) and
-# TypeScript (@scure/base) decoders reject any character outside the alphabet. The
-# charset is therefore checked explicitly before decoding.
-_BASE58_ALPHABET = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+# The 58 characters of the Bitcoin base58 alphabet used by SS58, in value order.
+_BASE58_ALPHABET_STR = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+# Value of each alphabet character, for decoding.
+_BASE58_INDEX = {char: index for index, char in enumerate(_BASE58_ALPHABET_STR)}
+
+# Charset of the alphabet, checked explicitly in ss58_decode before any base58
+# arithmetic so out-of-alphabet input always classifies as InvalidBase58. The codec
+# below is vendored: the historically used `base58` package right-stripped whitespace
+# from its input (str.rstrip), which would have given every address additional accepted
+# spellings such as "<address>\n"; the Rust (bs58) and TypeScript (@scure/base)
+# decoders reject any character outside the alphabet, and so does this one.
+_BASE58_ALPHABET = frozenset(_BASE58_ALPHABET_STR)
 
 Ss58ErrorKind: TypeAlias = Literal[
     "InvalidBase58",
@@ -113,6 +118,44 @@ class Ss58DecodeError(ValueError):
         """The SS58 format is reserved (46, 47), out of range (> 16383), or its prefix
         byte cannot be parsed."""
         return cls("InvalidFormat", "SS58 format is invalid or reserved")
+
+
+def _b58encode(data: bytes) -> str:
+    """Base58-encodes ``data`` with the Bitcoin alphabet.
+
+    Vendored so the package has no third-party runtime dependencies; the SS58 payloads
+    handled here are at most 36 bytes, so the big-int arithmetic is trivial. Each
+    leading zero byte encodes as one leading ``"1"`` character.
+    """
+    num = int.from_bytes(data, byteorder="big")
+    encoded: list[str] = []
+    while num:
+        num, digit = divmod(num, 58)
+        encoded.append(_BASE58_ALPHABET_STR[digit])
+    zeros = len(data) - len(data.lstrip(b"\x00"))
+    return "1" * zeros + "".join(reversed(encoded))
+
+
+def _b58decode(encoded: str) -> bytes:
+    """Base58-decodes ``encoded``, rejecting any character outside the alphabet.
+
+    Strict standalone: no whitespace tolerance of any kind (``ss58_decode``
+    additionally pre-checks the charset, so the classification never depends on this
+    decoder's rejection). Each leading ``"1"`` character decodes to one leading zero
+    byte.
+
+    Raises:
+        Ss58DecodeError: kind ``"InvalidBase58"`` on out-of-alphabet characters.
+    """
+    num = 0
+    for char in encoded:
+        digit = _BASE58_INDEX.get(char)
+        if digit is None:
+            raise Ss58DecodeError.invalid_base58()
+        num = num * 58 + digit
+    body = num.to_bytes((num.bit_length() + 7) // 8, byteorder="big")
+    zeros = len(encoded) - len(encoded.lstrip("1"))
+    return b"\x00" * zeros + body
 
 
 def _format_invalid(ss58_format: int) -> bool:
@@ -172,7 +215,7 @@ def ss58_encode(account_id: bytes, ss58_format: int) -> str:
             ]
         )
     payload = prefix + account_id
-    return base58.b58encode(payload + _ss58_hash(payload)[:_SS58_CHECKSUM_LENGTH]).decode("ascii")
+    return _b58encode(payload + _ss58_hash(payload)[:_SS58_CHECKSUM_LENGTH])
 
 
 def ss58_decode(address: str) -> tuple[bytes, int]:
@@ -200,7 +243,7 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
         raise Ss58DecodeError.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
         raise Ss58DecodeError.invalid_base58()
-    data = base58.b58decode(address)
+    data = _b58decode(address)
     if not data:
         raise Ss58DecodeError.invalid_length()
 

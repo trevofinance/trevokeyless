@@ -18,12 +18,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 
-dependencies = [
-  # 2.1.1 is the oldest release exercised by CI; the pre-2.x b58decode behaved
-  # differently around input handling, which the vendored _ss58 hardening relies on
-  # being consistent.
-  "base58>=2.1.1,<3"
-]
+# Zero runtime dependencies: the strict base58 codec is vendored in
+# trevokeyless._ss58 (the SS58 payloads are at most 36 bytes).
+dependencies = []
 
 [project.optional-dependencies]
 test = [

@@ -48,7 +48,10 @@ First public release line. Breaking changes from 0.4.0 (pre-1.0 API freeze):
   reference decoder (which checks the byte length of the input): non-ASCII input over
   50 bytes now raises kind `InvalidLength` instead of `InvalidBase58`, even when it
   stays within 50 characters. Pinned by new shared `ss58_invalid` vectors.
-- Dependency floor raised to `base58>=2.1.1`; added the `Typing :: Typed` classifier.
+- **Zero runtime dependencies:** the strict base58 codec is vendored in
+  `trevokeyless._ss58`; the `base58` package dependency is gone (its `str.rstrip`
+  input leniency was already being defended against with an explicit charset check,
+  which stays). Added the `Typing :: Typed` classifier.
 
 ## 0.4.0
 

@@ -9,11 +9,9 @@ import dataclasses
 import unittest
 from hashlib import blake2b
 
-import base58
-
 import trevokeyless
 from trevokeyless import AddressType, AddressTypeMismatchError, Ss58DecodeError
-from trevokeyless._ss58 import ss58_decode, ss58_encode
+from trevokeyless._ss58 import _b58decode, _b58encode, ss58_decode, ss58_encode
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -26,7 +24,7 @@ def _ss58_checksum(payload: bytes) -> bytes:
 
 def _raw_ss58(payload: bytes, checksum_length: int = 2) -> str:
     """Wraps a raw prefix+data payload in an SS58 envelope with a valid checksum."""
-    return base58.b58encode(payload + _ss58_checksum(payload)[:checksum_length]).decode()
+    return _b58encode(payload + _ss58_checksum(payload)[:checksum_length])
 
 
 def _format_prefix(ss58_format: int) -> bytes:
@@ -152,9 +150,9 @@ class TestMalformedSs58(unittest.TestCase):
 
     def test_rejects_tampered_ss58_checksum(self: "TestMalformedSs58") -> None:
         address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
-        payload = bytearray(base58.b58decode(address))
+        payload = bytearray(_b58decode(address))
         payload[-1] ^= 0xFF
-        tampered = base58.b58encode(bytes(payload)).decode()
+        tampered = _b58encode(bytes(payload))
         with self.assertRaisesRegex(Ss58DecodeError, "^Address has an invalid checksum$") as ctx:
             trevokeyless.decode_address(tampered, SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidChecksum")
@@ -253,8 +251,9 @@ class TestSurroundingWhitespace(unittest.TestCase):
     """An address with surrounding whitespace is not the canonical spelling of the
     account: whitespace is outside the base58 alphabet and must be rejected, as in the
     Rust and TypeScript implementations (pinned by the ss58_invalid conformance
-    vectors). base58.b58decode right-strips its input, so the charset is checked
-    explicitly before decoding."""
+    vectors). The historically used base58 package right-stripped its input; the
+    vendored decoder rejects out-of-alphabet characters outright, and the charset is
+    still checked explicitly before decoding."""
 
     def test_decode_rejects_surrounding_whitespace(self: "TestSurroundingWhitespace") -> None:
         address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
@@ -284,6 +283,36 @@ class TestSurroundingWhitespace(unittest.TestCase):
         with self.assertRaises(Ss58DecodeError) as ctx:
             trevokeyless.decode_address(address + "\u00a0", SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
+
+
+class TestVendoredBase58(unittest.TestCase):
+    """The vendored strict base58 codec (Bitcoin alphabet, no whitespace tolerance,
+    leading "1" characters encode leading zero bytes). The SS58 conformance vectors
+    exercise it end to end - including format 0, whose single 0x00 prefix byte covers
+    the leading-zero path; these tests pin the primitive directly."""
+
+    def test_round_trips(self: "TestVendoredBase58") -> None:
+        payloads = [b"", b"\x00", b"\x00\x00\x00", b"\x00abc", b"\xff" * 36, bytes(range(36))]
+        for data in payloads:
+            with self.subTest(data=data):
+                self.assertEqual(_b58decode(_b58encode(data)), data)
+
+    def test_known_vectors(self: "TestVendoredBase58") -> None:
+        # Reference vectors of the Bitcoin base58 alphabet.
+        self.assertEqual(_b58encode(b"Hello World!"), "2NEpo7TZRRrLZSi2U")
+        self.assertEqual(_b58decode("2NEpo7TZRRrLZSi2U"), b"Hello World!")
+        self.assertEqual(_b58encode(b"\x00\x00abc"), "11ZiCa")
+        self.assertEqual(_b58decode("11ZiCa"), b"\x00\x00abc")
+        self.assertEqual(_b58encode(bytes(36)), "1" * 36)
+
+    def test_decode_rejects_out_of_alphabet(self: "TestVendoredBase58") -> None:
+        # '0', 'O', 'I', and 'l' are excluded from the alphabet; whitespace anywhere
+        # (the leniency of the historically used base58 package) must also be rejected.
+        for bad in ["0", "O", "I", "l", "1 1", "abc\n", " abc", "abc "]:
+            with self.subTest(bad=bad):
+                with self.assertRaises(Ss58DecodeError) as ctx:
+                    _b58decode(bad)
+                self.assertEqual(ctx.exception.kind, "InvalidBase58")
 
 
 class TestStrictCodecContract(unittest.TestCase):
@@ -604,9 +633,9 @@ class TestSs58FormatMismatchError(unittest.TestCase):
         # like the Rust from_ss58check (the format mismatch error must not claim that a
         # corrupt string is "a valid address of another network").
         substrate_generic = trevokeyless.encode_app_agent_address(123, 42)
-        payload = bytearray(base58.b58decode(substrate_generic))
+        payload = bytearray(_b58decode(substrate_generic))
         payload[-1] ^= 0xFF
-        corrupted = base58.b58encode(bytes(payload)).decode()
+        corrupted = _b58encode(bytes(payload))
         with self.assertRaises(Ss58DecodeError) as ctx:
             trevokeyless.decode_address(corrupted, SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidChecksum")
