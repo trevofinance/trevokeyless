@@ -6,13 +6,10 @@
  * The crafted inputs are built with the reference construction rules so that each test
  * documents exactly what is being fed to the decoder.
  */
-import {
-  base58Decode,
-  base58Encode,
-  blake2AsU8a,
-  encodeAddress,
-} from "@polkadot/util-crypto";
-import { u8aConcat, u8aToHex } from "@polkadot/util";
+import { blake2b } from "@noble/hashes/blake2b";
+import { bytesToHex, concatBytes } from "@noble/hashes/utils";
+import { base58 } from "@scure/base";
+import { ss58Encode } from "../src/ss58";
 import {
   AddressType,
   AddressTypeMismatchError,
@@ -25,6 +22,7 @@ import {
   encodeNamed,
   encodeTransactional,
   isKeylessAddress,
+  Ss58Error,
   SS58_MAX_ADDRESS_LENGTH,
 } from "../src/keyless";
 
@@ -33,15 +31,20 @@ const U32_MAX = 4294967295;
 
 const SS58_PREFIX = Uint8Array.from("SS58PRE", (c) => c.charCodeAt(0));
 
+/** "0x"-prefixed lowercase hex of the given bytes. */
+function u8aToHex(bytes: Uint8Array): string {
+  return `0x${bytesToHex(bytes)}`;
+}
+
 /** First bytes of blake2b-512("SS58PRE" ++ payload) are the SS58 checksum. */
 function ss58Checksum(payload: Uint8Array): Uint8Array {
-  return blake2AsU8a(u8aConcat(SS58_PREFIX, payload), 512);
+  return blake2b(concatBytes(SS58_PREFIX, payload), { dkLen: 64 });
 }
 
 /** Wraps a raw prefix+data payload in an SS58 envelope with a valid checksum. */
 function rawSs58(payload: Uint8Array, checksumLength = 2): string {
-  return base58Encode(
-    u8aConcat(payload, ss58Checksum(payload).slice(0, checksumLength)),
+  return base58.encode(
+    concatBytes(payload, ss58Checksum(payload).slice(0, checksumLength)),
   );
 }
 
@@ -60,8 +63,8 @@ function formatPrefix(format: number): Uint8Array {
 
 /** 32-byte keyless account id: open part + trailing bytes of its blake2b-256 hash. */
 function keylessAccount(openPart: Uint8Array): Uint8Array {
-  const checksum = blake2AsU8a(openPart);
-  return u8aConcat(openPart, checksum.slice(openPart.length));
+  const checksum = blake2b(openPart, { dkLen: 32 });
+  return concatBytes(openPart, checksum.slice(openPart.length));
 }
 
 // The AppAgent(123) account used by the shared golden vectors.
@@ -119,7 +122,7 @@ describe("Boundary values", () => {
   });
 
   it("rejects a fractional ss58Format at encoding time", () => {
-    // encodeAddress range-checks the format but its bitwise prefix arithmetic would
+    // The SS58 layer range-checks the format but its bitwise prefix arithmetic would
     // silently truncate fractional values to an integer format.
     [5335.5, NaN].forEach((badFormat) => {
       expect(() => encodeAppAgent(123, badFormat)).toThrow(
@@ -143,10 +146,10 @@ describe("ss58Format validation", () => {
     });
   });
 
-  it("rejects -1 instead of treating it as the @polkadot any-format sentinel", () => {
-    // The underlying @polkadot decoder interprets -1 as "accept any format"; passing
-    // it through would silently disable the expected-format check, so an address of a
-    // *different* format must still be rejected with -1.
+  it("rejects -1 instead of treating it as an any-format sentinel", () => {
+    // Some Substrate decoders (e.g. @polkadot) interpret -1 as "accept any format";
+    // here it must be rejected like any other out-of-range value, so an address of a
+    // *different* format is never silently accepted.
     const substrateGenericAddress = encodeAppAgent(123, 42);
     expect(() => decodeAddress(substrateGenericAddress, -1)).toThrow(
       /ss58Format must be an integer in \[0, 16383\]/,
@@ -158,7 +161,9 @@ describe("ss58Format validation", () => {
     // carries no SS58 format, so accepting it here would silently bypass the
     // expected-format check. decodeAccountId (which takes no format) handles them.
     expect(() => decodeAddress(u8aToHex(appAgent123), ss58Format)).toThrow(
-      new Error("Raw account id hex is not an SS58 address; use decodeAccountId"),
+      new Error(
+        "Raw account id hex is not an SS58 address; use decodeAccountId",
+      ),
     );
     expect(() => isKeylessAddress(u8aToHex(appAgent123), ss58Format)).toThrow(
       /use decodeAccountId/,
@@ -193,7 +198,10 @@ describe("Account id length", () => {
       Uint8Array.of(0xde, 0xad, 0xbe, 0xef),
       new Uint8Array(8),
     ].forEach((payload) => {
-      const address = rawSs58(u8aConcat(formatPrefix(ss58Format), payload), 1);
+      const address = rawSs58(
+        concatBytes(formatPrefix(ss58Format), payload),
+        1,
+      );
       expect(() => decodeAddress(address, ss58Format)).toThrow();
     });
   });
@@ -201,17 +209,16 @@ describe("Account id length", () => {
   it("rejects a 33-byte payload", () => {
     // A 33-byte payload (ECDSA-style public key) is legal generic SS58 but never a
     // 32-byte account id.
-    const address = encodeAddress(
-      u8aConcat(appAgent123, Uint8Array.of(0)),
-      ss58Format,
+    const address = rawSs58(
+      concatBytes(formatPrefix(ss58Format), appAgent123, Uint8Array.of(0)),
     );
     expect(() => decodeAddress(address, ss58Format)).toThrow();
   });
 
   it("rejects a 31-byte payload", () => {
-    // Not a legal SS58 length at all; built manually since encodeAddress refuses it.
+    // Not a legal SS58 length at all; built manually since ss58Encode refuses it.
     const address = rawSs58(
-      u8aConcat(formatPrefix(ss58Format), appAgent123.slice(0, 31)),
+      concatBytes(formatPrefix(ss58Format), appAgent123.slice(0, 31)),
     );
     expect(() => decodeAddress(address, ss58Format)).toThrow();
   });
@@ -220,13 +227,13 @@ describe("Account id length", () => {
 describe("Malformed SS58 input", () => {
   it("rejects a tampered SS58 checksum", () => {
     const address = encodeAppAgent(123, ss58Format);
-    const payload = base58Decode(address);
+    const payload = base58.decode(address);
     /* eslint-disable no-bitwise */
     payload[payload.length - 1] ^= 0xff;
     /* eslint-enable no-bitwise */
-    const tampered = base58Encode(payload);
+    const tampered = base58.encode(payload);
     expect(() => decodeAddress(tampered, ss58Format)).toThrow(
-      /Invalid decoded address checksum/,
+      new Error("Address has an invalid checksum"),
     );
   });
 
@@ -238,14 +245,14 @@ describe("Malformed SS58 input", () => {
     /* eslint-disable no-bitwise */
     account[10] ^= 0xff;
     /* eslint-enable no-bitwise */
-    const address = encodeAddress(account, ss58Format);
+    const address = ss58Encode(account, ss58Format);
     const info = decodeAddress(address, ss58Format);
     expect(info.addressType).toEqual(AddressType.Regular);
     expect(info.appAgentId).toBeNull();
   });
 
   it("rejects the reserved format 46, crafted with a valid checksum", () => {
-    const address = rawSs58(u8aConcat(formatPrefix(46), appAgent123));
+    const address = rawSs58(concatBytes(formatPrefix(46), appAgent123));
     expect(() => decodeAddress(address, 46)).toThrow();
   });
 
@@ -258,9 +265,9 @@ describe("Malformed SS58 input", () => {
         ((reserved & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
         (reserved >> 8) | ((reserved & 0b0000_0000_0000_0011) << 6),
       );
-      const address = rawSs58(u8aConcat(prefix, appAgent123));
+      const address = rawSs58(concatBytes(prefix, appAgent123));
       expect(() => decodeAddress(address, reserved)).toThrow(
-        new Error(`${reserved} is a reserved SS58 format`),
+        new Error("SS58 format is invalid or reserved"),
       );
     });
     /* eslint-enable no-bitwise */
@@ -271,17 +278,17 @@ describe("Malformed SS58 input", () => {
     // prefix + 32-byte account + one-byte checksum), which would give every account a
     // second, shorter address string; the Rust and Python implementations reject it.
     const address = rawSs58(
-      u8aConcat(formatPrefix(ss58Format), appAgent123),
+      concatBytes(formatPrefix(ss58Format), appAgent123),
       1,
     );
     expect(() => decodeAddress(address, ss58Format)).toThrow(
-      new Error("Invalid address length"),
+      new Error("Address has an invalid length"),
     );
   });
 
   it("rejects a prefix byte in the reserved range 128..=255", () => {
     // Per the SS58 spec the first byte must be 0..=63 or 64..=127.
-    const address = rawSs58(u8aConcat(Uint8Array.of(0x80), appAgent123));
+    const address = rawSs58(concatBytes(Uint8Array.of(0x80), appAgent123));
     expect(() => decodeAddress(address, 128)).toThrow();
   });
 
@@ -295,7 +302,7 @@ describe("Malformed SS58 input", () => {
       (smallFormat >> 8) | ((smallFormat & 0b0000_0000_0000_0011) << 6),
     );
     /* eslint-enable no-bitwise */
-    const address = rawSs58(u8aConcat(nonCanonicalPrefix, appAgent123));
+    const address = rawSs58(concatBytes(nonCanonicalPrefix, appAgent123));
     const info = decodeAddress(address, smallFormat);
     expect(info.addressType).toEqual(AddressType.AppAgent);
     expect(info.appAgentId).toEqual(123);
@@ -322,7 +329,7 @@ describe("Malformed SS58 input", () => {
   it("rejects oversized input before base58 decoding", () => {
     const oversized = "1".repeat(SS58_MAX_ADDRESS_LENGTH + 1);
     expect(() => decodeAddress(oversized, ss58Format)).toThrow(
-      new Error("Invalid address length"),
+      new Error("Address has an invalid length"),
     );
   });
 
@@ -330,7 +337,7 @@ describe("Malformed SS58 input", () => {
     // The longest legitimate addresses (two-byte prefix, high account id bytes) stay
     // within the bound and must still decode.
     const maxFormat = 16383;
-    const address = encodeAddress(new Uint8Array(32).fill(0xff), maxFormat);
+    const address = ss58Encode(new Uint8Array(32).fill(0xff), maxFormat);
     expect(address.length).toBeLessThanOrEqual(SS58_MAX_ADDRESS_LENGTH);
     const info = decodeAddress(address, maxFormat);
     expect(info.addressType).toEqual(AddressType.Regular);
@@ -361,9 +368,7 @@ describe("Hex account id contract", () => {
   it("rejects hex of the wrong length", () => {
     ["0x", "0xdeadbeef", `${u8aToHex(appAgent123)}00`, "0xabc"].forEach(
       (badHex) => {
-        expect(() => decodeAccountId(badHex)).toThrow(
-          /Invalid hex account id/,
-        );
+        expect(() => decodeAccountId(badHex)).toThrow(/Invalid hex account id/);
       },
     );
   });
@@ -401,6 +406,49 @@ describe("isKeylessAddress", () => {
     // classified via decodeAccountId.
     const info = decodeAccountId(`0x${"00".repeat(32)}`);
     expect(info.addressType).toEqual(AddressType.Regular);
+  });
+});
+
+describe("Ss58Error", () => {
+  // The SS58 errors mirror the Rust Ss58Error enum: `kind` is the variant name and the
+  // message matches the Rust Display output. The wrong-format error carries the
+  // expected and the found format (the Python Ss58FormatMismatchError reports the same
+  // pair).
+
+  it("carries the expected and found formats on a format mismatch", () => {
+    const substrateGeneric = encodeAppAgent(123, 42);
+
+    let thrown: unknown;
+    try {
+      decodeAddress(substrateGeneric, ss58Format);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Ss58Error);
+    const mismatch = thrown as Ss58Error;
+    expect(mismatch.kind).toEqual("UnexpectedFormat");
+    expect(mismatch.expected).toEqual(ss58Format);
+    expect(mismatch.found).toEqual(42);
+    expect(mismatch.message).toEqual("Expected SS58 format 5335 but found 42");
+  });
+
+  it("classifies the failure via kind", () => {
+    const cases: [string, string][] = [
+      ["0OIl", "InvalidBase58"],
+      ["1".repeat(SS58_MAX_ADDRESS_LENGTH + 1), "InvalidLength"],
+      [rawSs58(concatBytes(formatPrefix(46), appAgent123)), "InvalidFormat"],
+    ];
+    cases.forEach(([input, expectedKind]) => {
+      let thrown: unknown;
+      try {
+        decodeAddress(input, ss58Format);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(Ss58Error);
+      expect((thrown as Ss58Error).kind).toEqual(expectedKind);
+    });
   });
 });
 

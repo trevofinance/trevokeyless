@@ -35,9 +35,7 @@ describe("AppAgent", () => {
 
   it("Decoding of AppAgent address to AppAgent ID takes into account SS58 format.", () => {
     expect(() => decodeAppAgent(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 
@@ -56,9 +54,7 @@ describe("AppAgent", () => {
 
   it("Decoding of AppAgent address to address info takes into account SS58 format.", () => {
     expect(() => decodeAddress(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 });
@@ -100,9 +96,7 @@ describe("Transactional", () => {
 
   it("Decoding of Transactional address to Transactional ID takes into account SS58 format.", () => {
     expect(() => decodeTransactional(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 
@@ -121,9 +115,7 @@ describe("Transactional", () => {
 
   it("Decoding of Transactional address to address info takes into account SS58 format.", () => {
     expect(() => decodeAddress(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 });
@@ -158,9 +150,7 @@ describe("Named", () => {
 
   it("Decoding of Named address to address name takes into account SS58 format.", () => {
     expect(() => decodeNamed(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 
@@ -179,9 +169,7 @@ describe("Named", () => {
 
   it("Decoding of Named address to address info takes into account SS58 format.", () => {
     expect(() => decodeAddress(blockchain_address, 42)).toThrow(
-      new Error(
-        "Decoding ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k: Expected ss58Format 42, received 5335",
-      ),
+      new Error("Expected SS58 format 42 but found 5335"),
     );
   });
 });

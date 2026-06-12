@@ -1,4 +1,5 @@
-import { blake2AsU8a, encodeAddress } from "@polkadot/util-crypto";
+import { blake2b } from "@noble/hashes/blake2b";
+import { ss58Encode } from "../src/ss58";
 import {
   encodeAppAgent,
   encodeTransactional,
@@ -142,12 +143,12 @@ describe("Named address with invalid name bytes", () => {
       Buffer.from([AddressType.Named]),
       Buffer.from(nameBytes),
     ]);
-    const checksum = blake2AsU8a(openPart);
+    const checksum = blake2b(openPart, { dkLen: 32 });
     const accountId = Buffer.concat([
       openPart,
       Buffer.from(checksum.slice(openPart.length)),
     ]);
-    return encodeAddress(accountId, ss58_format);
+    return ss58Encode(accountId, ss58_format);
   }
 
   const invalidNames: [string, Uint8Array][] = [

@@ -1,10 +1,11 @@
+import { blake2b } from "@noble/hashes/blake2b";
+import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils";
 import {
-  base58Decode,
-  blake2AsU8a,
-  decodeAddress as decodeAddressSs58,
-  encodeAddress,
-} from "@polkadot/util-crypto";
-import { hexToU8a, u8aConcat, u8aEq, u8aToHex } from "@polkadot/util";
+  SS58_MAX_ADDRESS_LENGTH,
+  Ss58Error,
+  ss58Decode,
+  ss58Encode,
+} from "./ss58";
 
 const APP_AGENT_ADDRESS_IDENTIFIER = 1;
 const TRANSACTIONAL_ADDRESS_IDENTIFIER = 2;
@@ -15,16 +16,6 @@ const SS58_FORMAT__TREVO_ASSET_HUB = 5335;
 
 // Length in bytes of a blockchain account id.
 const ACCOUNT_ID_BYTES_LENGTH = 32;
-
-// Length in bytes of the SS58 checksum of a 32-byte account id.
-const SS58_CHECKSUM_LENGTH = 2;
-
-// Maximum length in characters of an SS58 address of a 32-byte account id: the payload
-// is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
-// base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
-// ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-// whose cost grows quadratically with the input length. Mirrors the Rust implementation.
-const SS58_MAX_ADDRESS_LENGTH = 50;
 
 // A raw account id accepted by decodeAccountId: 0x followed by exactly 64 hex
 // characters. (The Python implementation uses the same expression; the Rust
@@ -116,11 +107,9 @@ function u32FromLeBytes(bytes: Uint8Array, offset: number): number {
  * 14 bits).
  *
  * The Rust implementation enforces this through the u16 type plus a range check; the
- * Python implementation performs the equivalent runtime check. Without it, fractional
- * values would be silently truncated by the prefix bit arithmetic of the underlying
- * encoder, and -1 would be passed through to the underlying @polkadot decoder, where it
- * acts as an "accept any format" sentinel and would silently disable the expected-format
- * check. The reserved formats 46 and 47 are rejected separately by the SS58 layer.
+ * Python implementation performs the equivalent runtime check. Rejecting the format up
+ * front gives the caller a clear message naming the parameter; the SS58 layer rejects
+ * the reserved formats 46 and 47 separately.
  *
  * @param {number} ss58Format - The SS58 format to validate.
  * @throws {Error} - Thrown if the format is not an integer in [0, 16383].
@@ -173,6 +162,36 @@ function isValidAddressNameBytes(nameBytes: Uint8Array): boolean {
 }
 
 /**
+ * The 32-byte blake2b-256 hash used for keyless account checksums.
+ *
+ * @param {Uint8Array} data - The data to hash.
+ * @returns {Uint8Array} - The 32-byte digest.
+ */
+function blake2b256(data: Uint8Array): Uint8Array {
+  return blake2b(data, { dkLen: 32 });
+}
+
+/**
+ * Compares two byte arrays for equality. Constant time is not required: every input of
+ * this library is a public identifier, no secrets are processed anywhere.
+ *
+ * @param {Uint8Array} a - The first array.
+ * @param {Uint8Array} b - The second array.
+ * @returns {boolean} - True if the arrays have equal length and contents.
+ */
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Builds a keyless account id from its open part and wraps it in an SS58 address.
  *
  * The 32-byte account id is `openPart ++ blake2_256(openPart)[openPart.length..]` —
@@ -187,9 +206,9 @@ function encodeKeylessAccount(
   ss58Format: number,
 ): string {
   validateSs58Format(ss58Format);
-  const checksum = blake2AsU8a(openPart);
-  const accountId = u8aConcat(openPart, checksum.slice(openPart.length));
-  return encodeAddress(accountId, ss58Format);
+  const checksum = blake2b256(openPart);
+  const accountId = concatBytes(openPart, checksum.slice(openPart.length));
+  return ss58Encode(accountId, ss58Format);
 }
 
 /**
@@ -202,7 +221,7 @@ function encodeAppAgent(
   appAgentId: number,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): string {
-  const openPart = u8aConcat(
+  const openPart = concatBytes(
     u32ToLeBytes(appAgentId, "appAgentId"),
     Uint8Array.of(APP_AGENT_ADDRESS_IDENTIFIER),
   );
@@ -221,7 +240,7 @@ function encodeTransactional(
   taId: number,
   ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
 ): string {
-  const openPart = u8aConcat(
+  const openPart = concatBytes(
     u32ToLeBytes(appAgentId, "appAgentId"),
     Uint8Array.of(TRANSACTIONAL_ADDRESS_IDENTIFIER),
     u32ToLeBytes(taId, "taId"),
@@ -245,7 +264,7 @@ function encodeNamed(
 
   // The name is validated ASCII, so the char codes are exactly the encoded bytes.
   const nameBytes = Uint8Array.from(name, (c) => c.charCodeAt(0));
-  const openPart = u8aConcat(
+  const openPart = concatBytes(
     u32ToLeBytes(appAgentId, "appAgentId"),
     Uint8Array.of(NAMED_ADDRESS_IDENTIFIER),
     nameBytes,
@@ -274,45 +293,114 @@ function decodeSs58AccountId(address: string, ss58Format: number): Uint8Array {
     );
   }
 
-  if (address.length > SS58_MAX_ADDRESS_LENGTH) {
-    // No valid address of a 32-byte account id is longer; rejecting early keeps the
-    // cost of base58-decoding untrusted input bounded.
-    throw new Error("Invalid address length");
-  }
-  const accountId = decodeAddressSs58(address, false, ss58Format);
-  if (accountId.length !== ACCOUNT_ID_BYTES_LENGTH) {
-    throw new Error(
-      `Invalid account id length: expected ${ACCOUNT_ID_BYTES_LENGTH} bytes, got ${accountId.length}`,
-    );
-  }
-
-  // decodeAddressSs58 validates base58, the SS58 checksum, and the expected format, but
-  // it also accepts legacy payload shapes that the Rust and Python implementations
-  // reject: a one-byte checksum after a two-byte prefix (which would give every account
-  // a second, shorter address spelling with only 8 bits of checksum) and two-byte-prefix
-  // encodings of the reserved formats 46 and 47. Enforce the canonical structure:
-  // prefix, account id, and a full two-byte checksum, with a non-reserved format.
-  /* eslint-disable no-bitwise */
-  const decoded = base58Decode(address);
-  const prefixLength = (decoded[0] & 0b0100_0000) === 0 ? 1 : 2;
-  if (
-    decoded.length !==
-    prefixLength + ACCOUNT_ID_BYTES_LENGTH + SS58_CHECKSUM_LENGTH
-  ) {
-    throw new Error("Invalid address length");
-  }
-  const embeddedFormat =
-    prefixLength === 1
-      ? decoded[0]
-      : ((decoded[0] & 0b0011_1111) << 2) |
-        (decoded[1] >> 6) |
-        ((decoded[1] & 0b0011_1111) << 8);
-  /* eslint-enable no-bitwise */
-  if (embeddedFormat === 46 || embeddedFormat === 47) {
-    throw new Error(`${embeddedFormat} is a reserved SS58 format`);
+  // ss58Decode enforces the canonical structure exactly like the Rust reference
+  // implementation: the 50-character pre-bound, a 1- or 2-byte prefix, a 32-byte
+  // account id, a full two-byte checksum, and a non-reserved format.
+  const { accountId, format } = ss58Decode(address);
+  if (format !== ss58Format) {
+    throw Ss58Error.unexpectedFormat(ss58Format, format);
   }
 
   return accountId;
+}
+
+/**
+ * Classifies a 32-byte account id and extracts any embedded keyless identifiers.
+ *
+ * @param {string} address - The original input (SS58 address or account id hex),
+ *   stored verbatim in the `address` field of the result.
+ * @param {Uint8Array} accountId - The 32-byte account id.
+ * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
+ */
+function classifyAccountId(
+  address: string,
+  accountId: Uint8Array,
+): BlockchainAddressInfo {
+  const accountIdHex = `0x${bytesToHex(accountId)}`;
+
+  // Read the byte that encodes type of the address
+  const addressTypeByte = accountId[4];
+
+  if (addressTypeByte === APP_AGENT_ADDRESS_IDENTIFIER) {
+    // Verify checksum
+    const openPartSize = 5;
+    const openPart = accountId.slice(0, openPartSize);
+    const checksum = accountId.slice(openPartSize);
+    const checksumCalculated = blake2b256(openPart).slice(openPartSize);
+    if (bytesEqual(checksum, checksumCalculated)) {
+      // Extract and decode appAgentId
+      const appAgentId = u32FromLeBytes(accountId, 0);
+
+      return {
+        address,
+        accountId: accountIdHex,
+        addressType: AddressType.AppAgent,
+        appAgentId,
+        taId: null,
+        addressName: null,
+      };
+    }
+  }
+
+  if (addressTypeByte === TRANSACTIONAL_ADDRESS_IDENTIFIER) {
+    // Verify checksum
+    const openPartSize = 9;
+    const openPart = accountId.slice(0, openPartSize);
+    const checksum = accountId.slice(openPartSize);
+    const checksumCalculated = blake2b256(openPart).slice(openPartSize);
+    if (bytesEqual(checksum, checksumCalculated)) {
+      // Extract and decode appAgentId and taId
+      const appAgentId = u32FromLeBytes(accountId, 0);
+      const taId = u32FromLeBytes(accountId, 5);
+
+      return {
+        address,
+        accountId: accountIdHex,
+        addressType: AddressType.Transactional,
+        appAgentId,
+        taId,
+        addressName: null,
+      };
+    }
+  }
+
+  if (addressTypeByte === NAMED_ADDRESS_IDENTIFIER) {
+    // Verify checksum
+    const openPartSize = 15;
+    const openPart = accountId.slice(0, openPartSize);
+    const checksum = accountId.slice(openPartSize);
+    const checksumCalculated = blake2b256(openPart).slice(openPartSize);
+    // The name bytes must additionally pass charset validation: an address with a valid
+    // checksum over invalid name bytes is classified as Regular, in line with the Rust
+    // implementation.
+    const nameBytes = accountId.slice(5, 15);
+    if (
+      bytesEqual(checksum, checksumCalculated) &&
+      isValidAddressNameBytes(nameBytes)
+    ) {
+      // Extract and decode appAgentId and addressName
+      const appAgentId = u32FromLeBytes(accountId, 0);
+      const addressName = String.fromCharCode(...nameBytes);
+
+      return {
+        address,
+        accountId: accountIdHex,
+        addressType: AddressType.Named,
+        appAgentId,
+        taId: null,
+        addressName,
+      };
+    }
+  }
+
+  return {
+    address,
+    accountId: accountIdHex,
+    addressType: AddressType.Regular,
+    appAgentId: null,
+    taId: null,
+    addressName: null,
+  };
 }
 
 /**
@@ -354,106 +442,7 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
       "Invalid hex account id: expected 0x followed by 64 hex characters",
     );
   }
-  return classifyAccountId(accountId, hexToU8a(accountId));
-}
-
-/**
- * Classifies a 32-byte account id and extracts any embedded keyless identifiers.
- *
- * @param {string} address - The original input (SS58 address or account id hex),
- *   stored verbatim in the `address` field of the result.
- * @param {Uint8Array} accountId - The 32-byte account id.
- * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
- */
-function classifyAccountId(
-  address: string,
-  accountId: Uint8Array,
-): BlockchainAddressInfo {
-  const accountIdHex = u8aToHex(accountId);
-
-  // Read the byte that encodes type of the address
-  const addressTypeByte = accountId[4];
-
-  if (addressTypeByte === APP_AGENT_ADDRESS_IDENTIFIER) {
-    // Verify checksum
-    const openPartSize = 5;
-    const openPart = accountId.slice(0, openPartSize);
-    const checksum = accountId.slice(openPartSize);
-    const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    if (u8aEq(checksum, checksumCalculated)) {
-      // Extract and decode appAgentId
-      const appAgentId = u32FromLeBytes(accountId, 0);
-
-      return {
-        address,
-        accountId: accountIdHex,
-        addressType: AddressType.AppAgent,
-        appAgentId,
-        taId: null,
-        addressName: null,
-      };
-    }
-  }
-
-  if (addressTypeByte === TRANSACTIONAL_ADDRESS_IDENTIFIER) {
-    // Verify checksum
-    const openPartSize = 9;
-    const openPart = accountId.slice(0, openPartSize);
-    const checksum = accountId.slice(openPartSize);
-    const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    if (u8aEq(checksum, checksumCalculated)) {
-      // Extract and decode appAgentId and taId
-      const appAgentId = u32FromLeBytes(accountId, 0);
-      const taId = u32FromLeBytes(accountId, 5);
-
-      return {
-        address,
-        accountId: accountIdHex,
-        addressType: AddressType.Transactional,
-        appAgentId,
-        taId,
-        addressName: null,
-      };
-    }
-  }
-
-  if (addressTypeByte === NAMED_ADDRESS_IDENTIFIER) {
-    // Verify checksum
-    const openPartSize = 15;
-    const openPart = accountId.slice(0, openPartSize);
-    const checksum = accountId.slice(openPartSize);
-    const checksumCalculated = blake2AsU8a(openPart).slice(openPartSize);
-    // The name bytes must additionally pass charset validation: an address with a valid
-    // checksum over invalid name bytes is classified as Regular, in line with the Rust
-    // implementation.
-    const nameBytes = accountId.slice(5, 15);
-    if (
-      u8aEq(checksum, checksumCalculated) &&
-      isValidAddressNameBytes(nameBytes)
-    ) {
-      // Extract and decode appAgentId and addressName
-      const appAgentId = u32FromLeBytes(accountId, 0);
-      const addressName = String.fromCharCode(...nameBytes);
-
-      return {
-        address,
-        accountId: accountIdHex,
-        addressType: AddressType.Named,
-        appAgentId,
-        taId: null,
-        addressName,
-      };
-    }
-  }
-
-  return {
-    address,
-    accountId: accountIdHex,
-    addressType: AddressType.Regular,
-    appAgentId: null,
-    taId: null,
-    addressName: null,
-  };
+  return classifyAccountId(accountId, hexToBytes(accountId.slice(2)));
 }
 
 /**
@@ -610,6 +599,7 @@ function isKeylessAddress(
 export {
   AddressType,
   AddressTypeMismatchError,
+  Ss58Error,
   BlockchainAddressInfo,
   DecodedTransactionalAddress,
   DecodedNamedAddress,
