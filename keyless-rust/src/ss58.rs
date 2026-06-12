@@ -30,7 +30,10 @@ const SS58_CHECKSUM_LENGTH: usize = 2;
 /// longer input before base58 decoding, whose cost grows quadratically with the input
 /// length; callers handling untrusted address strings can apply the same bound up front.
 ///
-/// The Python and TypeScript trevo-keyless libraries export the same constant.
+/// The bound is applied to the **UTF-8 byte length** of the input (`str::len`), which is
+/// identical to the character count for the all-ASCII base58 alphabet; the Python and
+/// TypeScript trevo-keyless libraries export the same constant and apply the same
+/// byte-length rule, so the rejection kind of non-ASCII garbage cannot drift.
 pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
@@ -137,9 +140,9 @@ impl AccountId32 {
     /// Decodes an SS58 address of any (non-reserved) format, returning the account id and
     /// the format found in the address.
     ///
-    /// Input longer than the maximum length of a valid address (50 characters) is rejected
-    /// with [`Ss58Error::InvalidLength`] before base58 decoding, so the cost of decoding
-    /// untrusted input stays bounded.
+    /// Input longer than the maximum length of a valid address (50 UTF-8 bytes, see
+    /// [`SS58_MAX_ADDRESS_LENGTH`]) is rejected with [`Ss58Error::InvalidLength`] before
+    /// base58 decoding, so the cost of decoding untrusted input stays bounded.
     pub fn from_ss58check_with_version(address: &str) -> Result<(Self, u16), Ss58Error> {
         if address.len() > SS58_MAX_ADDRESS_LENGTH {
             return Err(Ss58Error::InvalidLength);

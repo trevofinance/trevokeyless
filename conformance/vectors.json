@@ -704,7 +704,10 @@
 {"ss58":" ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"error_kind":"InvalidBase58","reason":"canonical address with a leading space"},
 {"ss58":"TTOWkP8aMqUgFBbgIKg2PBDynNeRHhrAlRDKTjEzeFjvEvNtP","format":5335,"error_kind":"InvalidBase58","reason":"case-swapped spelling of a canonical address"},
 {"ss58":"ttowKp8AmQuGfbBGikG20bdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"error_kind":"InvalidBase58","reason":"canonical address with one character replaced by '0' (outside the base58 alphabet)"},
-{"ss58":"ttowKp8AmQuGfbBGikG2IbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"error_kind":"InvalidBase58","reason":"canonical address with one character replaced by 'I' (outside the base58 alphabet)"}
+{"ss58":"ttowKp8AmQuGfbBGikG2IbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"error_kind":"InvalidBase58","reason":"canonical address with one character replaced by 'I' (outside the base58 alphabet)"},
+{"ss58":"éééééééééééééééééééééééééé","format":5335,"error_kind":"InvalidLength","reason":"26 two-byte UTF-8 characters: 26 code points but 52 bytes, over the 50-byte bound"},
+{"ss58":"𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞𝄞","format":5335,"error_kind":"InvalidLength","reason":"26 four-byte UTF-8 characters: 52 UTF-16 units and 104 bytes, over the 50-byte bound"},
+{"ss58":"é","format":5335,"error_kind":"InvalidBase58","reason":"single non-ASCII character, within the length bound"}
 ],
 "named_invalid_encode": [
 {"name":"","reason":"empty string"},

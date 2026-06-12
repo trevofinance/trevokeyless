@@ -37,6 +37,10 @@ First public release line. Breaking changes from 0.6.0 (pre-1.0 API freeze):
 - **Error wording unified cross-language:** name validation now throws
   `Address name must be exactly 10 characters long` /
   `Address name contains invalid characters`.
+- **The SS58 length pre-bound is measured in UTF-8 bytes**, matching the Rust
+  reference decoder (which checks the byte length of the input): non-ASCII input over
+  50 bytes now throws kind `InvalidLength` instead of `InvalidBase58`, even when it
+  stays within 50 UTF-16 units. Pinned by new shared `ss58_invalid` vectors.
 - **Node >= 22 required** (Node 20 reached end of life in April 2026); compiled output
   targets ES2022.
 

@@ -528,6 +528,29 @@ fn main() {
             "InvalidBase58",
             "canonical address with one character replaced by 'I' (outside the base58 alphabet)",
         ),
+        // Non-ASCII input interacting with the length pre-bound. The bound is defined in
+        // UTF-8 bytes (the unit this crate's `str::len` measures), so a string can stay
+        // within 50 characters - or 50 UTF-16 units - yet exceed 50 bytes. These vectors
+        // pin the classification that historically drifted between the implementations
+        // (code points in Python, UTF-16 units in TypeScript).
+        (
+            "é".repeat(26),
+            trevo,
+            "InvalidLength",
+            "26 two-byte UTF-8 characters: 26 code points but 52 bytes, over the 50-byte bound",
+        ),
+        (
+            "𝄞".repeat(26),
+            trevo,
+            "InvalidLength",
+            "26 four-byte UTF-8 characters: 52 UTF-16 units and 104 bytes, over the 50-byte bound",
+        ),
+        (
+            "é".to_string(),
+            trevo,
+            "InvalidBase58",
+            "single non-ASCII character, within the length bound",
+        ),
     ];
     let ss58_invalid: Vec<String> = ss58_invalid
         .into_iter()

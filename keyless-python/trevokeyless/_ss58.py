@@ -44,7 +44,9 @@ _ACCOUNT_ID_LENGTH = 32
 # is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
 # base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
 # ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-# whose cost grows quadratically with the input length. Mirrors the Rust implementation.
+# whose cost grows quadratically with the input length. The bound is applied to the
+# UTF-8 byte length, exactly like the Rust reference decoder (bytes and characters
+# coincide on the all-ASCII base58 alphabet).
 SS58_MAX_ADDRESS_LENGTH = 50
 
 # The 58 characters of the Bitcoin base58 alphabet used by SS58. base58.b58decode
@@ -187,7 +189,12 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
         Ss58DecodeError: with the ``kind`` describing the failure, exactly like the Rust
             ``from_ss58check_with_version``.
     """
-    if len(address) > SS58_MAX_ADDRESS_LENGTH:
+    # The bound is defined in UTF-8 bytes, like the Rust reference decoder (which checks
+    # the byte length of the &str): non-ASCII input can stay within 50 characters yet
+    # exceed 50 bytes and must classify as a length failure in every implementation.
+    # The code-point comparison short-circuits first, keeping the cost O(1) for huge
+    # input; the byte encoding only ever sees at most 50 characters.
+    if len(address) > SS58_MAX_ADDRESS_LENGTH or len(address.encode("utf-8")) > SS58_MAX_ADDRESS_LENGTH:
         raise Ss58DecodeError.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
         raise Ss58DecodeError.invalid_base58()

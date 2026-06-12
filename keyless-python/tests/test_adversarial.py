@@ -222,6 +222,20 @@ class TestMalformedSs58(unittest.TestCase):
             ss58_decode("$" * (trevokeyless.SS58_MAX_ADDRESS_LENGTH + 1))
         self.assertEqual(codec_ctx.exception.kind, "InvalidLength")
 
+    def test_length_bound_is_utf8_bytes(self: "TestMalformedSs58") -> None:
+        # The 50-character bound is defined in UTF-8 bytes, like the Rust reference
+        # decoder: input can stay within 50 code points (or 50 UTF-16 units) and still
+        # exceed the bound. Also pinned cross-language by the ss58_invalid vectors.
+        for over_bound in ["é" * 26, "𝄞" * 26]:  # 52 and 104 UTF-8 bytes
+            with self.subTest(over_bound=over_bound):
+                with self.assertRaises(Ss58DecodeError) as ctx:
+                    ss58_decode(over_bound)
+                self.assertEqual(ctx.exception.kind, "InvalidLength")
+        # A single non-ASCII character is within the bound and fails the charset check.
+        with self.assertRaises(Ss58DecodeError) as charset_ctx:
+            ss58_decode("é")
+        self.assertEqual(charset_ctx.exception.kind, "InvalidBase58")
+
     def test_longest_legitimate_address_still_decodes(self: "TestMalformedSs58") -> None:
         # The longest legitimate addresses (two-byte prefix, high account id bytes) stay
         # within the bound and must still decode.
@@ -246,7 +260,6 @@ class TestSurroundingWhitespace(unittest.TestCase):
             " " + address,
             address + "\n",
             address + "\t",
-            address + "\u00a0",  # non-breaking space, also stripped by str.rstrip
         ]
         for spelling in spellings:
             with self.subTest(spelling=spelling):
@@ -257,6 +270,17 @@ class TestSurroundingWhitespace(unittest.TestCase):
                 with self.assertRaises(Ss58DecodeError) as codec_ctx:
                     ss58_decode(spelling)
                 self.assertEqual(codec_ctx.exception.kind, "InvalidBase58")
+
+    def test_decode_rejects_appended_non_breaking_space(self: "TestSurroundingWhitespace") -> None:
+        # A non-breaking space (also stripped by str.rstrip) is a *two-byte* UTF-8
+        # character: appended to a 49-character Trevo address it brings the input to 50
+        # code points but 51 UTF-8 bytes, so the byte-length bound fires first - exactly
+        # like the Rust decoder, which measures bytes. (The previous expectation of
+        # InvalidBase58 pinned a Python-only divergence from the reference.)
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address(address + "\u00a0", SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
 
 
 class TestStrictCodecContract(unittest.TestCase):

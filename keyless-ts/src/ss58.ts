@@ -31,7 +31,9 @@ const ACCOUNT_ID_BYTES_LENGTH = 32;
 // is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
 // base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
 // ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-// whose cost grows quadratically with the input length. Mirrors the Rust implementation.
+// whose cost grows quadratically with the input length. The bound is applied to the
+// UTF-8 byte length, exactly like the Rust reference decoder (bytes and UTF-16 units
+// coincide on the all-ASCII base58 alphabet).
 export const SS58_MAX_ADDRESS_LENGTH = 50;
 
 /**
@@ -169,6 +171,14 @@ function ss58Decode(address: string): {
   format: number;
 } {
   if (address.length > SS58_MAX_ADDRESS_LENGTH) {
+    throw Ss58Error.invalidLength();
+  }
+  // The bound is defined in UTF-8 bytes, like the Rust reference decoder (which checks
+  // the byte length of the &str): non-ASCII input can stay within 50 UTF-16 units yet
+  // exceed 50 bytes and must classify as a length failure in every implementation. The
+  // unit check above keeps the cost O(1) for huge input; this exact check only ever
+  // encodes at most 50 UTF-16 units.
+  if (new TextEncoder().encode(address).length > SS58_MAX_ADDRESS_LENGTH) {
     throw Ss58Error.invalidLength();
   }
   let data: Uint8Array;

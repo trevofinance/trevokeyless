@@ -40,6 +40,10 @@ First public release line. Breaking changes from 0.4.0 (pre-1.0 API freeze):
   `Address name must be exactly 10 characters long`, and the
   `AddressTypeMismatchError` message no longer ends with a period (byte-identical to
   TypeScript).
+- **The SS58 length pre-bound is measured in UTF-8 bytes**, matching the Rust
+  reference decoder (which checks the byte length of the input): non-ASCII input over
+  50 bytes now raises kind `InvalidLength` instead of `InvalidBase58`, even when it
+  stays within 50 characters. Pinned by new shared `ss58_invalid` vectors.
 - Dependency floor raised to `base58>=2.1.1`; added the `Typing :: Typed` classifier.
 
 ## 0.4.0

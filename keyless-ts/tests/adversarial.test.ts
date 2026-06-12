@@ -331,6 +331,33 @@ describe("Malformed SS58 input", () => {
     );
   });
 
+  it("applies the length bound to UTF-8 bytes, not UTF-16 units", () => {
+    // The 50-character bound is defined in UTF-8 bytes, like the Rust reference
+    // decoder: input can stay within 50 UTF-16 units (or 50 code points) and still
+    // exceed the bound. Also pinned cross-language by the ss58_invalid vectors.
+    ["é".repeat(26) /* 52 bytes */, "𝄞".repeat(26) /* 104 bytes */].forEach(
+      (overBound) => {
+        let error: unknown;
+        try {
+          decodeAddress(overBound, ss58Format);
+        } catch (e) {
+          error = e;
+        }
+        expect(error).toBeInstanceOf(Ss58Error);
+        expect((error as Ss58Error).kind).toEqual("InvalidLength");
+      },
+    );
+    // A single non-ASCII character is within the bound and fails the base58 charset.
+    let error: unknown;
+    try {
+      decodeAddress("é", ss58Format);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Ss58Error);
+    expect((error as Ss58Error).kind).toEqual("InvalidBase58");
+  });
+
   it("still decodes the longest legitimate address", () => {
     // The longest legitimate addresses (two-byte prefix, high account id bytes) stay
     // within the bound and must still decode.
