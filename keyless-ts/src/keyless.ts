@@ -553,7 +553,7 @@ function decodeAppAgentAddress(
 /**
  * The identifiers embedded in a Transactional address, as returned by
  * `decodeTransactionalAddress`. (The Python implementation returns the same pair as a tuple;
- * its `TransactionalAddressId` type alias is the plain `taId` integer instead.)
+ * its `TransactionalId` type alias is the plain `taId` integer instead.)
  */
 interface DecodedTransactionalAddress {
   appAgentId: number;

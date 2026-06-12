@@ -30,7 +30,7 @@ class TestPublicSurface(unittest.TestCase):
             "Ss58DecodeError",
             "Ss58ErrorKind",
             "Ss58FormatMismatchError",
-            "TransactionalAddressId",
+            "TransactionalId",
             "decode_account_id",
             "decode_address",
             "decode_app_agent_address",

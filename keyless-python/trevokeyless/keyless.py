@@ -48,7 +48,7 @@ _HEX_ACCOUNT_ID = re.compile(r"0x[0-9a-fA-F]{64}")
 BlockchainAddress: TypeAlias = str
 BlockchainAccountId: TypeAlias = str
 AppAgentId: TypeAlias = int
-TransactionalAddressId: TypeAlias = int
+TransactionalId: TypeAlias = int
 AddressName: TypeAlias = str
 SS58Format: TypeAlias = int
 
@@ -119,7 +119,7 @@ class BlockchainAddressInfo:
     account_id: BlockchainAccountId
     address_type: AddressType
     app_agent_id: AppAgentId | None
-    ta_id: TransactionalAddressId | None
+    ta_id: TransactionalId | None
     address_name: AddressName | None
 
 
@@ -344,7 +344,7 @@ def decode_app_agent_address(
 
 def encode_transactional_address(
     app_agent_id: AppAgentId,
-    ta_id: TransactionalAddressId,
+    ta_id: TransactionalId,
     ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB,
 ) -> BlockchainAddress:
     """
@@ -377,7 +377,7 @@ def encode_transactional_address(
 
 def decode_transactional_address(
     encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
-) -> tuple[AppAgentId, TransactionalAddressId]:
+) -> tuple[AppAgentId, TransactionalId]:
     """
     Decode an encoded Transactional address.
 
