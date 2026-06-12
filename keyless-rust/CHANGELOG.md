@@ -12,6 +12,11 @@ First public release line. Changes from 0.8.0:
   interchange form `0x` + 64 lowercase hex characters (previously bare hex without
   the prefix), so a Rust-rendered account id is accepted verbatim by the Python
   `decode_account_id` and TypeScript `decodeAccountId` entry points.
+- **Breaking:** SCALE support is opt-in behind the new `scale` feature
+  (`Encode`/`Decode`/`DecodeWithMemTracking`/`TypeInfo`/`MaxEncodedLen` for every
+  public type). `parity-scale-codec` and `scale-info` are optional dependencies now;
+  Substrate runtime consumers add `features = ["scale"]`, everyone else stops
+  compiling the SCALE proc-macro stack.
 - The SCALE `Decode` error message for `AccountName` now reads
   `Account name contains invalid characters`, matching the `Display` wording of
   `AccountNameError::InvalidCharacter`.

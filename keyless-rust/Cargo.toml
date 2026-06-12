@@ -22,20 +22,23 @@ default = ["std"]
 std = [
     "blake2b_simd/std",
     "bs58?/std",
-    "parity-scale-codec/std",
-    "scale-info/std",
+    "parity-scale-codec?/std",
+    "scale-info?/std",
     "serde?/std",
 ]
 # SS58 address encoding/decoding for `AccountId32` (requires an allocator).
 ss58 = ["dep:bs58"]
+# SCALE codec and metadata support (Encode/Decode/DecodeWithMemTracking/TypeInfo/
+# MaxEncodedLen for every public type), for direct use inside a Substrate runtime.
+scale = ["dep:parity-scale-codec", "dep:scale-info"]
 # Serde support: `AccountId32` (de)serializes as an SS58 string, `AccountName` as a string.
 serde = ["dep:serde", "ss58"]
 
 [dependencies]
 blake2b_simd = { version = "1.0.2", default-features = false }
 bs58 = { version = "0.5.1", default-features = false, features = ["alloc"], optional = true }
-parity-scale-codec = { version = "3.7.5", default-features = false, features = ["max-encoded-len"] }
-scale-info = { version = "2.11.6", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "3.7.5", default-features = false, features = ["max-encoded-len"], optional = true }
+scale-info = { version = "2.11.6", default-features = false, features = ["derive"], optional = true }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [dev-dependencies]

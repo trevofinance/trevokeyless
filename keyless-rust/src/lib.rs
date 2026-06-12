@@ -76,6 +76,10 @@
 //! - `ss58` — SS58 address encoding/decoding for [`AccountId32`]
 //!   (`to_ss58check*` / `from_ss58check*`, [`SS58_FORMAT_TREVO_ASSET_HUB`]). Works in
 //!   `no_std` environments but requires an allocator.
+//! - `scale` — SCALE codec and metadata support: `Encode`/`Decode`/`DecodeWithMemTracking`/
+//!   `TypeInfo`/`MaxEncodedLen` implementations for every public type, for direct use inside
+//!   a Substrate runtime. SCALE `Decode` of [`BlockchainAccountInfo`] performs no
+//!   consistency validation (see the type documentation).
 //! - `serde` — serde support (implies `ss58`): [`AccountId32`] (de)serializes as an SS58
 //!   address string in the Trevo format, [`AccountName`] as a string, and the remaining
 //!   public types via derived implementations. Deserializing [`BlockchainAccountInfo`]

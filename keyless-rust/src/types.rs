@@ -1,6 +1,8 @@
+#[cfg(feature = "scale")]
 use parity_scale_codec::{
     Decode, DecodeWithMemTracking, Encode, Error as CodecError, Input, MaxEncodedLen,
 };
+#[cfg(feature = "scale")]
 use scale_info::TypeInfo;
 
 /// Numeric identifier of an App Agent (u32, little-endian in keyless account bytes [0..=3]).
@@ -24,20 +26,10 @@ pub const NAMED_ACCOUNT_IDENTIFIER: AccountIdentifierType = 3;
 ///
 /// For keyless accounts the bytes follow the layout described in the crate documentation.
 /// For regular accounts the bytes are an opaque public key or hash with no special structure.
-#[derive(
-    Clone,
-    Copy,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    Debug,
-    TypeInfo,
-    MaxEncodedLen,
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
 )]
 pub struct AccountId32([u8; 32]);
 
@@ -92,9 +84,8 @@ impl core::fmt::Display for AccountId32 {
 ///
 /// Only the characters `0-9`, `a-z`, `A-Z`, `-`, and `#` (64 characters total) are allowed.
 /// The name is stored verbatim in bytes [5..=14] of the Named account's open part.
-#[derive(
-    Clone, Encode, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Copy, TypeInfo, MaxEncodedLen,
-)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "scale", derive(Encode, TypeInfo, MaxEncodedLen))]
 pub struct AccountName([u8; 10]);
 
 impl AccountName {
@@ -213,6 +204,7 @@ impl core::fmt::Display for AccountName {
     }
 }
 
+#[cfg(feature = "scale")]
 impl Decode for AccountName {
     fn decode<I: Input>(input: &mut I) -> Result<Self, CodecError> {
         let mut buf = [0u8; 10];
@@ -224,6 +216,7 @@ impl Decode for AccountName {
 
 /// Sound because the manual `Decode` implementation above reads into a fixed-size stack
 /// buffer and never allocates heap memory.
+#[cfg(feature = "scale")]
 impl DecodeWithMemTracking for AccountName {}
 
 #[cfg(feature = "serde")]
@@ -245,18 +238,10 @@ impl<'de> serde::Deserialize<'de> for AccountName {
 ///
 /// Deliberately exhaustive (no `#[non_exhaustive]`): the name validation rules are part of
 /// the frozen encoding, so the failure taxonomy is not expected to grow.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    PartialEq,
-    Hash,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    TypeInfo,
-    MaxEncodedLen,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccountNameError {
@@ -285,20 +270,10 @@ impl core::fmt::Display for AccountNameError {
 /// trevo-keyless libraries; the variant order (Regular = 0, AppAgent = 1, Transactional = 2,
 /// Named = 3) matches their numeric values, so the keyless variants coincide with the type
 /// discriminant stored at byte `[4]` of a keyless account.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    TypeInfo,
-    MaxEncodedLen,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccountType {
@@ -332,18 +307,10 @@ impl core::fmt::Display for AccountType {
 /// Deliberately exhaustive (no `#[non_exhaustive]`): one variant per typed decoder, mirrored
 /// by the Python/TypeScript `AddressTypeMismatchError`; the set only changes if the frozen
 /// encoding gains an account type.
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    PartialEq,
-    Hash,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    TypeInfo,
-    MaxEncodedLen,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeylessDecodeError {
@@ -409,18 +376,10 @@ impl core::fmt::Display for KeylessDecodeError {
 /// This shape differs from the flat info objects returned by the Python and TypeScript
 /// trevo-keyless libraries; only SS58 address strings and raw account-id bytes are
 /// cross-language interchange formats.
-#[derive(
-    Eq,
-    PartialEq,
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    TypeInfo,
-    MaxEncodedLen,
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
 )]
 #[cfg_attr(
     feature = "serde",
@@ -640,9 +599,8 @@ mod tests_account_name {
 }
 
 #[cfg(all(test, feature = "std"))]
-mod tests_display_and_codec {
+mod tests_display {
     use super::*;
-    use parity_scale_codec::{Decode, Encode};
 
     #[test]
     fn test_account_id32_display() {
@@ -723,6 +681,27 @@ mod tests_display_and_codec {
             "Account is not a Named account (found: AppAgent)"
         );
     }
+
+    /// Compile-time check that every public type of the crate supports `core::hash::Hash`,
+    /// independently of the `std` feature.
+    #[test]
+    fn test_all_types_implement_hash() {
+        fn assert_impl<T: core::hash::Hash>() {}
+        assert_impl::<AppAgentId>();
+        assert_impl::<TransactionalId>();
+        assert_impl::<AccountId32>();
+        assert_impl::<AccountName>();
+        assert_impl::<AccountNameError>();
+        assert_impl::<AccountType>();
+        assert_impl::<KeylessDecodeError>();
+        assert_impl::<BlockchainAccountInfo>();
+    }
+}
+
+#[cfg(all(test, feature = "std", feature = "scale"))]
+mod tests_scale_codec {
+    use super::*;
+    use parity_scale_codec::{Decode, Encode};
 
     #[test]
     fn test_account_name_scale_codec() {
@@ -848,21 +827,6 @@ mod tests_display_and_codec {
     #[test]
     fn test_all_types_implement_decode_with_mem_tracking() {
         fn assert_impl<T: DecodeWithMemTracking>() {}
-        assert_impl::<AppAgentId>();
-        assert_impl::<TransactionalId>();
-        assert_impl::<AccountId32>();
-        assert_impl::<AccountName>();
-        assert_impl::<AccountNameError>();
-        assert_impl::<AccountType>();
-        assert_impl::<KeylessDecodeError>();
-        assert_impl::<BlockchainAccountInfo>();
-    }
-
-    /// Compile-time check that every public type of the crate supports `core::hash::Hash`,
-    /// independently of the `std` feature.
-    #[test]
-    fn test_all_types_implement_hash() {
-        fn assert_impl<T: core::hash::Hash>() {}
         assert_impl::<AppAgentId>();
         assert_impl::<TransactionalId>();
         assert_impl::<AccountId32>();

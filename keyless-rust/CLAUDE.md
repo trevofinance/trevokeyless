@@ -1,7 +1,7 @@
 # CLAUDE.md — trevo-keyless
 
 Pure-Rust library for encoding and decoding Trevo keyless accounts. No Substrate/frame dependency;
-only `parity-scale-codec`, `scale-info`, and `blake2b_simd` (plus optional `bs58` and `serde`,
+only `blake2b_simd` (plus optional `parity-scale-codec` + `scale-info`, `bs58`, and `serde` —
 see Cargo features below).
 
 ## Cargo features
@@ -11,6 +11,9 @@ see Cargo features below).
 - `ss58` — SS58 address encoding/decoding for `AccountId32` (`to_ss58check*`,
   `from_ss58check*`, `SS58_FORMAT_TREVO_ASSET_HUB = 5335`). `no_std`-compatible but requires
   an allocator.
+- `scale` — SCALE codec and metadata support
+  (`Encode`/`Decode`/`DecodeWithMemTracking`/`TypeInfo`/`MaxEncodedLen` for every public
+  type), for direct use inside a Substrate runtime.
 - `serde` — serde support (implies `ss58`): `AccountId32` (de)serializes as an SS58 string in
   the Trevo format, `AccountName` as a string, other public types via derived impls.
   Deserializing `BlockchainAccountInfo` re-validates that the embedded identifiers match
