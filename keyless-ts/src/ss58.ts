@@ -17,8 +17,9 @@ import { concatBytes, utf8ToBytes } from "@noble/hashes/utils";
 import { base58 } from "@scure/base";
 
 // Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
-// bound of the Rust implementation.
-export const SS58_FORMAT_MAX = 0b0011_1111_1111_1111;
+// bound of the Rust implementation (private there too; keyless.ts keeps its own copy
+// for the parameter validation message).
+const SS58_FORMAT_MAX = 0b0011_1111_1111_1111;
 
 // Length in bytes of the SS58 checksum of a 32-byte account id.
 const SS58_CHECKSUM_LENGTH = 2;

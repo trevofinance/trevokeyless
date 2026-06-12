@@ -40,8 +40,9 @@ const {
 ```
 
 TypeScript users can additionally import the type-only declarations
-`BlockchainAddressInfo`, `DecodedTransactionalAddress`, and `DecodedNamedAddress`
-(interfaces are erased at runtime, so they are not available from `require`).
+`BlockchainAddressInfo`, `DecodedTransactionalAddress`, `DecodedNamedAddress`, and
+`Ss58ErrorKind` (types are erased at runtime, so they are not available from
+`require`).
 
 Example for AppAgent addresses:
 

@@ -3,6 +3,7 @@ import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils";
 import {
   SS58_MAX_ADDRESS_LENGTH,
   Ss58Error,
+  Ss58ErrorKind,
   ss58Decode,
   ss58Encode,
 } from "./ss58";
@@ -639,6 +640,7 @@ export {
   AddressType,
   AddressTypeMismatchError,
   Ss58Error,
+  Ss58ErrorKind,
   BlockchainAddressInfo,
   DecodedTransactionalAddress,
   DecodedNamedAddress,
