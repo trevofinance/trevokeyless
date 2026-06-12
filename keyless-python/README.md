@@ -92,6 +92,17 @@ expected_data = trevokeyless.BlockchainAddressInfo(
 assert decoded_data == expected_data
 ```
 
+### Decode a raw account id
+
+``` python3
+import trevokeyless
+
+# Raw account bytes carry no SS58 format, so decode_account_id takes none.
+info = trevokeyless.decode_account_id("0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2")
+assert info.address_type is trevokeyless.AddressType.AppAgent
+assert info.app_agent_id == 123
+```
+
 ### Check whether an address is keyless
 
 ``` python3
@@ -103,20 +114,34 @@ assert trevokeyless.is_keyless_address(trevokeyless.encode_app_agent_address(123
 assert not trevokeyless.is_keyless_address("ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4")
 ```
 
+Note: an address that is *keyless* is not an address that is *authorized* — anyone can
+construct a valid keyless address embedding any AppAgent ID. See the
+[security model](https://github.com/trevo-finance/trevo-keyless#security-model).
+
 ## Accepted input and errors
 
-The decoding functions accept an SS58 address string of a 32-byte account id in the
-expected SS58 format (5335, the Trevo asset hub, by default). A raw account id in hex
-form (`0x` followed by exactly 64 hex characters) is classified with
-`decode_account_id` instead; raw account bytes carry no SS58 format, so that function
-takes no `ss58_format` argument.
+`decode_address` (and `is_keyless_address` and the typed decoders) accept an SS58
+address string of a 32-byte account id in the expected SS58 format (5335, the Trevo
+asset hub, by default). A raw account id (`0x` followed by exactly 64 hex characters)
+is classified with `decode_account_id` instead; raw account bytes carry no SS58 format,
+so that function takes no `ss58_format` argument, and `decode_address` rejects `0x`
+input outright. The `address` field of the returned `BlockchainAddressInfo` always
+holds the input verbatim; `account_id` is normalized `0x` + lowercase hex.
 
-Any other input — wrong SS58 format or checksum, account ids that are not exactly
-32 bytes, malformed base58 or hex, surrounding whitespace — raises `ValueError`; only
-the canonical spelling of an address is accepted. The typed decoders
-(`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
-raise `AddressTypeMismatchError` (a `ValueError` subclass carrying the `expected` and
-`found` address types) when the address decodes to a different type.
+Only the canonical spelling of an address is accepted: wrong-length checksums,
+surrounding whitespace, case variations, characters outside the base58 alphabet, and
+account ids that are not exactly 32 bytes all raise `ValueError`. (One deliberate,
+Substrate-compatible exception: the two-byte-prefix encoding of formats below 64 is
+accepted on decode.) `is_keyless_address` likewise raises — rather than returning
+`False` — when the input cannot be decoded at all.
+
+Two `ValueError` subclasses carry structured details:
+
+- `Ss58FormatMismatchError` (`expected`/`found` attributes) when the address is a valid
+  SS58 string of a different format;
+- `AddressTypeMismatchError` (`expected`/`found` attributes) from the typed decoders
+  (`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
+  when the address decodes to a different type.
 
 The encoding functions validate their inputs: AppAgent and Transactional IDs must be
 integers in the u32 range `[0, 4294967295]` (matching the `u32` identifiers of the

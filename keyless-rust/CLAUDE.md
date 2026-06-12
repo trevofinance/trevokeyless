@@ -110,7 +110,13 @@ src/
   tests_serde.rs   — serde tests (feature `serde`)
 examples/
   gen_conformance.rs — generates ../../conformance/vectors.json (requires feature `ss58`)
+fuzz/
+  fuzz_targets/ss58_decode.rs — cargo-fuzz target for the SS58 decoder (nightly; excluded
+  from the published crate)
 ```
+
+Contribution and release workflow (fixture regeneration rule, per-package tagging,
+trusted publishing): see ../CONTRIBUTING.md.
 
 All test modules additionally require the `std` feature; run the full suite with
 `cargo test --all-features`.

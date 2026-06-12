@@ -52,3 +52,17 @@ assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
   validates that the embedded identifiers match the account id. Its JSON shape is the Rust
   enum representation and is not interchangeable with the info objects of the Python and
   TypeScript libraries — SS58 address strings are the cross-language interchange format.
+
+## Design notes
+
+- **Accounts, not addresses.** Unlike the Python and TypeScript trevo-keyless libraries,
+  whose entry points take and return SS58 address *strings*, this crate separates the two
+  layers: `encode_*_account` returns the raw 32-byte `AccountId32`, and rendering it as an
+  address is an explicit `to_ss58check*` call. The crate's primary consumer is the chain
+  runtime, which works in account ids; address strings are an off-chain presentation.
+- **SCALE support is unconditional.** `parity-scale-codec` and `scale-info` are mandatory
+  dependencies because every public type is meant to be usable directly inside a Substrate
+  runtime (`Encode`/`Decode`/`TypeInfo`/`MaxEncodedLen`). Note that SCALE `Decode` of
+  `BlockchainAccountInfo` performs no consistency validation — see the type documentation.
+- **Hex rendering.** `AccountId32`'s `Display` prints bare lowercase hex without a `0x`
+  prefix; the Python and TypeScript libraries render account ids as `0x` + hex.

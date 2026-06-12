@@ -28,6 +28,7 @@ const {
   encodeNamedAddress,
   AddressType,
   AddressTypeMismatchError,
+  Ss58Error,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
   decodeNamedAddress,
@@ -94,6 +95,17 @@ const decodedRegularAddress = decodeAddress(encodedRegularAddress);
 console.log("Decoded Regular address:", decodedRegularAddress);
 ```
 
+Decode a raw account id (raw account bytes carry no SS58 format, so `decodeAccountId`
+takes none)
+
+```javascript
+const info = decodeAccountId(
+  "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2",
+);
+console.log(info.addressType === AddressType.AppAgent); // true
+console.log(info.appAgentId); // 123
+```
+
 Check whether an address is keyless
 
 ```javascript
@@ -102,21 +114,37 @@ console.log(isKeylessAddress(encodeAppAgentAddress(123))); // true
 console.log(isKeylessAddress(regularAddress)); // false
 ```
 
+Note: an address that is *keyless* is not an address that is *authorized* — anyone can
+construct a valid keyless address embedding any AppAgent ID. See the
+[security model](https://github.com/trevo-finance/trevo-keyless#security-model).
+
 ## Accepted input and errors
 
-The decoding functions accept an SS58 address string of a 32-byte account id in the
-expected SS58 format (5335, the Trevo asset hub, by default). A raw account id in hex
-form (`0x` followed by exactly 64 hex characters) is classified with `decodeAccountId`
-instead; raw account bytes carry no SS58 format, so that function takes no `ss58Format`
-argument.
+`decodeAddress` (and `isKeylessAddress` and the typed decoders) accept an SS58 address
+string of a 32-byte account id in the expected SS58 format (5335, the Trevo asset hub,
+by default). A raw account id (`0x` followed by exactly 64 hex characters) is
+classified with `decodeAccountId` instead; raw account bytes carry no SS58 format, so
+that function takes no `ss58Format` argument, and `decodeAddress` rejects `0x` input
+outright. The `address` field of the returned `BlockchainAddressInfo` always holds the
+input verbatim; `accountId` is normalized `0x` + lowercase hex.
 
-Any other input — wrong SS58 format or checksum, account ids that are not exactly
-32 bytes, malformed base58 or hex, surrounding whitespace — throws an `Error`; only the
-canonical spelling of an address is accepted. The typed decoders
-(`decodeAppAgentAddress`, `decodeTransactionalAddress`, `decodeNamedAddress`) throw
-`AddressTypeMismatchError` (carrying the `expected` and `found` address types) when the
-address decodes to a different type.
+Only the canonical spelling of an address is accepted: wrong-length checksums,
+surrounding whitespace, case variations, characters outside the base58 alphabet, and
+account ids that are not exactly 32 bytes all throw. (One deliberate,
+Substrate-compatible exception: the two-byte-prefix encoding of formats below 64 is
+accepted on decode.) `isKeylessAddress` likewise throws — rather than returning
+`false` — when the input cannot be decoded at all.
+
+Two error classes carry structured details:
+
+- `Ss58Error` for every SS58 decoding failure: its `kind` mirrors the variants of the
+  Rust `Ss58Error` enum (`"InvalidBase58" | "InvalidLength" | "InvalidChecksum" |
+  "InvalidFormat" | "UnexpectedFormat"`), and for `"UnexpectedFormat"` the `expected`
+  and `found` fields carry the two formats;
+- `AddressTypeMismatchError` (carrying the `expected` and `found` address types) from
+  the typed decoders (`decodeAppAgentAddress`, `decodeTransactionalAddress`,
+  `decodeNamedAddress`) when the address decodes to a different type.
 
 The `ss58Format` argument of every function must be an integer in `[0, 16383]` and not
-a reserved format (46, 47); in particular `-1` is rejected rather than passed to the
-underlying decoder, where it would act as an "accept any format" sentinel.
+a reserved format (46, 47); in particular `-1` is rejected rather than treated as an
+"accept any format" sentinel.
