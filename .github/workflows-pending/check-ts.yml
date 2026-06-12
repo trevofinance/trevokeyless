@@ -1,0 +1,53 @@
+name: check-js
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  js-checks:
+    concurrency:
+      group: js-checks-${{ github.ref }}-${{ matrix.node_version }}
+      cancel-in-progress: true
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Active LTS versions (Node 20 reached end of life in April 2026).
+        node_version: [22, 24]
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js ${{ matrix.node_version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node_version }}
+      - run: |
+          cd keyless-ts
+          npm ci
+          npm run format-check
+          npm run lint-check
+          npm run build
+          npm run test
+
+      - name: Audit production dependencies
+        run: |
+          cd keyless-ts
+          npm audit --omit=dev --audit-level=high
+
+      - name: Check package contents
+        # The "files" allowlist is release-critical; verify the packed tarball instead
+        # of trusting the configuration.
+        run: |
+          cd keyless-ts
+          npm pack --dry-run --json > /tmp/pack-report.json
+          node -e "
+          const files = require('/tmp/pack-report.json')[0].files.map((f) => f.path);
+          const allowed = (f) => f.startsWith('dist/') || ['package.json', 'README.md', 'LICENSE'].includes(f);
+          if (files.length === 0 || !files.every(allowed)) { console.error('unexpected package contents:', files); process.exit(1); }
+          console.log('npm package contents OK:', files.length, 'files');
+          "

@@ -1,0 +1,59 @@
+# Publishes the trevokeyless package to PyPI on a `python-vX.Y.Z` tag.
+#
+# One-time registry setup (no API token is stored): on PyPI, configure a Trusted
+# Publisher for the project with repository `trevo-finance/trevo-keyless`, workflow
+# `publish-python.yml`, and environment `release`.
+name: publish-python
+
+on:
+  push:
+    tags: ['python-v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Tag must match the package version
+        run: |
+          cd keyless-python
+          tag_version="${GITHUB_REF_NAME#python-v}"
+          pkg_version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          test "$tag_version" = "$pkg_version" || { echo "tag $tag_version != pyproject $pkg_version"; exit 1; }
+
+      - name: Run tests
+        run: |
+          cd keyless-python
+          pip install .[test]
+          python3 -m unittest discover
+
+      - name: Build and validate
+        run: |
+          cd keyless-python
+          pip install --upgrade build twine packaging
+          python3 -m build
+          twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: keyless-python/dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1

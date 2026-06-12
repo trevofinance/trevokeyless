@@ -1,0 +1,44 @@
+# Publishes @trevofinance/trevo-keyless to npm on a `ts-vX.Y.Z` tag.
+#
+# One-time registry setup (no token is stored): on npmjs.com, configure a Trusted
+# Publisher for the package with repository `trevo-finance/trevo-keyless` and workflow
+# `publish-ts.yml`. Publishing via trusted publishing requires npm >= 11.5 (bundled
+# with Node 24) and attaches provenance automatically.
+name: publish-ts
+
+on:
+  push:
+    tags: ['ts-v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Tag must match the package version
+        run: |
+          cd keyless-ts
+          tag_version="${GITHUB_REF_NAME#ts-v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          test "$tag_version" = "$pkg_version" || { echo "tag $tag_version != package.json $pkg_version"; exit 1; }
+
+      - name: Build and test
+        run: |
+          cd keyless-ts
+          npm ci
+          npm run build
+          npm run test
+
+      - name: Publish to npm (trusted publishing, with provenance)
+        run: |
+          cd keyless-ts
+          npm publish --provenance --access public
