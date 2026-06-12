@@ -14,8 +14,9 @@ This makes the keyless addresses convenient for use in off-chain applications.
 npm install @trevofinance/trevo-keyless
 ```
 
-The package ships a single CommonJS module with TypeScript declarations; it works from
-both `require` and `import`.
+The package deliberately ships a single CommonJS module with TypeScript declarations;
+it works from both `require` and ESM `import` (named imports resolve via Node's CJS
+interop, which CI verifies against the packed tarball on every run).
 
 ## Usage
 
