@@ -238,6 +238,9 @@ impl<'de> serde::Deserialize<'de> for AccountName {
 }
 
 /// Error returned by [`AccountName`] constructors when the input is not a valid account name.
+///
+/// Deliberately exhaustive (no `#[non_exhaustive]`): the name validation rules are part of
+/// the frozen encoding, so the failure taxonomy is not expected to grow.
 #[derive(
     Clone,
     Copy,
@@ -321,6 +324,10 @@ impl core::fmt::Display for AccountType {
 ///
 /// Each variant carries the actual classification of the account in its `found` field, as
 /// determined by [`decode_account_info`](crate::decode_account_info).
+///
+/// Deliberately exhaustive (no `#[non_exhaustive]`): one variant per typed decoder, mirrored
+/// by the Python/TypeScript `AddressTypeMismatchError`; the set only changes if the frozen
+/// encoding gains an account type.
 #[derive(
     Clone,
     Copy,

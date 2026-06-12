@@ -7,6 +7,9 @@
 //!
 //! The Trevo chain uses the SS58 format [`SS58_FORMAT_TREVO_ASSET_HUB`] (5335).
 
+// The prefix and checksum scheme follows the SS58 codec of Substrate's sp-core (Apache-2.0):
+// https://github.com/paritytech/polkadot-sdk/blob/polkadot-stable2407-2/substrate/primitives/core/src/crypto.rs
+
 use crate::types::AccountId32;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -31,6 +34,11 @@ const SS58_CHECKSUM_LENGTH: usize = 2;
 pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
+///
+/// Deliberately exhaustive (no `#[non_exhaustive]`): the five variants are the contractual
+/// error taxonomy shared with the Python (`Ss58DecodeError.kind`) and TypeScript
+/// (`Ss58Error.kind`) implementations and pinned by the conformance fixture. Adding a variant
+/// is a breaking change of that cross-language contract, not a routine extension.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Ss58Error {
     /// The string is not valid base58.

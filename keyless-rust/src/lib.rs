@@ -5,10 +5,20 @@
 //! A **keyless account** is a 32-byte on-chain account identifier whose private key is
 //! deliberately unknown. Its bytes are deterministically derived from a set of logical
 //! identifiers (see byte layout below), so anyone can compute the address from the identifiers
-//! and verify that an address belongs to a specific App Agent simply by reading its bytes.
+//! and read back, by inspecting the bytes alone, which App Agent controls the account under
+//! the Trevo chain's rules.
 //!
 //! Because no private key exists, keyless accounts cannot sign transactions. Instead, an App
 //! Agent submits **App Transactions** to act on behalf of its keyless accounts.
+//!
+//! **Classification is not authorization.** The keyless checksum involves no key material and
+//! no secret of any kind: *anyone* can construct a valid keyless account embedding *any*
+//! AppAgentId, for free. A successful decode therefore proves only that the bytes follow the
+//! keyless layout — never that the embedded App Agent created, requested, or authorized the
+//! account. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an
+//! account merely because it decodes to a particular AppAgentId. See the
+//! [security model](https://github.com/trevo-finance/trevo-keyless#security-model) for the
+//! full contract.
 //!
 //! There are three keyless account types:
 //!

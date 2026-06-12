@@ -6,10 +6,18 @@ and named accounts.
 A **keyless account** is a 32-byte on-chain account identifier whose private key is deliberately
 unknown. Its bytes are deterministically derived from a set of logical identifiers (AppAgentId and
 optionally a TransactionalId or AccountName), so anyone can compute the address from the
-identifiers and verify account ownership by inspecting the bytes alone.
+identifiers and read back, by inspecting the bytes alone, which App Agent controls the account
+under the Trevo chain's rules.
 
 Because no private key exists, keyless accounts cannot sign transactions. Instead, an App Agent
 acts on behalf of its keyless accounts by submitting App Transactions on Trevo blockchain.
+
+**Classification is not authorization.** The keyless checksum involves no key material and no
+secret of any kind — *anyone* can construct a valid keyless account embedding *any* AppAgentId,
+for free. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an account
+merely because it decodes to a particular AppAgentId. See the
+[security model](https://github.com/trevo-finance/trevo-keyless#security-model) for the full
+contract.
 
 ## Byte layout
 
