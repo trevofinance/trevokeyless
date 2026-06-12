@@ -48,6 +48,7 @@ First public release line. Breaking changes from 0.6.0 (pre-1.0 API freeze):
   stays within 50 UTF-16 units. Pinned by new shared `ss58_invalid` vectors.
 - **Node >= 22 required** (Node 20 reached end of life in April 2026); compiled output
   targets ES2022.
+- Package metadata: `keywords` and the `bugs` URL for the npm registry page.
 
 ## 0.6.0
 

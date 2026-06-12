@@ -18,6 +18,7 @@ class TestPublicSurface(unittest.TestCase):
             "SS58_FORMAT_TREVO_ASSET_HUB",
             "SS58_MAX_ADDRESS_LENGTH",
             "U32_MAX",
+            "__version__",
             "AddressName",
             "AddressType",
             "AddressTypeMismatchError",

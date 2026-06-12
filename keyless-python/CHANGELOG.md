@@ -52,6 +52,8 @@ First public release line. Breaking changes from 0.4.0 (pre-1.0 API freeze):
   `trevokeyless._ss58`; the `base58` package dependency is gone (its `str.rstrip`
   input leniency was already being defended against with an explicit charset check,
   which stays). Added the `Typing :: Typed` classifier.
+- New `trevokeyless.__version__` (resolved from the installed package metadata) and a
+  Changelog project URL.
 
 ## 0.4.0
 

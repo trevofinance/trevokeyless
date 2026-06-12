@@ -8,6 +8,17 @@
     "type": "git",
     "url": "git+https://github.com/trevo-finance/trevo-keyless.git"
   },
+  "bugs": {
+    "url": "https://github.com/trevo-finance/trevo-keyless/issues"
+  },
+  "keywords": [
+    "trevo",
+    "blockchain",
+    "substrate",
+    "ss58",
+    "keyless",
+    "address"
+  ],
   "main": "dist/keyless.js",
   "types": "dist/keyless.d.ts",
   "exports": {

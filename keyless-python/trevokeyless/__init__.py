@@ -1,5 +1,11 @@
 # ruff: noqa: I001
 
+from importlib.metadata import version as _version
+
+# Resolved from the installed package metadata, so pyproject.toml stays the single
+# source of the version.
+__version__ = _version("trevokeyless")
+
 # The SS58 error types and the address length bound live in trevokeyless._ss58 (the
 # module that raises/applies them); they are deliberately part of the public API,
 # unlike the codec helpers of that module.
@@ -53,6 +59,7 @@ __all__ = [
     "Ss58ErrorKind",
     "Ss58FormatMismatchError",
     "TransactionalAddressId",
+    "__version__",
     "decode_account_id",
     "decode_address",
     "decode_app_agent_address",

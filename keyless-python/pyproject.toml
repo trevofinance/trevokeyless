@@ -33,6 +33,7 @@ test = [
 Homepage = "https://trevo.finance"
 Repository = "https://github.com/trevo-finance/trevo-keyless.git"
 Issues = "https://github.com/trevo-finance/trevo-keyless/issues"
+Changelog = "https://github.com/trevo-finance/trevo-keyless/blob/main/keyless-python/CHANGELOG.md"
 
 
 [build-system]
