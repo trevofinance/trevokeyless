@@ -114,7 +114,7 @@ console.log(isKeylessAddress(encodeAppAgentAddress(123))); // true
 console.log(isKeylessAddress(regularAddress)); // false
 ```
 
-Note: an address that is *keyless* is not an address that is *authorized* — anyone can
+Note: an address that is _keyless_ is not an address that is _authorized_ — anyone can
 construct a valid keyless address embedding any AppAgent ID. See the
 [security model](https://github.com/trevo-finance/trevo-keyless#security-model).
 
@@ -139,7 +139,7 @@ Two error classes carry structured details:
 
 - `Ss58Error` for every SS58 decoding failure: its `kind` mirrors the variants of the
   Rust `Ss58Error` enum (`"InvalidBase58" | "InvalidLength" | "InvalidChecksum" |
-  "InvalidFormat" | "UnexpectedFormat"`), and for `"UnexpectedFormat"` the `expected`
+"InvalidFormat" | "UnexpectedFormat"`), and for `"UnexpectedFormat"` the `expected`
   and `found` fields carry the two formats;
 - `AddressTypeMismatchError` (carrying the `expected` and `found` address types) from
   the typed decoders (`decodeAppAgentAddress`, `decodeTransactionalAddress`,
