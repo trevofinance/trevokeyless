@@ -23,7 +23,7 @@ from hashlib import blake2b
 from typing import TypeAlias
 
 from ._ss58 import SS58_FORMAT_MAX as _SS58_FORMAT_MAX
-from ._ss58 import Ss58DecodeError, ss58_decode, ss58_encode
+from ._ss58 import Ss58Error, ss58_decode, ss58_encode
 
 # Constants
 NAMED_ADDRESS_LENGTH = 10
@@ -80,15 +80,15 @@ class AddressTypeMismatchError(ValueError):
         super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}")
 
 
-class Ss58FormatMismatchError(Ss58DecodeError):
+class Ss58FormatMismatchError(Ss58Error):
     """Raised when an address is a valid SS58 string but uses a different format than expected.
 
-    The ``"UnexpectedFormat"`` case of :class:`Ss58DecodeError`, mirroring the
+    The ``"UnexpectedFormat"`` case of :class:`Ss58Error`, mirroring the
     ``Ss58Error::UnexpectedFormat`` variant of the Rust implementation (the TypeScript
     implementation reports the same pair). Raised only after the address has fully
     validated — structure, length, and checksum — exactly like the Rust implementation,
     which compares the format last; an address that fails validation raises the
-    corresponding :class:`Ss58DecodeError` instead.
+    corresponding :class:`Ss58Error` instead.
 
     Attributes:
         expected (SS58Format): The SS58 format required by the caller.
@@ -479,7 +479,7 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
 
     Raises:
         TypeError: If blockchain_address is not a str, or ss58_format is not an int.
-        Ss58DecodeError: If the input is not a valid SS58 address of a 32-byte account
+        Ss58Error: If the input is not a valid SS58 address of a 32-byte account
             id (``Ss58FormatMismatchError`` if it is valid but uses a different format
             than expected).
         ValueError: If ss58_format is outside [0, 16383].
@@ -522,7 +522,7 @@ def decode_address(
 
     Raises:
         TypeError: If blockchain_address is not a str, or ss58_format is not an int.
-        Ss58DecodeError: If the address is not a valid SS58 string of a 32-byte account
+        Ss58Error: If the address is not a valid SS58 string of a 32-byte account
             id; its ``kind`` carries the failure classification
             (``Ss58FormatMismatchError`` if the address is valid but uses a different
             format than expected).
@@ -582,7 +582,7 @@ def encode_address(
         TypeError: If account_id is not a str, or ss58_format is not an int.
         ValueError: If the input is not `0x` followed by exactly 64 hex characters, or
             ss58_format is outside [0, 16383].
-        Ss58DecodeError: kind ``"InvalidFormat"`` if ss58_format is reserved (46, 47).
+        Ss58Error: kind ``"InvalidFormat"`` if ss58_format is reserved (46, 47).
     """
     _require_str(account_id, "account_id")
     if _HEX_ACCOUNT_ID.fullmatch(account_id) is None:

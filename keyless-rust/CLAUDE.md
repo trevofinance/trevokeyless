@@ -76,7 +76,7 @@ groups: `ss58_invalid` (address strings every implementation must reject when de
 with the accompanying expected format: non-canonical shapes such as one-byte checksums,
 reserved formats, corrupted checksums, surrounding whitespace; each vector's
 `error_kind` pins the failure classification — the Rust `Ss58Error` variant name,
-matched by the TypeScript `Ss58Error.kind` and the Python `Ss58DecodeError.kind`),
+matched by the `Ss58Error.kind` of the TypeScript and Python implementations),
 `ss58_decode_only` (non-canonical two-byte-prefix spellings of formats below 64 that
 every implementation must accept on decode while re-encoding canonically — the
 documented malleability exception),

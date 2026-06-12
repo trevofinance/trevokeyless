@@ -128,8 +128,8 @@ fn decode_expecting(address: &str, format: u16) -> Result<AccountId32, Ss58Error
     Ok(account)
 }
 
-/// The fixture name of an `Ss58Error`: the Rust variant name, matched by the TypeScript
-/// `Ss58Error.kind` and the Python `Ss58DecodeError.kind`.
+/// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
+/// `Ss58Error.kind` of the TypeScript and Python implementations.
 fn ss58_error_kind(error: &Ss58Error) -> &'static str {
     match error {
         Ss58Error::InvalidBase58 => "InvalidBase58",
@@ -418,9 +418,8 @@ fn main() {
     // contract — non-canonical shapes that permissive decoders historically accepted
     // (e.g. one-byte checksums) must fail in every language, exactly like in this
     // crate. `error_kind` pins the failure classification: the Rust `Ss58Error` variant
-    // name, mirrored by the TypeScript `Ss58Error.kind` and the Python
-    // `Ss58DecodeError.kind` — so the error taxonomy cannot drift apart unnoticed
-    // either.
+    // name, mirrored by the `Ss58Error.kind` of the TypeScript and Python
+    // implementations — so the error taxonomy cannot drift apart unnoticed either.
     let account_id = encode_app_agent_account(123);
     let canonical_address = account_id.to_ss58check();
     let account: [u8; 32] = account_id.into();

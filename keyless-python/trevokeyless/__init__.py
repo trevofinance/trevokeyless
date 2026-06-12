@@ -11,7 +11,7 @@ __version__ = _version("trevokeyless")
 # unlike the codec helpers of that module.
 from trevokeyless._ss58 import (
     SS58_MAX_ADDRESS_LENGTH,
-    Ss58DecodeError,
+    Ss58Error,
     Ss58ErrorKind,
 )
 from trevokeyless.keyless import (
@@ -55,7 +55,7 @@ __all__ = [
     "BlockchainAddress",
     "BlockchainAddressInfo",
     "SS58Format",
-    "Ss58DecodeError",
+    "Ss58Error",
     "Ss58ErrorKind",
     "Ss58FormatMismatchError",
     "TransactionalId",

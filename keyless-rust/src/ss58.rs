@@ -43,8 +43,8 @@ pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
 ///
 /// Deliberately exhaustive (no `#[non_exhaustive]`): the five variants are the contractual
-/// error taxonomy shared with the Python (`Ss58DecodeError.kind`) and TypeScript
-/// (`Ss58Error.kind`) implementations and pinned by the conformance fixture. Adding a variant
+/// error taxonomy shared with the Python and TypeScript implementations (`Ss58Error.kind`
+/// in both) and pinned by the conformance fixture. Adding a variant
 /// is a breaking change of that cross-language contract, not a routine extension.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Ss58Error {

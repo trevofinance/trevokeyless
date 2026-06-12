@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import trevokeyless
-from trevokeyless import Ss58DecodeError
+from trevokeyless import Ss58Error
 from trevokeyless._ss58 import ss58_decode, ss58_encode
 
 _VECTORS_PATH = Path(__file__).resolve().parents[2] / "conformance" / "vectors.json"
@@ -87,10 +87,10 @@ class TestConformanceVectors(unittest.TestCase):
         # Rejection vectors: address strings that must not decode in any implementation
         # when the accompanying format is expected. The error_kind field pins the
         # failure classification (the Rust Ss58Error variant name, carried here by
-        # Ss58DecodeError.kind), so the error taxonomy cannot drift apart unnoticed.
+        # Ss58Error.kind), so the error taxonomy cannot drift apart unnoticed.
         for v in _VECTORS["ss58_invalid"]:
             with self.subTest(ss58=v["ss58"], reason=v["reason"]):
-                with self.assertRaises(Ss58DecodeError, msg=f"{v['ss58']!r} must be rejected: {v['reason']}") as ctx:
+                with self.assertRaises(Ss58Error, msg=f"{v['ss58']!r} must be rejected: {v['reason']}") as ctx:
                     trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(
                     ctx.exception.kind,

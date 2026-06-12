@@ -50,7 +50,7 @@ mod tests {
     }
 
     /// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
-    /// TypeScript `Ss58Error.kind` and the Python `Ss58DecodeError.kind`.
+    /// `Ss58Error.kind` of the TypeScript and Python implementations.
     #[cfg(feature = "ss58")]
     fn ss58_error_kind(error: &crate::Ss58Error) -> &'static str {
         match error {

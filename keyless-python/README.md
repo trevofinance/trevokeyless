@@ -151,7 +151,7 @@ accepted on decode.) `is_keyless_address` likewise raises — rather than return
 
 Two `ValueError` subclasses carry structured details:
 
-- `Ss58DecodeError` for every SS58 decoding failure: its `kind` attribute mirrors the
+- `Ss58Error` for every SS58 decoding failure: its `kind` attribute mirrors the
   variants of the Rust `Ss58Error` enum (`"InvalidBase58" | "InvalidLength" |
   "InvalidChecksum" | "InvalidFormat" | "UnexpectedFormat"`). The `"UnexpectedFormat"`
   case is raised as the subclass `Ss58FormatMismatchError` (`expected`/`found`

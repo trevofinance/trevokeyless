@@ -27,7 +27,7 @@ class TestPublicSurface(unittest.TestCase):
             "BlockchainAddress",
             "BlockchainAddressInfo",
             "SS58Format",
-            "Ss58DecodeError",
+            "Ss58Error",
             "Ss58ErrorKind",
             "Ss58FormatMismatchError",
             "TransactionalId",
@@ -48,7 +48,7 @@ class TestPublicSurface(unittest.TestCase):
 
     def test_ss58_codec_module_is_private(self: "TestPublicSurface") -> None:
         # The SS58 codec helpers intentionally have no public name; only the error
-        # types (Ss58DecodeError, Ss58ErrorKind) defined alongside them are public.
+        # types (Ss58Error, Ss58ErrorKind) defined alongside them are public.
         self.assertFalse(hasattr(trevokeyless, "ss58"))
         self.assertNotIn("ss58", trevokeyless.__all__)
         self.assertNotIn("_ss58", trevokeyless.__all__)

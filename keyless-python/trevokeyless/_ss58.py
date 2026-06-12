@@ -13,7 +13,7 @@ in the address, and the caller compares it only after the address has fully vali
 exactly like ``from_ss58check`` of the Rust implementation.
 
 This module is private to the package; only the entry points of
-``trevokeyless.keyless`` are public API. The error types (``Ss58DecodeError``,
+``trevokeyless.keyless`` are public API. The error types (``Ss58Error``,
 ``Ss58ErrorKind``) are re-exported from the package root.
 """
 
@@ -70,7 +70,7 @@ Ss58ErrorKind: TypeAlias = Literal[
     "InvalidFormat",
     "UnexpectedFormat",
 ]
-"""The failure classification of an ``Ss58DecodeError``.
+"""The failure classification of an ``Ss58Error``.
 
 The names mirror the variants of the Rust ``Ss58Error`` enum; the TypeScript
 ``Ss58Error.kind`` uses the same set. ``"UnexpectedFormat"`` is raised only by
@@ -78,7 +78,7 @@ The names mirror the variants of the Rust ``Ss58Error`` enum; the TypeScript
 """
 
 
-class Ss58DecodeError(ValueError):
+class Ss58Error(ValueError):
     """Raised by the SS58 decoding (and encoding, for invalid formats) functions.
 
     Mirrors the ``Ss58Error`` enum of the Rust implementation: ``kind`` is the variant
@@ -98,23 +98,23 @@ class Ss58DecodeError(ValueError):
         super().__init__(message)
 
     @classmethod
-    def invalid_base58(cls) -> "Ss58DecodeError":
+    def invalid_base58(cls) -> "Ss58Error":
         """The string contains a character outside the base58 alphabet."""
         return cls("InvalidBase58", "Address is not valid base58")
 
     @classmethod
-    def invalid_length(cls) -> "Ss58DecodeError":
+    def invalid_length(cls) -> "Ss58Error":
         """The address is longer than any valid SS58-encoded 32-byte account id, or the
         decoded payload does not have the expected length."""
         return cls("InvalidLength", "Address has an invalid length")
 
     @classmethod
-    def invalid_checksum(cls) -> "Ss58DecodeError":
+    def invalid_checksum(cls) -> "Ss58Error":
         """The checksum does not match the payload."""
         return cls("InvalidChecksum", "Address has an invalid checksum")
 
     @classmethod
-    def invalid_format(cls) -> "Ss58DecodeError":
+    def invalid_format(cls) -> "Ss58Error":
         """The SS58 format is reserved (46, 47), out of range (> 16383), or its prefix
         byte cannot be parsed."""
         return cls("InvalidFormat", "SS58 format is invalid or reserved")
@@ -145,13 +145,13 @@ def _b58decode(encoded: str) -> bytes:
     byte.
 
     Raises:
-        Ss58DecodeError: kind ``"InvalidBase58"`` on out-of-alphabet characters.
+        Ss58Error: kind ``"InvalidBase58"`` on out-of-alphabet characters.
     """
     num = 0
     for char in encoded:
         digit = _BASE58_INDEX.get(char)
         if digit is None:
-            raise Ss58DecodeError.invalid_base58()
+            raise Ss58Error.invalid_base58()
         num = num * 58 + digit
     body = num.to_bytes((num.bit_length() + 7) // 8, byteorder="big")
     zeros = len(encoded) - len(encoded.lstrip("1"))
@@ -193,14 +193,14 @@ def ss58_encode(account_id: bytes, ss58_format: int) -> str:
         str: The SS58 address.
 
     Raises:
-        Ss58DecodeError: kind ``"InvalidFormat"`` if the format is reserved (46, 47) or
+        Ss58Error: kind ``"InvalidFormat"`` if the format is reserved (46, 47) or
             not an integer in [0, 16383]; kind ``"InvalidLength"`` if the account id is
             not exactly 32 bytes.
     """
     if _format_invalid(ss58_format):
-        raise Ss58DecodeError.invalid_format()
+        raise Ss58Error.invalid_format()
     if len(account_id) != _ACCOUNT_ID_LENGTH:
-        raise Ss58DecodeError.invalid_length()
+        raise Ss58Error.invalid_length()
 
     if ss58_format <= _SINGLE_BYTE_FORMAT_MAX:
         prefix = bytes([ss58_format])
@@ -231,7 +231,7 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
         tuple[bytes, int]: The 32-byte account id and the format found in the address.
 
     Raises:
-        Ss58DecodeError: with the ``kind`` describing the failure, exactly like the Rust
+        Ss58Error: with the ``kind`` describing the failure, exactly like the Rust
             ``from_ss58check_with_version``.
     """
     # The bound is defined in UTF-8 bytes, like the Rust reference decoder (which checks
@@ -251,31 +251,31 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
         len(address) > SS58_MAX_ADDRESS_LENGTH
         or len(address.encode("utf-8", errors="surrogatepass")) > SS58_MAX_ADDRESS_LENGTH
     ):
-        raise Ss58DecodeError.invalid_length()
+        raise Ss58Error.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
-        raise Ss58DecodeError.invalid_base58()
+        raise Ss58Error.invalid_base58()
     data = _b58decode(address)
     if not data:
-        raise Ss58DecodeError.invalid_length()
+        raise Ss58Error.invalid_length()
 
     if data[0] <= _SINGLE_BYTE_FORMAT_MAX:
         prefix_length = 1
         ss58_format = data[0]
     elif data[0] <= _TWO_BYTE_PREFIX_FIRST_MAX:
         if len(data) < 2:  # noqa: PLR2004 - the two-byte prefix needs a second byte
-            raise Ss58DecodeError.invalid_length()
+            raise Ss58Error.invalid_length()
         prefix_length = 2
         ss58_format = ((data[0] & 0b0011_1111) << 2) | (data[1] >> 6) | ((data[1] & 0b0011_1111) << 8)
     else:
         # First bytes 128..=255 are not a valid SS58 prefix encoding.
-        raise Ss58DecodeError.invalid_format()
+        raise Ss58Error.invalid_format()
     if _format_invalid(ss58_format):
-        raise Ss58DecodeError.invalid_format()
+        raise Ss58Error.invalid_format()
     if len(data) != prefix_length + _ACCOUNT_ID_LENGTH + _SS58_CHECKSUM_LENGTH:
-        raise Ss58DecodeError.invalid_length()
+        raise Ss58Error.invalid_length()
 
     checksum_start = len(data) - _SS58_CHECKSUM_LENGTH
     if data[checksum_start:] != _ss58_hash(data[:checksum_start])[:_SS58_CHECKSUM_LENGTH]:
-        raise Ss58DecodeError.invalid_checksum()
+        raise Ss58Error.invalid_checksum()
 
     return bytes(data[prefix_length:checksum_start]), ss58_format
