@@ -70,8 +70,7 @@ Cross-language conventions:
 The three packages are versioned independently. To release one:
 
 1. Bump the version in its manifest (`Cargo.toml` / `pyproject.toml` / `package.json`,
-   and `Cargo.lock` / `package-lock.json` where applicable) and update its
-   `CHANGELOG.md`.
+   and `Cargo.lock` / `package-lock.json` where applicable).
 2. Land that on `main` through a pull request (CI validates the publishable artifacts
    on every run).
 3. Tag the merge commit `rust-vX.Y.Z`, `python-vX.Y.Z`, or `ts-vX.Y.Z` and push the
