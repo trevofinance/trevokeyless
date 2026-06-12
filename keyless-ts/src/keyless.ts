@@ -12,7 +12,7 @@ const TRANSACTIONAL_ADDRESS_IDENTIFIER = 2;
 const NAMED_ADDRESS_IDENTIFIER = 3;
 const NAMED_ADDRESS_BYTES_LENGTH = 10;
 const ADDRESS_NAME_ALLOWED_CHARS = /^[0-9a-zA-Z\-#]+$/;
-const SS58_FORMAT__TREVO_ASSET_HUB = 5335;
+const SS58_FORMAT_TREVO_ASSET_HUB = 5335;
 
 // Length in bytes of a blockchain account id.
 const ACCOUNT_ID_BYTES_LENGTH = 32;
@@ -219,7 +219,7 @@ function encodeKeylessAccount(
  */
 function encodeAppAgent(
   appAgentId: number,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
   const openPart = concatBytes(
     u32ToLeBytes(appAgentId, "appAgentId"),
@@ -238,7 +238,7 @@ function encodeAppAgent(
 function encodeTransactional(
   appAgentId: number,
   taId: number,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
   const openPart = concatBytes(
     u32ToLeBytes(appAgentId, "appAgentId"),
@@ -258,7 +258,7 @@ function encodeTransactional(
 function encodeNamed(
   appAgentId: number,
   name: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
   validateAddressName(name);
 
@@ -417,7 +417,7 @@ function classifyAccountId(
  */
 function decodeAddress(
   address: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): BlockchainAddressInfo {
   return classifyAccountId(address, decodeSs58AccountId(address, ss58Format));
 }
@@ -454,7 +454,7 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
  */
 function decodeAppAgent(
   address: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): number {
   const decodingResult = decodeAddress(address, ss58Format);
 
@@ -496,7 +496,7 @@ interface DecodedTransactionalAddress {
  */
 function decodeTransactional(
   address: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): DecodedTransactionalAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
@@ -545,7 +545,7 @@ interface DecodedNamedAddress {
  */
 function decodeNamed(
   address: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): DecodedNamedAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
@@ -591,7 +591,7 @@ function decodeNamed(
  */
 function isKeylessAddress(
   address: string,
-  ss58Format: number = SS58_FORMAT__TREVO_ASSET_HUB,
+  ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): boolean {
   return decodeAddress(address, ss58Format).addressType !== AddressType.Regular;
 }
@@ -614,7 +614,7 @@ export {
   isKeylessAddress,
   ACCOUNT_ID_BYTES_LENGTH,
   NAMED_ADDRESS_BYTES_LENGTH,
-  SS58_FORMAT__TREVO_ASSET_HUB,
+  SS58_FORMAT_TREVO_ASSET_HUB,
   SS58_MAX_ADDRESS_LENGTH,
   U32_MAX,
 };

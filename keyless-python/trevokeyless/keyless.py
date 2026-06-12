@@ -26,7 +26,7 @@ from ._ss58 import get_ss58_format, ss58_decode, ss58_encode
 
 # Constants
 NAMED_ADDRESS_LENGTH = 10
-SS58_FORMAT__TREVO_ASSET_HUB = 5335
+SS58_FORMAT_TREVO_ASSET_HUB = 5335
 
 # Largest value of a u32 identifier (AppAgent ID, TA ID). Mirrors the `u32` types of the
 # Rust implementation and the `U32_MAX` bound of the TypeScript implementation.
@@ -252,7 +252,7 @@ def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddr
 
 
 def encode_app_agent_address(
-    app_agent_id: AppAgentId, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    app_agent_id: AppAgentId, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> BlockchainAddress:
     """
     Encode an AppAgent address.
@@ -279,7 +279,7 @@ def encode_app_agent_address(
 
 
 def decode_app_agent_address(
-    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> AppAgentId:
     """
     Decode an encoded AppAgent address.
@@ -308,7 +308,7 @@ def decode_app_agent_address(
 def encode_transactional_address(
     app_agent_id: AppAgentId,
     ta_id: TransactionalAddressId,
-    ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB,
+    ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB,
 ) -> BlockchainAddress:
     """
     Encode a Transactional address.
@@ -338,7 +338,7 @@ def encode_transactional_address(
 
 
 def decode_transactional_address(
-    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> tuple[AppAgentId, TransactionalAddressId]:
     """
     Decode an encoded Transactional address.
@@ -368,7 +368,7 @@ def decode_transactional_address(
 
 
 def encode_named_address(
-    app_agent_id: AppAgentId, name: AddressName, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    app_agent_id: AppAgentId, name: AddressName, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> BlockchainAddress:
     """
     Encode a Named address.
@@ -398,7 +398,7 @@ def encode_named_address(
 
 
 def decode_named_address(
-    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> tuple[AppAgentId, AddressName]:
     """
     Decode an encoded Named address.
@@ -475,7 +475,7 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
 
 
 def decode_address(
-    blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> BlockchainAddressInfo:
     """
     Decode an SS58 blockchain address and classify it.
@@ -619,7 +619,7 @@ def _classify_account_id(blockchain_address: BlockchainAddress, account_id_bytes
 
 
 def is_keyless_address(
-    blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT__TREVO_ASSET_HUB
+    blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> bool:
     """
     Returns True if the address passes the keyless checksum verification (AppAgent,

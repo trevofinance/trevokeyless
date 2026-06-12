@@ -15,7 +15,7 @@ class TestPublicSurface(unittest.TestCase):
         expected = {
             "ACCOUNT_ID_LENGTH",
             "NAMED_ADDRESS_LENGTH",
-            "SS58_FORMAT__TREVO_ASSET_HUB",
+            "SS58_FORMAT_TREVO_ASSET_HUB",
             "SS58_MAX_ADDRESS_LENGTH",
             "U32_MAX",
             "AddressName",
