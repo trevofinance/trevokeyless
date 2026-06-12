@@ -8,7 +8,7 @@
 //! and read back, by inspecting the bytes alone, which App Agent controls the account under
 //! the Trevo chain's rules.
 //!
-//! Because no private key exists, keyless accounts cannot sign transactions. Instead, an App
+//! Because no private key is known, keyless accounts cannot sign transactions. Instead, an App
 //! Agent submits **App Transactions** to act on behalf of its keyless accounts.
 //!
 //! **Classification is not authorization.** The keyless checksum involves no key material and

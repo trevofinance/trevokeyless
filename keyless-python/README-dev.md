@@ -12,6 +12,9 @@ mypy trevokeyless
 python3 -m unittest discover
 ```
 
+The `dev` extra installs the lint and type-checking tools only; the test suite is plain
+stdlib `unittest` and needs no extra dependencies.
+
 ## Typing
 
 The package ships a `py.typed` marker, so type checkers read the inline annotations of

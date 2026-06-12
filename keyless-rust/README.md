@@ -9,7 +9,7 @@ optionally a TransactionalId or AccountName), so anyone can compute the address 
 identifiers and read back, by inspecting the bytes alone, which App Agent controls the account
 under the Trevo chain's rules.
 
-Because no private key exists, keyless accounts cannot sign transactions. Instead, an App Agent
+Because no private key is known, keyless accounts cannot sign transactions. Instead, an App Agent
 acts on behalf of its keyless accounts by submitting App Transactions on Trevo blockchain.
 
 **Classification is not authorization.** The keyless checksum involves no key material and no

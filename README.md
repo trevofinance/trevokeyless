@@ -96,6 +96,12 @@ language's info object and parse it in another; exchange addresses or account id
   are stable; [`conformance/vectors.json`](./conformance/vectors.json) is the executable
   specification, and a change to any committed vector is a breaking change of the
   encoding itself.
+- **Forward compatibility of classification.** Decoding treats any unknown account type
+  discriminant (byte `[4]` outside 1–3) as `Regular`. If the Trevo chain ever adds a
+  keyless account type, it will be additive — and library versions released before it
+  will silently classify those accounts as `Regular`, not raise an error. `Regular`
+  therefore means "not a keyless account *that this library version knows*"; consumers
+  that need exhaustive classification must track library updates.
 - The three packages are versioned **independently** (their APIs evolve at different
   speeds), each with its own git tag scheme (`rust-vX.Y.Z`, `python-vX.Y.Z`,
   `ts-vX.Y.Z`), and follow [semantic versioning](https://semver.org): breaking changes
@@ -105,7 +111,8 @@ language's info object and parse it in another; exchange addresses or account id
 ## Common terms
 
 - **AppAgent**: on-chain entity that serves as a blockchain representation of an off-chain application;
-- **Keyless address**: an address with unknown private key controlled by an AppAgent;
+- **Keyless address**: an address whose private key is deliberately unknown (nobody can
+  sign for it), controlled by an AppAgent;
 - **Address**: an SS58-encoded address string (49 characters in the Trevo SS58 format, 5335);
 - **Account**: the 32-byte account identifier behind an address — an opaque public key
   or hash for regular accounts, deterministically derived bytes (no key exists) for
