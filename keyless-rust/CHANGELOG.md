@@ -17,6 +17,9 @@ First public release line. Changes from 0.8.0:
   public type). `parity-scale-codec` and `scale-info` are optional dependencies now;
   Substrate runtime consumers add `features = ["scale"]`, everyone else stops
   compiling the SCALE proc-macro stack.
+- **Breaking:** `AccountName::starts_with` is removed — it was the one
+  use-case-specific helper on an otherwise minimal type;
+  `name.as_bytes().starts_with(...)` covers it.
 - The SCALE `Decode` error message for `AccountName` now reads
   `Account name contains invalid characters`, matching the `Display` wording of
   `AccountNameError::InvalidCharacter`.

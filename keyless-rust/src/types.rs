@@ -141,11 +141,6 @@ impl AccountName {
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(&self.0).expect("AccountName bytes are always valid ASCII")
     }
-
-    /// Returns `true` if the name begins with `prefix`.
-    pub fn starts_with(&self, prefix: &[u8]) -> bool {
-        self.0.starts_with(prefix)
-    }
 }
 
 impl AsRef<[u8; 10]> for AccountName {
@@ -536,25 +531,6 @@ mod tests_account_name {
         assert_eq!(
             AccountName::new(invalid_account3).unwrap_err(),
             AccountNameError::InvalidCharacter
-        );
-    }
-
-    #[test]
-    fn test_starts_with() {
-        let name = AccountName::new(b"hot-wallet").unwrap();
-        assert!(name.starts_with(b"hot"), "must match known prefix");
-        assert!(
-            name.starts_with(b"hot-wallet"),
-            "full name is its own prefix"
-        );
-        assert!(name.starts_with(b""), "empty prefix always matches");
-        assert!(
-            !name.starts_with(b"cold"),
-            "non-matching prefix must return false"
-        );
-        assert!(
-            !name.starts_with(b"hot-wallet1"),
-            "longer-than-name prefix must return false"
         );
     }
 

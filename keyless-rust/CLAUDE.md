@@ -114,7 +114,7 @@ BlockchainAccountInfo::{account_id, account_type, app_agent_id, ta_id, account_n
 // KeylessDecodeError variants each carry `found: AccountType` — the actual classification.
 
 // AccountName
-AccountName::{new, as_bytes, as_str, starts_with} (+ TryFrom, FromStr, Display)
+AccountName::{new, as_bytes, as_str} (+ TryFrom, FromStr, Display)
 
 // SS58 (feature `ss58`)
 AccountId32::to_ss58check(&self) -> String
