@@ -38,7 +38,7 @@ cargo test --all-features
 cargo test --no-default-features
 
 # Python (keyless-python/)
-pip install -e .[test]
+pip install -e .[dev]
 ruff format --check && ruff check
 mypy trevokeyless
 python3 -m unittest discover

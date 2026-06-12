@@ -9,7 +9,7 @@ authors = [
 ]
 description = "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses."
 readme = "README.md"
-keywords = ["trevo"]
+keywords = ["trevo", "blockchain", "substrate", "ss58", "keyless", "address"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
@@ -23,7 +23,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-test = [
+dev = [
     "mypy>=1.15.0",
     "ruff>=0.11.2",
 ]

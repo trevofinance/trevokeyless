@@ -5,7 +5,7 @@
 Install the package with its development tools and run the checks that CI runs:
 
 ```
-pip install -e .[test]
+pip install -e .[dev]
 ruff format --check
 ruff check
 mypy trevokeyless
