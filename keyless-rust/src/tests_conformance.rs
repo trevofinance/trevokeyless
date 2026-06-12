@@ -155,6 +155,17 @@ mod tests {
                 error_kind,
                 "error kind of {address:?} must match the fixture: {reason}"
             );
+            // UnexpectedFormat vectors additionally pin the expected/found pair.
+            if let crate::Ss58Error::UnexpectedFormat { expected, found } = error {
+                assert_eq!(
+                    (u64::from(expected), u64::from(found)),
+                    (
+                        v["expected"].as_u64().unwrap(),
+                        v["found"].as_u64().unwrap()
+                    ),
+                    "expected/found of {address:?} must match the fixture: {reason}"
+                );
+            }
         }
 
         // Names every implementation must reject at encode time. In this crate the

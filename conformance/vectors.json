@@ -677,7 +677,8 @@
 {"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":64,"ss58":"cEVxL6QDK8synQijncpSU1RB4cavgkDTbxVscYXHm8FqWrBHx"},
 {"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":255,"ss58":"yGD7dokhm9M6ZcFxQGz8orv7Uwxy9eWU7nDpb9epF4kQ55t6j"},
 {"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":5335,"ss58":"ttmYBFqTgxMcQuAQ7ifeUk2c9MVkGF184f8h6TZHUzr5YF9em"},
-{"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":16383,"ss58":"yNViC6FpAMgCMSxSdLXZJegsFfXyg748ufUiruiLDEcrnp5Fe"}
+{"hex":"10e0159b8923e15724c7481786bbd86e5efc0ba4bb9bdda2802dccf7450f9a94","format":16383,"ss58":"yNViC6FpAMgCMSxSdLXZJegsFfXyg748ufUiruiLDEcrnp5Fe"},
+{"hex":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","format":16383,"ss58":"yNb7j1viLcZunrTHozyfJPTZJrprRSPpY485Lwzq1CFK2z3Nk"}
 ],
 "ss58_invalid": [
 {"ss58":"Ckumw79RR7Ke5fZEXknYgLB6JAoBojh1Je5FUV1oj4hDP6AP","format":5335,"error_kind":"InvalidLength","reason":"canonical account with a truncated one-byte checksum (decoded length 35)"},
@@ -694,7 +695,7 @@
 {"ss58":"DpYhybeunBmaS6DGCpmQq5Yzc3gcnizo9CBFAyjoS8fmP2Yu","format":5335,"error_kind":"InvalidFormat","reason":"first byte 0x80: not a valid SS58 prefix encoding"},
 {"ss58":"2sGQ43q3t72UBTSdZXkEh7z66ge4i7ipPsukqEFePErYogV31X","format":5335,"error_kind":"InvalidFormat","reason":"first byte 0xF5: two-byte Trevo prefix with the high bit set"},
 {"ss58":"ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnQo","format":5335,"error_kind":"InvalidChecksum","reason":"canonical address with the last checksum byte flipped"},
-{"ss58":"5EqykH6EjAZ513RNK37NMagT2KPL4xr2vJXxGCRucbXqBSA7","format":5335,"error_kind":"UnexpectedFormat","reason":"valid format-42 address, decoded expecting the Trevo format"},
+{"ss58":"5EqykH6EjAZ513RNK37NMagT2KPL4xr2vJXxGCRucbXqBSA7","format":5335,"error_kind":"UnexpectedFormat","expected":5335,"found":42,"reason":"valid format-42 address, decoded expecting the Trevo format"},
 {"ss58":"5EqykH6EjAZ513RNK37NMagT2KPL4xr2vJXxGCRucbXqBS6e","format":5335,"error_kind":"InvalidChecksum","reason":"format-42 address with the last checksum byte flipped, decoded expecting the Trevo format"},
 {"ss58":"xhYtVZuW3AXp8oJWv3MFBMGQrvznkvFUwGd5oYUKwVjUWh","format":5335,"error_kind":"InvalidLength","reason":"format-42 31-byte payload with a full checksum, decoded expecting the Trevo format"},
 {"ss58":"111111111111111111111111111111111111111111111111111","format":5335,"error_kind":"InvalidLength","reason":"longer than any valid address of a 32-byte account id"},

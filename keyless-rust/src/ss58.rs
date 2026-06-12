@@ -34,6 +34,10 @@ const SS58_CHECKSUM_LENGTH: usize = 2;
 /// identical to the character count for the all-ASCII base58 alphabet; the Python and
 /// TypeScript trevo-keyless libraries export the same constant and apply the same
 /// byte-length rule, so the rejection kind of non-ASCII garbage cannot drift.
+///
+/// The bound is a safe over-approximation: the first payload byte of a valid address is
+/// at most `0x7F`, so the payload value stays below 2²⁸⁷ and the longest achievable
+/// address is 49 characters (pinned by the all-`0xFF`/format-16383 conformance vector).
 pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.

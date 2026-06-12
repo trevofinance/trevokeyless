@@ -85,6 +85,14 @@ class TestConformanceVectors(unittest.TestCase):
                     v["error_kind"],
                     f"error kind of {v['ss58']!r} must match the fixture: {v['reason']}",
                 )
+                if v["error_kind"] == "UnexpectedFormat":
+                    # These vectors additionally pin the expected/found pair, carried
+                    # here by the Ss58FormatMismatchError subclass.
+                    self.assertIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
+                    self.assertEqual(
+                        (ctx.exception.expected, ctx.exception.found),
+                        (v["expected"], v["found"]),
+                    )
 
     def test_named_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
         # Names every implementation must reject at encode time.

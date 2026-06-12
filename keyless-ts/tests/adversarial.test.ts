@@ -373,6 +373,14 @@ describe("Hex account id contract", () => {
   // decodeAccountId accepts a raw account id ("0x" + exactly 64 hex chars); anything
   // else is rejected. decodeAddress accepts SS58 addresses only.
 
+  it("rejects a non-string account id at runtime", () => {
+    // RegExp.test coerces its argument ("123" never matches the 0x contract), so
+    // untyped callers get the standard invalid-hex error rather than a crash.
+    expect(() => decodeAccountId(123 as never)).toThrow(
+      "Invalid hex account id",
+    );
+  });
+
   it("classifies a valid hex account id", () => {
     const info = decodeAccountId(u8aToHex(appAgent123));
     expect(info.addressType).toEqual(AddressType.AppAgent);

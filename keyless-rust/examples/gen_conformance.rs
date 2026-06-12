@@ -316,6 +316,27 @@ fn main() {
             ));
         }
     }
+    // Deterministic boundary entry: the all-0xFF account id under the largest format
+    // (two-byte prefix 0x7F 0xFF) yields the longest legitimate address. The first
+    // payload byte of a valid address is at most 0x7F, so the payload value stays below
+    // 2^287 and no valid address reaches SS58_MAX_ADDRESS_LENGTH (50) characters: the
+    // longest achievable address is 49, one under the bound. This vector pins that
+    // maximum, so every implementation must still decode an address of the maximal
+    // length (and the bound itself stays a safe over-approximation).
+    let boundary_account = AccountId32::from([0xFF; 32]);
+    let boundary_address = boundary_account
+        .to_ss58check_with_version(16383)
+        .expect("16383 is a valid format");
+    assert_eq!(
+        boundary_address.len(),
+        SS58_MAX_ADDRESS_LENGTH - 1,
+        "self check: the longest achievable address is one under the bound"
+    );
+    ss58_formats.push(format!(
+        r#"{{"hex":{},"format":16383,"ss58":{}}}"#,
+        js(&hex(&boundary_account)),
+        js(&boundary_address)
+    ));
 
     // 6. SS58 address strings that every implementation must reject when decoding with
     // the accompanying expected format. These pin the *rejection* side of the SS58
@@ -565,8 +586,17 @@ fn main() {
                 error_kind,
                 "self check: declared error kind of {reason:?} must match the implementation"
             );
+            // UnexpectedFormat vectors additionally pin the expected/found pair the
+            // error must carry (Rust variant fields, Python Ss58FormatMismatchError
+            // attributes, TypeScript Ss58Error fields).
+            let details = match error {
+                Ss58Error::UnexpectedFormat { expected, found } => {
+                    format!(r#","expected":{expected},"found":{found}"#)
+                }
+                _ => String::new(),
+            };
             format!(
-                r#"{{"ss58":{},"format":{format},"error_kind":{},"reason":{}}}"#,
+                r#"{{"ss58":{},"format":{format},"error_kind":{}{details},"reason":{}}}"#,
                 js(&address),
                 js(error_kind),
                 js(reason)

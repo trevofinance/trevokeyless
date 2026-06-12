@@ -46,7 +46,9 @@ _ACCOUNT_ID_LENGTH = 32
 # ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
 # whose cost grows quadratically with the input length. The bound is applied to the
 # UTF-8 byte length, exactly like the Rust reference decoder (bytes and characters
-# coincide on the all-ASCII base58 alphabet).
+# coincide on the all-ASCII base58 alphabet). It is a safe over-approximation: the
+# first payload byte of a valid address is at most 0x7F, so the longest achievable
+# address is 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
 SS58_MAX_ADDRESS_LENGTH = 50
 
 # The 58 characters of the Bitcoin base58 alphabet used by SS58. base58.b58decode
