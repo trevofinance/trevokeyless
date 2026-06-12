@@ -12,7 +12,7 @@ For more detailed docs, visit the README of the specific library:
 
 - Typescript
   - Sources: [GitHub](./keyless-ts/)
-  - Package: [NPM](https://www.npmjs.com/package/@trevofinance/trevo-keyless)
+  - Package: [NPM](https://www.npmjs.com/package/@trevofinance/trevokeyless)
 - Python 
   - Sources: [GitHub](./keyless-python/)
   - Package: [PyPI](https://pypi.org/project/trevokeyless/)

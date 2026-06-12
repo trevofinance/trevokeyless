@@ -11,7 +11,7 @@ This makes the keyless addresses convenient for use in off-chain applications.
 ## Installation
 
 ```
-npm install @trevofinance/trevo-keyless
+npm install @trevofinance/trevokeyless
 ```
 
 The package deliberately ships a single CommonJS module with TypeScript declarations;
@@ -37,7 +37,7 @@ const {
   decodeAccountId,
   encodeAddress,
   isKeylessAddress,
-} = require("@trevofinance/trevo-keyless");
+} = require("@trevofinance/trevokeyless");
 ```
 
 TypeScript users can additionally import the type-only declarations

@@ -1,4 +1,4 @@
-# Changelog — @trevofinance/trevo-keyless (TypeScript)
+# Changelog — @trevofinance/trevokeyless (TypeScript)
 
 The byte encoding of keyless addresses is frozen; `conformance/vectors.json` at the
 repository root is the executable specification shared with the Rust and Python
