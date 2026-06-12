@@ -92,9 +92,10 @@ language's info object and parse it in another; exchange addresses or account id
   specification, and a change to any committed vector is a breaking change of the
   encoding itself.
 - The three packages are versioned **independently** (their APIs evolve at different
-  speeds), each with its own git tag scheme (`rust-vX.Y.Z`,
-  `python-vX.Y.Z`, `ts-vX.Y.Z`). While the versions are below 1.0.0, minor releases may
-  contain breaking API changes; the encoding itself never changes.
+  speeds), each with its own git tag scheme (`rust-vX.Y.Z`, `python-vX.Y.Z`,
+  `ts-vX.Y.Z`), and follow [semantic versioning](https://semver.org): breaking changes
+  to a package's public API only happen in its major releases. The encoding itself
+  never changes at any version.
 
 ## Common terms
 

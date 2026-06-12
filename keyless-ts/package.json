@@ -1,6 +1,6 @@
 {
   "name": "@trevofinance/trevokeyless",
-  "version": "0.7.0",
+  "version": "1.0.0",
   "license": "Apache-2.0",
   "description": "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses.",
   "homepage": "https://trevo.finance",
