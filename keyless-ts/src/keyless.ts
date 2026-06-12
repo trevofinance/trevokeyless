@@ -11,12 +11,12 @@ import {
 const APP_AGENT_ADDRESS_IDENTIFIER = 1;
 const TRANSACTIONAL_ADDRESS_IDENTIFIER = 2;
 const NAMED_ADDRESS_IDENTIFIER = 3;
-const NAMED_ADDRESS_BYTES_LENGTH = 10;
+const NAMED_ADDRESS_LENGTH = 10;
 const ADDRESS_NAME_ALLOWED_CHARS = /^[0-9a-zA-Z\-#]+$/;
 const SS58_FORMAT_TREVO_ASSET_HUB = 5335;
 
 // Length in bytes of a blockchain account id.
-const ACCOUNT_ID_BYTES_LENGTH = 32;
+const ACCOUNT_ID_LENGTH = 32;
 
 // A raw account id accepted by decodeAccountId: 0x followed by exactly 64 hex
 // characters. (The Python implementation uses the same expression; the Rust
@@ -176,7 +176,7 @@ function validateSs58Format(ss58Format: number): void {
  * @throws {Error} - Thrown if the name has a wrong length or contains invalid characters.
  */
 function validateAddressName(name: string): void {
-  if (name.length !== NAMED_ADDRESS_BYTES_LENGTH) {
+  if (name.length !== NAMED_ADDRESS_LENGTH) {
     throw new Error("Address name must be exactly 10 characters long");
   }
   if (!ADDRESS_NAME_ALLOWED_CHARS.test(name)) {
@@ -196,7 +196,7 @@ function validateAddressName(name: string): void {
  */
 function isValidAddressNameBytes(nameBytes: Uint8Array): boolean {
   return (
-    nameBytes.length === NAMED_ADDRESS_BYTES_LENGTH &&
+    nameBytes.length === NAMED_ADDRESS_LENGTH &&
     nameBytes.every((byte) =>
       ADDRESS_NAME_ALLOWED_CHARS.test(String.fromCharCode(byte)),
     )
@@ -688,8 +688,8 @@ export {
   decodeAccountId,
   encodeAddress,
   isKeylessAddress,
-  ACCOUNT_ID_BYTES_LENGTH,
-  NAMED_ADDRESS_BYTES_LENGTH,
+  ACCOUNT_ID_LENGTH,
+  NAMED_ADDRESS_LENGTH,
   SS58_FORMAT_TREVO_ASSET_HUB,
   SS58_MAX_ADDRESS_LENGTH,
   U32_MAX,

@@ -25,7 +25,7 @@ const SS58_FORMAT_MAX = 0b0011_1111_1111_1111;
 const SS58_CHECKSUM_LENGTH = 2;
 
 // Length in bytes of a blockchain account id.
-const ACCOUNT_ID_BYTES_LENGTH = 32;
+const ACCOUNT_ID_LENGTH = 32;
 
 // Maximum length in characters of an SS58 address of a 32-byte account id: the payload
 // is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
@@ -139,7 +139,7 @@ function ss58Encode(accountId: Uint8Array, format: number): string {
   if (formatInvalid(format)) {
     throw Ss58Error.invalidFormat();
   }
-  if (accountId.length !== ACCOUNT_ID_BYTES_LENGTH) {
+  if (accountId.length !== ACCOUNT_ID_LENGTH) {
     throw Ss58Error.invalidLength();
   }
   const prefix =
@@ -214,10 +214,7 @@ function ss58Decode(address: string): {
   if (formatInvalid(format)) {
     throw Ss58Error.invalidFormat();
   }
-  if (
-    data.length !==
-    prefixLength + ACCOUNT_ID_BYTES_LENGTH + SS58_CHECKSUM_LENGTH
-  ) {
+  if (data.length !== prefixLength + ACCOUNT_ID_LENGTH + SS58_CHECKSUM_LENGTH) {
     throw Ss58Error.invalidLength();
   }
 
