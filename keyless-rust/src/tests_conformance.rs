@@ -121,5 +121,26 @@ mod tests {
                 "{address:?} must be rejected: {reason}"
             );
         }
+
+        // Names every implementation must reject at encode time. In this crate the
+        // rejection happens at AccountName construction; encode_named_account only
+        // accepts an already-validated AccountName.
+        for v in vectors["named_invalid_encode"].as_array().unwrap() {
+            let name = v["name"].as_str().unwrap();
+            let reason = v["reason"].as_str().unwrap();
+            assert!(
+                AccountName::try_from(name).is_err(),
+                "{name:?} must be rejected at encode time: {reason}"
+            );
+        }
+
+        // The `hex_invalid` group pins the "0x" + 64 hex contract of the Python
+        // decode_account_id and TypeScript decodeAccountId entry points. This crate has
+        // no string form of an account id (AccountId32 is constructed from bytes), so
+        // there is nothing to verify here beyond the group being present.
+        assert!(
+            !vectors["hex_invalid"].as_array().unwrap().is_empty(),
+            "hex_invalid group must be present for the Python/TypeScript suites"
+        );
     }
 }

@@ -702,5 +702,33 @@
 {"ss58":"TTOWkP8aMqUgFBbgIKg2PBDynNeRHhrAlRDKTjEzeFjvEvNtP","format":5335,"reason":"case-swapped spelling of a canonical address"},
 {"ss58":"ttowKp8AmQuGfbBGikG20bdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with one character replaced by '0' (outside the base58 alphabet)"},
 {"ss58":"ttowKp8AmQuGfbBGikG2IbdYNnErhHRaLrdktJeZEfJVeVnTp","format":5335,"reason":"canonical address with one character replaced by 'I' (outside the base58 alphabet)"}
+],
+"named_invalid_encode": [
+{"name":"","reason":"empty string"},
+{"name":"short","reason":"5 characters"},
+{"name":"abcdefghi","reason":"9 characters"},
+{"name":"abcdefghijk","reason":"11 characters"},
+{"name":"name with spaces","reason":"16 characters including spaces"},
+{"name":"invalid@12","reason":"10 characters, '@' outside the charset"},
+{"name":"with space","reason":"10 characters, ' ' outside the charset"},
+{"name":"with_under","reason":"10 characters, '_' outside the charset"},
+{"name":"tab\there12","reason":"10 characters, tab outside the charset"},
+{"name":"nul\u0000byte12","reason":"10 characters, NUL outside the charset"},
+{"name":"héllo12345","reason":"10 code points, 'é' outside the charset (11 UTF-8 bytes)"}
+],
+"hex_invalid": [
+{"hex":"","reason":"empty string"},
+{"hex":"0x","reason":"prefix only"},
+{"hex":"0xabc","reason":"odd number of hex digits"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63","reason":"62 hex characters"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e","reason":"63 hex characters"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e20","reason":"65 hex characters"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63zz","reason":"characters outside the hex alphabet"},
+{"hex":"0X7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"uppercase 0X prefix"},
+{"hex":"7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"missing 0x prefix"},
+{"hex":"0x7b000000 1293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"embedded space (bytes.fromhex would tolerate it)"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2 ","reason":"trailing space"},
+{"hex":" 0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"leading space"},
+{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2\n","reason":"trailing newline"}
 ]
 }

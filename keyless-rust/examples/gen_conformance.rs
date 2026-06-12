@@ -95,6 +95,20 @@ fn hex(account: &AccountId32) -> String {
     format!("{account}")
 }
 
+/// JSON string literal for `s`. Routing every string field through serde_json keeps the
+/// hand-rolled printer correct even when a vector contains characters that need
+/// escaping (quotes, control characters).
+fn js(s: &str) -> String {
+    serde_json::to_string(s).expect("strings always serialize")
+}
+
+/// The raw account id contract of the Python `decode_account_id` and TypeScript
+/// `decodeAccountId` entry points: exactly "0x" followed by 64 hex characters.
+fn is_valid_hex_account_id(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 66 && bytes.starts_with(b"0x") && bytes[2..].iter().all(u8::is_ascii_hexdigit)
+}
+
 /// The expected classification of `account` as a JSON object, with the same field values
 /// the Python and TypeScript info objects expose.
 fn classification_json(account: &AccountId32) -> String {
@@ -113,8 +127,8 @@ fn classification_json(account: &AccountId32) -> String {
             account_name,
             ..
         } => format!(
-            r#"{{"type":"Named","app_agent_id":{app_agent_id},"name":"{}"}}"#,
-            account_name.as_str()
+            r#"{{"type":"Named","app_agent_id":{app_agent_id},"name":{}}}"#,
+            js(account_name.as_str())
         ),
     }
 }
@@ -135,9 +149,9 @@ fn main() {
     for id in (0..60).map(|_| rng.next_u32()).chain([0, 1, u32::MAX]) {
         let account = encode_app_agent_account(id);
         app_agent.push(format!(
-            r#"{{"id":{id},"hex":"{}","ss58":"{}"}}"#,
-            hex(&account),
-            account.to_ss58check()
+            r#"{{"id":{id},"hex":{},"ss58":{}}}"#,
+            js(&hex(&account)),
+            js(&account.to_ss58check())
         ));
     }
 
@@ -152,9 +166,9 @@ fn main() {
     ]) {
         let account = encode_transactional_account(aa, ta);
         transactional.push(format!(
-            r#"{{"aa":{aa},"ta":{ta},"hex":"{}","ss58":"{}"}}"#,
-            hex(&account),
-            account.to_ss58check()
+            r#"{{"aa":{aa},"ta":{ta},"hex":{},"ss58":{}}}"#,
+            js(&hex(&account)),
+            js(&account.to_ss58check())
         ));
     }
 
@@ -180,10 +194,10 @@ fn main() {
     for (aa, name) in named_cases {
         let account = encode_named_account(aa, name);
         named.push(format!(
-            r#"{{"aa":{aa},"name":"{}","hex":"{}","ss58":"{}"}}"#,
-            name.as_str(),
-            hex(&account),
-            account.to_ss58check()
+            r#"{{"aa":{aa},"name":{},"hex":{},"ss58":{}}}"#,
+            js(name.as_str()),
+            js(&hex(&account)),
+            js(&account.to_ss58check())
         ));
     }
 
@@ -199,8 +213,8 @@ fn main() {
         bytes[4] = (i % 8) as u8;
         let account = AccountId32::from(bytes);
         classify.push(format!(
-            r#"{{"hex":"{}","expected":{}}}"#,
-            hex(&account),
+            r#"{{"hex":{},"expected":{}}}"#,
+            js(&hex(&account)),
             classification_json(&account)
         ));
     }
@@ -268,9 +282,9 @@ fn main() {
         for format in [0u16, 1, 42, 45, 48, 63, 64, 255, 5335, 16383] {
             let address = account.to_ss58check_with_version(format).unwrap();
             ss58_formats.push(format!(
-                r#"{{"hex":"{}","format":{format},"ss58":"{}"}}"#,
-                hex(&account),
-                address
+                r#"{{"hex":{},"format":{format},"ss58":{}}}"#,
+                js(&hex(&account)),
+                js(&address)
             ));
         }
     }
@@ -442,7 +456,84 @@ fn main() {
                 AccountId32::from_ss58check_with_version(&address).is_err(),
                 "self check: {reason:?} must not decode"
             );
-            format!(r#"{{"ss58":"{address}","format":{format},"reason":"{reason}"}}"#)
+            format!(
+                r#"{{"ss58":{},"format":{format},"reason":{}}}"#,
+                js(&address),
+                js(reason)
+            )
+        })
+        .collect();
+
+    // 7. Names every implementation must reject at *encode* time (wrong length or
+    // characters outside the charset). The tab, NUL, and non-ASCII entries deliberately
+    // exercise the JSON escaping of the generator and the parsers of the consuming
+    // suites. Note "héllo12345": 10 code points but 11 UTF-8 bytes — the byte-level
+    // Rust validation reports a length error while Python/TypeScript report a charset
+    // error; all three must reject it.
+    let named_invalid_encode: Vec<(&str, &str)> = vec![
+        ("", "empty string"),
+        ("short", "5 characters"),
+        ("abcdefghi", "9 characters"),
+        ("abcdefghijk", "11 characters"),
+        ("name with spaces", "16 characters including spaces"),
+        ("invalid@12", "10 characters, '@' outside the charset"),
+        ("with space", "10 characters, ' ' outside the charset"),
+        ("with_under", "10 characters, '_' outside the charset"),
+        ("tab\there12", "10 characters, tab outside the charset"),
+        ("nul\0byte12", "10 characters, NUL outside the charset"),
+        (
+            "héllo12345",
+            "10 code points, 'é' outside the charset (11 UTF-8 bytes)",
+        ),
+    ];
+    let named_invalid_encode: Vec<String> = named_invalid_encode
+        .into_iter()
+        .map(|(name, reason)| {
+            // The generator must never emit a name this crate itself accepts.
+            assert!(
+                AccountName::try_from(name).is_err(),
+                "self check: {reason:?} must not construct an AccountName"
+            );
+            format!(r#"{{"name":{},"reason":{}}}"#, js(name), js(reason))
+        })
+        .collect();
+
+    // 8. Raw account id strings that must be rejected: the contract of the Python
+    // `decode_account_id` and TypeScript `decodeAccountId` entry points is exactly
+    // "0x" + 64 hex characters. This crate has no string form of an account id
+    // (`AccountId32` is constructed from bytes), so the Rust suite does not consume
+    // this group.
+    let h = hex(&account_id);
+    let hex_invalid: Vec<(String, &str)> = vec![
+        (String::new(), "empty string"),
+        ("0x".to_string(), "prefix only"),
+        ("0xabc".to_string(), "odd number of hex digits"),
+        (format!("0x{}", &h[..62]), "62 hex characters"),
+        (format!("0x{}", &h[..63]), "63 hex characters"),
+        (format!("0x{h}0"), "65 hex characters"),
+        (
+            format!("0x{}zz", &h[..62]),
+            "characters outside the hex alphabet",
+        ),
+        (format!("0X{h}"), "uppercase 0X prefix"),
+        (h.clone(), "missing 0x prefix"),
+        (
+            format!("0x{} {}", &h[..8], &h[9..]),
+            "embedded space (bytes.fromhex would tolerate it)",
+        ),
+        (format!("0x{h} "), "trailing space"),
+        (format!(" 0x{h}"), "leading space"),
+        (format!("0x{h}\n"), "trailing newline"),
+    ];
+    let hex_invalid: Vec<String> = hex_invalid
+        .into_iter()
+        .map(|(input, reason)| {
+            // The generator must never emit a string that satisfies the contract.
+            assert!(
+                !is_valid_hex_account_id(&input),
+                "self check: {reason:?} must not be a valid hex account id"
+            );
+            format!(r#"{{"hex":{},"reason":{}}}"#, js(&input), js(reason))
         })
         .collect();
 
@@ -452,6 +543,8 @@ fn main() {
     print_group("named", &named, false);
     print_group("classify", &classify, false);
     print_group("ss58_formats", &ss58_formats, false);
-    print_group("ss58_invalid", &ss58_invalid, true);
+    print_group("ss58_invalid", &ss58_invalid, false);
+    print_group("named_invalid_encode", &named_invalid_encode, false);
+    print_group("hex_invalid", &hex_invalid, true);
     println!("}}");
 }

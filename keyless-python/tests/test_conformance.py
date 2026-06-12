@@ -76,6 +76,25 @@ class TestConformanceVectors(unittest.TestCase):
             ):
                 trevokeyless.decode_address(v["ss58"], v["format"])
 
+    def test_named_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
+        # Names every implementation must reject at encode time.
+        for v in _VECTORS["named_invalid_encode"]:
+            with (
+                self.subTest(name=v["name"], reason=v["reason"]),
+                self.assertRaises(ValueError, msg=f"{v['name']!r} must be rejected: {v['reason']}"),
+            ):
+                trevokeyless.encode_named_address(1, v["name"])
+
+    def test_hex_invalid_vectors(self: "TestConformanceVectors") -> None:
+        # Raw account id strings that violate the "0x" + 64 hex contract of
+        # decode_account_id.
+        for v in _VECTORS["hex_invalid"]:
+            with (
+                self.subTest(hex=v["hex"], reason=v["reason"]),
+                self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"),
+            ):
+                trevokeyless.decode_account_id(v["hex"])
+
 
 if __name__ == "__main__":
     unittest.main()

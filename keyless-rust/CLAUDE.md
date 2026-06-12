@@ -118,9 +118,13 @@ All test modules additionally require the `std` feature; run the full suite with
 ## Cross-language conformance fixture
 
 `conformance/vectors.json` (repository root) holds encoding, classification, and SS58
-vectors derived from this crate — the source of truth — plus `ss58_invalid`: address
-strings every implementation must *reject* (non-canonical shapes such as one-byte
-checksums, reserved formats, corrupted checksums, surrounding whitespace). The Rust,
+vectors derived from this crate — the source of truth — plus three rejection groups:
+`ss58_invalid` (address strings every implementation must reject: non-canonical shapes
+such as one-byte checksums, reserved formats, corrupted checksums, surrounding
+whitespace), `named_invalid_encode` (names every implementation must reject at encode
+time), and `hex_invalid` (raw account id strings violating the "0x" + 64 hex contract
+of the Python `decode_account_id` / TypeScript `decodeAccountId` entry points; this
+crate has no string form of an account id, so its suite skips that group). The Rust,
 Python, and TypeScript test suites all verify against the committed fixture, and CI
 checks that the fixture matches the generator output. After an intentional change to the encoding semantics,
 regenerate with:
