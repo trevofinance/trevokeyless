@@ -351,7 +351,8 @@ describe("Hex account id contract", () => {
     expect(info.addressType).toEqual(AddressType.AppAgent);
     expect(info.appAgentId).toEqual(123);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
-    expect(info.address).toEqual(u8aToHex(appAgent123));
+    // Raw account bytes carry no address; encodeAddress renders one explicitly.
+    expect(info.address).toBeNull();
   });
 
   it("normalizes uppercase hex", () => {
@@ -359,8 +360,7 @@ describe("Hex account id contract", () => {
     const info = decodeAccountId(upper);
     expect(info.addressType).toEqual(AddressType.AppAgent);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
-    // The address field holds the input verbatim.
-    expect(info.address).toEqual(upper);
+    expect(info.address).toBeNull();
   });
 
   it("rejects hex of the wrong length", () => {

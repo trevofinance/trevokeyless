@@ -348,14 +348,14 @@ class TestHexAccountIdContract(unittest.TestCase):
         self.assertIs(info.address_type, AddressType.AppAgent)
         self.assertEqual(info.app_agent_id, 123)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
-        self.assertEqual(info.address, "0x" + APP_AGENT_123.hex())
+        # Raw account bytes carry no address; encode_address renders one explicitly.
+        self.assertIsNone(info.address)
 
     def test_uppercase_hex_is_normalized(self: "TestHexAccountIdContract") -> None:
         info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex().upper())
         self.assertIs(info.address_type, AddressType.AppAgent)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
-        # The address field holds the input verbatim.
-        self.assertEqual(info.address, "0x" + APP_AGENT_123.hex().upper())
+        self.assertIsNone(info.address)
 
     def test_rejects_hex_of_wrong_length(self: "TestHexAccountIdContract") -> None:
         for bad_hex in ["0x", "0xdeadbeef", "0x" + APP_AGENT_123.hex() + "00", "0xabc"]:

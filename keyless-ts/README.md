@@ -138,8 +138,9 @@ classified with `decodeAccountId` instead; raw account bytes carry no SS58 forma
 that function takes no `ss58Format` argument, and `decodeAddress` rejects `0x` input
 outright. `encodeAddress` is the reverse direction: it takes the same raw account id
 form and renders the SS58 address for the given format. The `address` field of the
-returned `BlockchainAddressInfo` always holds the input verbatim; `accountId` is
-normalized `0x` + lowercase hex.
+returned `BlockchainAddressInfo` holds the SS58 address for `decodeAddress` and is
+`null` for `decodeAccountId` (raw account bytes carry no address; render one with
+`encodeAddress`); `accountId` is normalized `0x` + lowercase hex.
 
 Only the canonical spelling of an address is accepted: wrong-length checksums,
 surrounding whitespace, case variations, characters outside the base58 alphabet, and

@@ -107,9 +107,15 @@ class BlockchainAddressInfo:
 
     Immutable (and therefore hashable), mirroring the value semantics of the Rust
     ``BlockchainAccountInfo`` (``Copy + Eq + Hash``).
+
+    The ``address`` field is the SS58 address the info was decoded from, or ``None``
+    when the input was a raw account id (``decode_account_id``): raw account bytes
+    carry no SS58 format, so there is no address to report — render one explicitly
+    with ``encode_address``. ``account_id`` is always the normalized ``0x`` +
+    lowercase hex form.
     """
 
-    address: BlockchainAddress
+    address: BlockchainAddress | None
     account_id: BlockchainAccountId
     address_type: AddressType
     app_agent_id: AppAgentId | None
@@ -496,7 +502,8 @@ def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
 
     Returns:
         BlockchainAddressInfo: an object with info about the account id. The `address`
-            field holds the input verbatim.
+            field is `None` (raw account bytes carry no address; render one with
+            `encode_address`).
 
     Raises:
         ValueError: If the input is not `0x` followed by exactly 64 hex characters.
@@ -504,7 +511,7 @@ def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
     if _HEX_ACCOUNT_ID.fullmatch(account_id) is None:
         msg = "Invalid hex account id: expected 0x followed by 64 hex characters"
         raise ValueError(msg)
-    return _classify_account_id(account_id, bytes.fromhex(account_id[2:]))
+    return _classify_account_id(None, bytes.fromhex(account_id[2:]))
 
 
 def encode_address(
@@ -538,13 +545,16 @@ def encode_address(
     return ss58_encode(bytes.fromhex(account_id[2:]), ss58_format)
 
 
-def _classify_account_id(blockchain_address: BlockchainAddress, account_id_bytes: bytes) -> BlockchainAddressInfo:
+def _classify_account_id(
+    blockchain_address: BlockchainAddress | None, account_id_bytes: bytes
+) -> BlockchainAddressInfo:
     """
     Classifies a 32-byte account id and extracts any embedded keyless identifiers.
 
     Args:
-        blockchain_address (str): The original input (SS58 address or account id hex),
-            stored verbatim in the `address` field of the result.
+        blockchain_address (str | None): The SS58 address the account id was decoded
+            from, stored in the `address` field of the result; None when the input was
+            a raw account id.
         account_id_bytes (bytes): The 32-byte account id.
 
     Returns:

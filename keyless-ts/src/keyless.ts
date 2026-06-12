@@ -58,9 +58,16 @@ class AddressTypeMismatchError extends Error {
   }
 }
 
-// Represents the information related to a blockchain address.
+/**
+ * Represents the information related to a blockchain address.
+ *
+ * The `address` field is the SS58 address the info was decoded from, or `null` when
+ * the input was a raw account id (`decodeAccountId`): raw account bytes carry no SS58
+ * format, so there is no address to report — render one explicitly with
+ * `encodeAddress`. `accountId` is always the normalized `0x` + lowercase hex form.
+ */
 interface BlockchainAddressInfo {
-  address: string;
+  address: string | null;
   accountId: string;
   addressType: AddressType;
   appAgentId: number | null;
@@ -307,13 +314,14 @@ function decodeSs58AccountId(address: string, ss58Format: number): Uint8Array {
 /**
  * Classifies a 32-byte account id and extracts any embedded keyless identifiers.
  *
- * @param {string} address - The original input (SS58 address or account id hex),
- *   stored verbatim in the `address` field of the result.
+ * @param {string | null} address - The SS58 address the account id was decoded from,
+ *   stored in the `address` field of the result; null when the input was a raw
+ *   account id.
  * @param {Uint8Array} accountId - The 32-byte account id.
  * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
  */
 function classifyAccountId(
-  address: string,
+  address: string | null,
   accountId: Uint8Array,
 ): BlockchainAddressInfo {
   const accountIdHex = `0x${bytesToHex(accountId)}`;
@@ -432,7 +440,8 @@ function decodeAddress(
  * @param {string} accountId - The account id: `0x` followed by exactly 64 hex
  *   characters.
  * @returns {BlockchainAddressInfo} - An object containing the decoded address type and
- *   data; its `address` field holds the input verbatim.
+ *   data; its `address` field is `null` (raw account bytes carry no address; render
+ *   one with `encodeAddress`).
  * @throws {Error} - Thrown if the input is not `0x` followed by exactly 64 hex
  *   characters.
  */
@@ -442,7 +451,7 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
       "Invalid hex account id: expected 0x followed by 64 hex characters",
     );
   }
-  return classifyAccountId(accountId, hexToBytes(accountId.slice(2)));
+  return classifyAccountId(null, hexToBytes(accountId.slice(2)));
 }
 
 /**
