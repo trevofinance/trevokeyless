@@ -376,6 +376,35 @@ describe("Malformed SS58 input", () => {
     expect((error as Ss58Error).kind).toEqual("InvalidBase58");
   });
 
+  it("classifies unpaired surrogates via the SS58 error taxonomy", () => {
+    // JavaScript strings can hold lone surrogates; TextEncoder encodes each one as
+    // the 3-byte replacement character, so the byte bound and the base58 charset
+    // classify them like any other non-ASCII garbage. The Python implementation
+    // counts the same 3 bytes via surrogatepass; Rust cannot represent such strings
+    // at all (&str is always valid UTF-8), so the classification is pinned here and
+    // in the Python suite rather than in the conformance fixture (the generator's
+    // serde_json cannot emit lone surrogates).
+    let error: unknown;
+    try {
+      // One lone surrogate: 1 UTF-16 unit, 3 bytes - within the length bound.
+      decodeAddress("\ud800", ss58Format);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Ss58Error);
+    expect((error as Ss58Error).kind).toEqual("InvalidBase58");
+
+    let overBoundError: unknown;
+    try {
+      // 50 lone surrogates: 50 UTF-16 units but 150 bytes - over the 50-byte bound.
+      decodeAddress("\ud800".repeat(50), ss58Format);
+    } catch (e) {
+      overBoundError = e;
+    }
+    expect(overBoundError).toBeInstanceOf(Ss58Error);
+    expect((overBoundError as Ss58Error).kind).toEqual("InvalidLength");
+  });
+
   it("still decodes the longest legitimate address", () => {
     // The longest legitimate addresses (two-byte prefix, high account id bytes) stay
     // within the bound and must still decode.
