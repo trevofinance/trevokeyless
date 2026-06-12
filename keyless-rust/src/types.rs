@@ -68,8 +68,11 @@ impl AsRef<[u8]> for AccountId32 {
 }
 
 /// Renders the account id in the cross-language raw interchange form: `0x` followed by
-/// 64 lowercase hex characters — the exact string accepted by the Python
-/// `decode_account_id` and TypeScript `decodeAccountId` entry points.
+/// 64 lowercase hex characters — the exact string accepted by this type's [`FromStr`]
+/// implementation and by the Python `decode_account_id` and TypeScript
+/// `decodeAccountId` entry points.
+///
+/// [`FromStr`]: core::str::FromStr
 impl core::fmt::Display for AccountId32 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("0x")?;
@@ -77,6 +80,63 @@ impl core::fmt::Display for AccountId32 {
             write!(f, "{:02x}", b)?;
         }
         Ok(())
+    }
+}
+
+/// Error returned when parsing an [`AccountId32`] from its hex string form fails.
+///
+/// The accepted form is exactly `0x` followed by 64 hex characters (both digit cases)
+/// — the contract shared with the Python `decode_account_id` and TypeScript
+/// `decodeAccountId` entry points and pinned by the `hex_valid` / `hex_invalid`
+/// groups of the conformance fixture. The display message matches theirs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct ParseAccountIdError;
+
+#[cfg(feature = "std")]
+impl std::error::Error for ParseAccountIdError {}
+
+impl core::fmt::Display for ParseAccountIdError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Invalid hex account id: expected 0x followed by 64 hex characters")
+    }
+}
+
+/// Parses the cross-language raw interchange form produced by `Display`: exactly `0x`
+/// (lowercase prefix) followed by 64 hex characters, both digit cases accepted —
+/// the same contract as the Python `decode_account_id` and TypeScript
+/// `decodeAccountId` entry points (pinned by the `hex_valid` / `hex_invalid`
+/// conformance groups). No whitespace or other deviation is tolerated.
+impl core::str::FromStr for AccountId32 {
+    type Err = ParseAccountIdError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn nibble(c: u8) -> Result<u8, ParseAccountIdError> {
+            match c {
+                b'0'..=b'9' => Ok(c - b'0'),
+                b'a'..=b'f' => Ok(c - b'a' + 10),
+                b'A'..=b'F' => Ok(c - b'A' + 10),
+                _ => Err(ParseAccountIdError),
+            }
+        }
+
+        let hex = s.strip_prefix("0x").ok_or(ParseAccountIdError)?.as_bytes();
+        if hex.len() != 64 {
+            // Byte length: multi-byte UTF-8 input of 64 bytes is caught by `nibble`.
+            return Err(ParseAccountIdError);
+        }
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            *byte = (nibble(hex[2 * i])? << 4) | nibble(hex[2 * i + 1])?;
+        }
+        Ok(Self(bytes))
+    }
+}
+
+impl TryFrom<&str> for AccountId32 {
+    type Error = ParseAccountIdError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
     }
 }
 
@@ -671,6 +731,72 @@ mod tests_display {
         assert_impl::<AccountType>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
+        assert_impl::<ParseAccountIdError>();
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod tests_account_id_from_str {
+    use super::*;
+
+    #[test]
+    fn test_round_trips_with_display() {
+        let bytes: [u8; 32] = core::array::from_fn(|i| (7 * i) as u8);
+        let account = AccountId32::new(bytes);
+        let rendered = account.to_string();
+        assert_eq!(rendered.parse::<AccountId32>().unwrap(), account);
+        assert_eq!(AccountId32::try_from(rendered.as_str()).unwrap(), account);
+    }
+
+    #[test]
+    fn test_accepts_both_hex_digit_cases() {
+        let lower = format!("0x{}", "ab".repeat(32));
+        let upper = format!("0x{}", "AB".repeat(32));
+        let mixed = format!("0x{}", "aB".repeat(32));
+        let expected = AccountId32::new([0xAB; 32]);
+        for spelling in [lower, upper, mixed] {
+            assert_eq!(
+                spelling.parse::<AccountId32>().unwrap(),
+                expected,
+                "{spelling:?} must parse to the same account"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rejects_deviations_from_the_contract() {
+        let h = "ab".repeat(32);
+        let rejected = [
+            String::new(),
+            "0x".to_string(),
+            format!("0x{}", &h[..62]),
+            format!("0x{}", &h[..63]),
+            format!("0x{h}0"),
+            format!("0X{h}"),
+            h.clone(),
+            format!("0x{} {}", &h[..8], &h[9..]),
+            format!("0x{h} "),
+            format!(" 0x{h}"),
+            format!("0x{h}\n"),
+            format!("0x{}zz", &h[..62]),
+            // 64 bytes after the prefix, but two of them form one multi-byte char.
+            format!("0x{}é", &h[..62]),
+        ];
+        for input in rejected {
+            assert_eq!(
+                input.parse::<AccountId32>().unwrap_err(),
+                ParseAccountIdError,
+                "{input:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_account_id_error_display() {
+        assert_eq!(
+            format!("{}", ParseAccountIdError),
+            "Invalid hex account id: expected 0x followed by 64 hex characters"
+        );
     }
 }
 

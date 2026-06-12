@@ -211,18 +211,30 @@ mod tests {
             );
         }
 
-        // The `hex_invalid` and `hex_valid` groups pin the "0x" + 64 hex contract of
-        // the Python decode_account_id and TypeScript decodeAccountId entry points
-        // (rejection and mixed-case acceptance respectively). This crate has no string
-        // form of an account id (AccountId32 is constructed from bytes), so there is
-        // nothing to verify here beyond the groups being present.
-        assert!(
-            !vectors["hex_invalid"].as_array().unwrap().is_empty(),
-            "hex_invalid group must be present for the Python/TypeScript suites"
-        );
-        assert!(
-            !vectors["hex_valid"].as_array().unwrap().is_empty(),
-            "hex_valid group must be present for the Python/TypeScript suites"
-        );
+        // The `hex_invalid` and `hex_valid` groups pin the "0x" + 64 hex contract
+        // shared by this crate's `FromStr` implementation for `AccountId32` and the
+        // Python decode_account_id / TypeScript decodeAccountId entry points
+        // (rejection and mixed-case acceptance respectively).
+        for v in vectors["hex_invalid"].as_array().unwrap() {
+            let input = v["hex"].as_str().unwrap();
+            let reason = v["reason"].as_str().unwrap();
+            assert!(
+                input.parse::<AccountId32>().is_err(),
+                "{input:?} must be rejected: {reason}"
+            );
+        }
+        for v in vectors["hex_valid"].as_array().unwrap() {
+            let input = v["hex"].as_str().unwrap();
+            let account: AccountId32 = input
+                .parse()
+                .unwrap_or_else(|_| panic!("{input:?} must parse as an account id"));
+            // Display renders the normalized lowercase form pinned by the fixture.
+            assert_eq!(
+                account.to_string(),
+                v["account_id"].as_str().unwrap(),
+                "Display of {input:?} must be the normalized lowercase form"
+            );
+            assert_classification(&account, &v["expected"]);
+        }
     }
 }

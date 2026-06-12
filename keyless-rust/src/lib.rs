@@ -68,6 +68,10 @@
 //! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
 //!   (performs up to one Blake2b-256 hash internally).
+//! - [`AccountId32`] renders as, and parses from, the raw interchange form `0x` + 64 hex
+//!   characters (`Display` / `FromStr`, the latter returning [`ParseAccountIdError`] on
+//!   any deviation) — the same strings the Python `decode_account_id` and TypeScript
+//!   `decodeAccountId` entry points accept.
 //!
 //! ## Cargo features
 //!

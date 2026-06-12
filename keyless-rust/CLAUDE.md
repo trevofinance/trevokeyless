@@ -82,10 +82,10 @@ every implementation must accept on decode while re-encoding canonically — the
 documented malleability exception),
 `named_invalid_encode` (names every implementation must reject at encode time),
 `hex_invalid` (raw account id strings violating the "0x" + 64 hex contract of the
-Python `decode_account_id` / TypeScript `decodeAccountId` entry points), and
+Rust `AccountId32` `FromStr` and the Python `decode_account_id` / TypeScript
+`decodeAccountId` entry points), and
 `hex_valid` (mixed-case raw account id strings those entry points must accept, with the
-normalized lowercase `account_id`). This crate has no string form of an account id, so
-its suite skips the `hex_*` groups. The Rust, Python, and TypeScript test suites all
+normalized lowercase `account_id`). The Rust, Python, and TypeScript test suites all
 verify against the committed fixture, and CI checks that the fixture matches the
 generator output. After an intentional change to the encoding semantics,
 regenerate with:
@@ -118,6 +118,10 @@ BlockchainAccountInfo::{account_id, account_type, app_agent_id, ta_id, account_n
 
 // AccountName
 AccountName::{new, as_bytes, as_str} (+ TryFrom, FromStr, Display)
+
+// AccountId32 hex interchange form ("0x" + 64 hex characters)
+AccountId32: Display (renders lowercase) + FromStr/TryFrom<&str> (both digit cases;
+Err = ParseAccountIdError) — the contract of the hex_valid/hex_invalid fixture groups
 
 // SS58 (feature `ss58`)
 AccountId32::to_ss58check(&self) -> String

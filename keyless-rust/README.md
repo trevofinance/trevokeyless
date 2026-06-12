@@ -77,6 +77,7 @@ assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
   and classify accounts never compile `parity-scale-codec`, `scale-info`, or their
   proc-macro stack. Note that SCALE `Decode` of `BlockchainAccountInfo` performs no
   consistency validation — see the type documentation.
-- **Hex rendering.** `AccountId32`'s `Display` prints the cross-language raw interchange
-  form `0x` + 64 lowercase hex characters — the exact string the Python
-  `decode_account_id` and TypeScript `decodeAccountId` entry points accept.
+- **Hex round-trip.** `AccountId32`'s `Display` prints the cross-language raw interchange
+  form `0x` + 64 lowercase hex characters, and its `FromStr` parses exactly that contract
+  (both digit cases accepted) — the same strings the Python `decode_account_id` and
+  TypeScript `decodeAccountId` entry points accept.

@@ -105,8 +105,9 @@ fn js(s: &str) -> String {
     serde_json::to_string(s).expect("strings always serialize")
 }
 
-/// The raw account id contract of the Python `decode_account_id` and TypeScript
-/// `decodeAccountId` entry points: exactly "0x" followed by 64 hex characters.
+/// The raw account id contract of the Rust `AccountId32` `FromStr` and the Python
+/// `decode_account_id` / TypeScript `decodeAccountId` entry points: exactly "0x"
+/// followed by 64 hex characters.
 fn is_valid_hex_account_id(s: &str) -> bool {
     let bytes = s.as_bytes();
     bytes.len() == 66 && bytes.starts_with(b"0x") && bytes[2..].iter().all(u8::is_ascii_hexdigit)
@@ -712,11 +713,9 @@ fn main() {
         })
         .collect();
 
-    // 9. Raw account id strings that must be rejected: the contract of the Python
-    // `decode_account_id` and TypeScript `decodeAccountId` entry points is exactly
-    // "0x" + 64 hex characters. This crate has no string form of an account id
-    // (`AccountId32` is constructed from bytes), so the Rust suite does not consume
-    // this group.
+    // 9. Raw account id strings that must be rejected: the contract of this crate's
+    // `FromStr` for `AccountId32` and of the Python `decode_account_id` / TypeScript
+    // `decodeAccountId` entry points is exactly "0x" + 64 hex characters.
     let h = hex(&account_id);
     let hex_invalid: Vec<(String, &str)> = vec![
         (String::new(), "empty string"),
@@ -753,10 +752,9 @@ fn main() {
 
     // 10. Raw account id strings that must be *accepted*: the "0x" + 64 hex contract
     // allows both hex digit cases ([0-9a-fA-F]), and the normalized `account_id` of the
-    // result is always "0x" + lowercase hex. Pinning the acceptance keeps a future
-    // "strictness fix" in one implementation from silently diverging. Like
-    // `hex_invalid`, this group applies to the Python/TypeScript string entry points
-    // only; this crate has no string form of an account id.
+    // result is always "0x" + lowercase hex (this crate's `Display`). Pinning the
+    // acceptance keeps a future "strictness fix" in one implementation from silently
+    // diverging.
     let mut hex_valid: Vec<String> = Vec::new();
     for account in [
         encode_app_agent_account(123),
