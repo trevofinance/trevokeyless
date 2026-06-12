@@ -362,7 +362,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "trevo-keyless"
+name = "trevokeyless"
 version = "0.9.0"
 dependencies = [
  "array-bytes",

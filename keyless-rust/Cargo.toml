@@ -1,5 +1,5 @@
 [package]
-name = "trevo-keyless"
+name = "trevokeyless"
 version = "0.9.0"
 edition = "2021"
 rust-version = "1.79.0"

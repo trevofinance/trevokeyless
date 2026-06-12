@@ -32,7 +32,7 @@ const SS58_CHECKSUM_LENGTH: usize = 2;
 ///
 /// The bound is applied to the **UTF-8 byte length** of the input (`str::len`), which is
 /// identical to the character count for the all-ASCII base58 alphabet; the Python and
-/// TypeScript trevo-keyless libraries export the same constant and apply the same
+/// TypeScript trevokeyless libraries export the same constant and apply the same
 /// byte-length rule, so the rejection kind of non-ASCII garbage cannot drift.
 ///
 /// The bound is a safe over-approximation: the first payload byte of a valid address is
@@ -208,7 +208,7 @@ impl AccountId32 {
 
 /// `AccountId32` serializes as its SS58 address string in the Trevo format
 /// ([`SS58_FORMAT_TREVO_ASSET_HUB`]), matching the address representation used by the
-/// Python and TypeScript trevo-keyless libraries.
+/// Python and TypeScript trevokeyless libraries.
 #[cfg(feature = "serde")]
 impl serde::Serialize for AccountId32 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

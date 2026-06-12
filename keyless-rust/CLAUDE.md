@@ -1,4 +1,4 @@
-# CLAUDE.md — trevo-keyless
+# CLAUDE.md — trevokeyless
 
 Pure-Rust library for encoding and decoding Trevo keyless accounts. No Substrate/frame dependency;
 only `blake2b_simd` (plus optional `parity-scale-codec` + `scale-info`, `bs58`, and `serde` —

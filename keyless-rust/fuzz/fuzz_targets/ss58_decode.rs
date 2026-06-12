@@ -8,7 +8,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use trevo_keyless::AccountId32;
+use trevokeyless::AccountId32;
 
 fuzz_target!(|data: &str| {
     if let Ok((account, format)) = AccountId32::from_ss58check_with_version(data) {

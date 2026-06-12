@@ -262,7 +262,7 @@ impl core::fmt::Display for AccountNameError {
 /// [`decode_account_info`](crate::decode_account_info).
 ///
 /// This is the Rust counterpart of the `AddressType` enum of the Python and TypeScript
-/// trevo-keyless libraries; the variant order (Regular = 0, AppAgent = 1, Transactional = 2,
+/// trevokeyless libraries; the variant order (Regular = 0, AppAgent = 1, Transactional = 2,
 /// Named = 3) matches their numeric values, so the keyless variants coincide with the type
 /// discriminant stored at byte `[4]` of a keyless account.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -369,7 +369,7 @@ impl core::fmt::Display for KeylessDecodeError {
 /// The serde representation is the externally tagged Rust enum, e.g.
 /// `{"Named":{"account_id":"ttow…","app_agent_id":123,"account_name":"example123"}}`.
 /// This shape differs from the flat info objects returned by the Python and TypeScript
-/// trevo-keyless libraries; only SS58 address strings and raw account-id bytes are
+/// trevokeyless libraries; only SS58 address strings and raw account-id bytes are
 /// cross-language interchange formats.
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Hash)]
 #[cfg_attr(

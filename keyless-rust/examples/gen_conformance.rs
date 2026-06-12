@@ -14,7 +14,7 @@
 //!
 //! CI verifies that the committed fixture matches this generator's output.
 
-use trevo_keyless::*;
+use trevokeyless::*;
 
 /// Deterministic xorshift64* PRNG (same construction as `tests_properties.rs`).
 struct Rng(u64);

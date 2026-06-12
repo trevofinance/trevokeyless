@@ -18,7 +18,7 @@ For more detailed docs, visit the README of the specific library:
   - Package: [PyPI](https://pypi.org/project/trevokeyless/)
 - Rust
   - Sources: [GitHub](./keyless-rust/)
-  - Package: [Crates.io](https://crates.io/crates/trevo-keyless)
+  - Package: [Crates.io](https://crates.io/crates/trevokeyless)
 
 The Rust implementation is the source of truth for the encoding. The shared fixture
 [`conformance/vectors.json`](./conformance/vectors.json) is generated from it

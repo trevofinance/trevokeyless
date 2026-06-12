@@ -32,7 +32,7 @@ The checksum bytes are `blake2_256(open_part)[N..]` where N is the length of the
 ## Example
 
 ```rust
-use trevo_keyless::*;
+use trevokeyless::*;
 
 // Encode an AppAgent root account
 let app_agent_id: AppAgentId = 123;
@@ -66,7 +66,7 @@ assert_eq!(AccountId32::from_ss58check(&address).unwrap(), account);
 
 ## Design notes
 
-- **Accounts, not addresses.** Unlike the Python and TypeScript trevo-keyless libraries,
+- **Accounts, not addresses.** Unlike the Python and TypeScript trevokeyless libraries,
   whose entry points take and return SS58 address *strings*, this crate separates the two
   layers: `encode_*_account` returns the raw 32-byte `AccountId32`, and rendering it as an
   address is an explicit `to_ss58check*` call. The crate's primary consumer is the chain

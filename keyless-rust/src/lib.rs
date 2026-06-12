@@ -90,7 +90,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use trevo_keyless::*;
+//! use trevokeyless::*;
 //!
 //! // Encode an AppAgent root account
 //! let app_agent_id: AppAgentId = 123;

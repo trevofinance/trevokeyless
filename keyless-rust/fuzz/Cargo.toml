@@ -1,5 +1,5 @@
 [package]
-name = "trevo-keyless-fuzz"
+name = "trevokeyless-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-trevo-keyless = { path = "..", features = ["ss58"] }
+trevokeyless = { path = "..", features = ["ss58"] }
 
 [[bin]]
 name = "ss58_decode"

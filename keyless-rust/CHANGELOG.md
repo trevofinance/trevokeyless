@@ -1,4 +1,4 @@
-# Changelog — trevo-keyless (Rust)
+# Changelog — trevokeyless (Rust)
 
 The byte encoding of keyless accounts is frozen; `conformance/vectors.json` at the
 repository root is the executable specification shared with the Python and TypeScript
