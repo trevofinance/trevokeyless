@@ -1,8 +1,8 @@
 """Pins the public surface of the package.
 
-The vendored generic SS58 codec lives in the private module ``trevokeyless._ss58``;
-it must not be reachable under a public name, and ``__all__`` must stay the complete
-list of supported names.
+The SS58 codec lives in the private module ``trevokeyless._ss58``; its helpers must not
+be reachable under a public name (only its error types are re-exported), and
+``__all__`` must stay the complete list of supported names.
 """
 
 import unittest
@@ -26,6 +26,8 @@ class TestPublicSurface(unittest.TestCase):
             "BlockchainAddress",
             "BlockchainAddressInfo",
             "SS58Format",
+            "Ss58DecodeError",
+            "Ss58ErrorKind",
             "Ss58FormatMismatchError",
             "TransactionalAddressId",
             "decode_account_id",
@@ -42,13 +44,14 @@ class TestPublicSurface(unittest.TestCase):
         for name in trevokeyless.__all__:
             self.assertTrue(hasattr(trevokeyless, name), f"__all__ contains unresolvable name {name!r}")
 
-    def test_vendored_ss58_module_is_private(self: "TestPublicSurface") -> None:
-        # The generic Substrate SS58 helpers intentionally have no public name: their
-        # semantics (hex passthrough, non-32-byte payloads) are broader than the
-        # contract of this library.
+    def test_ss58_codec_module_is_private(self: "TestPublicSurface") -> None:
+        # The SS58 codec helpers intentionally have no public name; only the error
+        # types (Ss58DecodeError, Ss58ErrorKind) defined alongside them are public.
         self.assertFalse(hasattr(trevokeyless, "ss58"))
         self.assertNotIn("ss58", trevokeyless.__all__)
         self.assertNotIn("_ss58", trevokeyless.__all__)
+        self.assertNotIn("ss58_decode", trevokeyless.__all__)
+        self.assertNotIn("ss58_encode", trevokeyless.__all__)
 
 
 if __name__ == "__main__":

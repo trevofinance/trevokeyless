@@ -15,7 +15,6 @@ python3 -m unittest discover
 ## Typing
 
 The package ships a `py.typed` marker, so type checkers read the inline annotations of
-`keyless.py` directly — there is no stub file to keep in sync. The vendored
-`_ss58.py` (Polkascan code, kept byte-stable apart from hardening fixes) is the one
-exception: it is shadowed by the handwritten `_ss58.pyi` stub, which is the typed surface
-of that module.
+every module directly — there are no stub files to keep in sync. (`_ss58.py` is a fully
+typed port of the Rust reference SS58 decoder; the historically vendored Polkascan
+codec and its handwritten stub are gone.)

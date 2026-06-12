@@ -1,266 +1,218 @@
-# ruff: noqa
+"""Strict SS58 codec for 32-byte account ids (private module).
 
-# Python SCALE Codec Library
-#
-# Copyright 2018-2021 Stichting Polkascan (Polkascan Foundation).
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-#  ss58.py
+A port of the Rust reference implementation (``keyless-rust/src/ss58.rs``, mirrored by
+the TypeScript ``src/ss58.ts``). Decoding accepts only the canonical structure: a 1- or
+2-byte format prefix, a 32-byte account id, and a full two-byte checksum
+(``blake2b_512(b"SS58PRE" ++ prefix ++ account_id)[0..2]``), with a non-reserved format.
 
-""" SS58 is a simple address format designed for Substrate based chains.
-    Encoding/decoding according to specification on
-    https://github.com/paritytech/substrate/wiki/External-Address-Format-(SS58)
+The historically vendored generic codec additionally accepted account-index payloads
+(1, 2, 4, 8 bytes), 33-byte public keys, and a ``"0x"`` hex passthrough; those inputs
+are now rejected with the same error classification as the Rust decoder. The expected
+SS58 format is deliberately *not* checked here: ``ss58_decode`` returns the format found
+in the address, and the caller compares it only after the address has fully validated —
+exactly like ``from_ss58check`` of the Rust implementation.
 
+This module is private to the package; only the entry points of
+``trevokeyless.keyless`` are public API. The error types (``Ss58DecodeError``,
+``Ss58ErrorKind``) are re-exported from the package root.
 """
-from typing import Optional, Union
+
+from hashlib import blake2b
+from typing import Literal, TypeAlias
 
 import base58
-from hashlib import blake2b
 
-# Longest base58 string any payload supported by this codec can produce: the largest
-# payload in the checksum-length table of ss58_decode is 2 (prefix) + 33 (public key) +
-# 2 (checksum) = 37 bytes = 296 bits, and each base58 character carries log2(58) ~ 5.858
-# bits, so a valid address has at most ceil(296 / 5.858) = 51 characters. Longer input is
-# rejected before base58 decoding, whose cost grows quadratically with the input length.
-# (The trevokeyless layer applies its stricter 50-character bound for 32-byte account
-# ids; this generic bound mirrors the same hardening inside the Rust SS58 decoder.)
-_MAX_SS58_ADDRESS_LENGTH = 51
+# Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
+# bound of the Rust implementation.
+SS58_FORMAT_MAX = 16383
+
+# The reserved SS58 formats that can never be used (per the SS58 registry).
+_RESERVED_FORMATS = frozenset((46, 47))
+
+# First-byte ranges of the SS58 prefix encoding: 0..=63 is a single-byte format,
+# 64..=127 starts a two-byte format, 128..=255 is invalid.
+_SINGLE_BYTE_FORMAT_MAX = 0b0011_1111
+_TWO_BYTE_PREFIX_FIRST_MAX = 0b0111_1111
+
+# Length in bytes of the SS58 checksum of a 32-byte account id.
+_SS58_CHECKSUM_LENGTH = 2
+
+# Length in bytes of a blockchain account id.
+_ACCOUNT_ID_LENGTH = 32
+
+# Maximum length in characters of an SS58 address of a 32-byte account id: the payload
+# is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
+# base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
+# ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
+# whose cost grows quadratically with the input length. Mirrors the Rust implementation.
+SS58_MAX_ADDRESS_LENGTH = 50
 
 # The 58 characters of the Bitcoin base58 alphabet used by SS58. base58.b58decode
 # right-strips whitespace from its input (str.rstrip) before decoding, which would give
 # every address additional accepted spellings such as "<address>\n"; the Rust (bs58) and
-# TypeScript (@polkadot) decoders reject any character outside the alphabet. The charset
-# is therefore checked explicitly before decoding.
+# TypeScript (@scure/base) decoders reject any character outside the alphabet. The
+# charset is therefore checked explicitly before decoding.
 _BASE58_ALPHABET = frozenset("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
-# The hex digits accepted in a "0x"-prefixed account id string.
-_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+Ss58ErrorKind: TypeAlias = Literal[
+    "InvalidBase58",
+    "InvalidLength",
+    "InvalidChecksum",
+    "InvalidFormat",
+    "UnexpectedFormat",
+]
+"""The failure classification of an ``Ss58DecodeError``.
+
+The names mirror the variants of the Rust ``Ss58Error`` enum; the TypeScript
+``Ss58Error.kind`` uses the same set. ``"UnexpectedFormat"`` is raised only by
+``trevokeyless.keyless`` (as ``Ss58FormatMismatchError``), never by this module.
+"""
 
 
-def _validate_base58_charset(address: str) -> None:
+class Ss58DecodeError(ValueError):
+    """Raised by the SS58 decoding (and encoding, for invalid formats) functions.
+
+    Mirrors the ``Ss58Error`` enum of the Rust implementation: ``kind`` is the variant
+    name and the message matches the Rust ``Display`` output (the TypeScript
+    implementation reports the same pair). Subclasses ``ValueError`` so existing
+    ``except ValueError`` handlers treat it like any other decoding failure.
+
+    ``trevokeyless.Ss58FormatMismatchError`` is the ``"UnexpectedFormat"`` case; it
+    additionally carries the expected and the found format.
+
+    Attributes:
+        kind (Ss58ErrorKind): The failure classification.
+    """
+
+    def __init__(self, kind: Ss58ErrorKind, message: str) -> None:
+        self.kind: Ss58ErrorKind = kind
+        super().__init__(message)
+
+    @classmethod
+    def invalid_base58(cls) -> "Ss58DecodeError":
+        """The string contains a character outside the base58 alphabet."""
+        return cls("InvalidBase58", "Address is not valid base58")
+
+    @classmethod
+    def invalid_length(cls) -> "Ss58DecodeError":
+        """The address is longer than any valid SS58-encoded 32-byte account id, or the
+        decoded payload does not have the expected length."""
+        return cls("InvalidLength", "Address has an invalid length")
+
+    @classmethod
+    def invalid_checksum(cls) -> "Ss58DecodeError":
+        """The checksum does not match the payload."""
+        return cls("InvalidChecksum", "Address has an invalid checksum")
+
+    @classmethod
+    def invalid_format(cls) -> "Ss58DecodeError":
+        """The SS58 format is reserved (46, 47), out of range (> 16383), or its prefix
+        byte cannot be parsed."""
+        return cls("InvalidFormat", "SS58 format is invalid or reserved")
+
+
+def _format_invalid(ss58_format: int) -> bool:
+    """True for SS58 formats that can never be used: reserved (46, 47), out of the
+    14-bit range, or not an integer at all.
+
+    Mirrors the TypeScript ``formatInvalid`` check; the Rust implementation enforces
+    integrality through the ``u16`` type. ``bool`` is rejected explicitly: it is an
+    ``int`` subclass, but silently encoding ``True`` as format 1 would hide a caller
+    bug.
+    """
+    return (
+        isinstance(ss58_format, bool)
+        or not isinstance(ss58_format, int)
+        or ss58_format < 0
+        or ss58_format > SS58_FORMAT_MAX
+        or ss58_format in _RESERVED_FORMATS
+    )
+
+
+def _ss58_hash(data: bytes) -> bytes:
+    """The 64-byte blake2b hash of ``b"SS58PRE" + data``, of which the first
+    ``_SS58_CHECKSUM_LENGTH`` bytes are the SS58 checksum."""
+    return blake2b(b"SS58PRE" + data, digest_size=64).digest()
+
+
+def ss58_encode(account_id: bytes, ss58_format: int) -> str:
+    """Encodes a 32-byte account id as an SS58 address with the given format.
+
+    Args:
+        account_id (bytes): The raw 32-byte account id.
+        ss58_format (int): SS58 format (network prefix) to encode.
+
+    Returns:
+        str: The SS58 address.
+
+    Raises:
+        Ss58DecodeError: kind ``"InvalidFormat"`` if the format is reserved (46, 47) or
+            not an integer in [0, 16383]; kind ``"InvalidLength"`` if the account id is
+            not exactly 32 bytes.
+    """
+    if _format_invalid(ss58_format):
+        raise Ss58DecodeError.invalid_format()
+    if len(account_id) != _ACCOUNT_ID_LENGTH:
+        raise Ss58DecodeError.invalid_length()
+
+    if ss58_format <= _SINGLE_BYTE_FORMAT_MAX:
+        prefix = bytes([ss58_format])
+    else:
+        # Two-byte prefix: the first byte carries bits 2..=7 of the format (tagged with
+        # 0b01 in its upper two bits), the second byte carries bits 8..=13 in its lower
+        # six bits and bits 0..=1 in its upper two bits.
+        prefix = bytes(
+            [
+                ((ss58_format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
+                (ss58_format >> 8) | ((ss58_format & 0b0000_0000_0000_0011) << 6),
+            ]
+        )
+    payload = prefix + account_id
+    return base58.b58encode(payload + _ss58_hash(payload)[:_SS58_CHECKSUM_LENGTH]).decode("ascii")
+
+
+def ss58_decode(address: str) -> tuple[bytes, int]:
+    """Decodes an SS58 address of any (non-reserved) format.
+
+    Input longer than the maximum length of a valid address (50 characters) is rejected
+    before base58 decoding, so the cost of decoding untrusted input stays bounded.
+
+    Args:
+        address (str): The SS58 address string.
+
+    Returns:
+        tuple[bytes, int]: The 32-byte account id and the format found in the address.
+
+    Raises:
+        Ss58DecodeError: with the ``kind`` describing the failure, exactly like the Rust
+            ``from_ss58check_with_version``.
+    """
+    if len(address) > SS58_MAX_ADDRESS_LENGTH:
+        raise Ss58DecodeError.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
-        raise ValueError("Invalid base58 character")
+        raise Ss58DecodeError.invalid_base58()
+    data = base58.b58decode(address)
+    if not data:
+        raise Ss58DecodeError.invalid_length()
 
-
-def _decode_hex_strict(hex_digits: str) -> bytes:
-    """bytes.fromhex with a strict charset: fromhex tolerates ASCII whitespace between
-    digit pairs, which would let malformed strings through. The trevokeyless layer and
-    the Rust and TypeScript implementations all reject such input."""
-    if not all(c in _HEX_DIGITS for c in hex_digits):
-        raise ValueError("Invalid hex account id")
-    try:
-        return bytes.fromhex(hex_digits)
-    except ValueError as error:
-        # Odd number of hex digits.
-        raise ValueError("Invalid hex account id") from error
-
-
-def ss58_decode(address: str, valid_ss58_format: Optional[int] = None) -> str:
-    """
-    Decodes given SS58 encoded address to an account ID
-    Parameters
-    ----------
-    address: e.g. EaG2CRhJWPb7qmdcJvy3LiWdh26Jreu9Dx6R1rXxPmYXoDk
-    valid_ss58_format
-
-    Returns
-    -------
-    Decoded string AccountId
-    """
-
-    # Check if address is already decoded. The hex digits are still validated, so that
-    # malformed input (e.g. "0xzz") raises ValueError instead of being returned verbatim.
-    if address.startswith('0x'):
-        _decode_hex_strict(address[2:])
-        return address
-
-    if address == '':
-        raise ValueError("Empty address provided")
-
-    if len(address) > _MAX_SS58_ADDRESS_LENGTH:
-        # No valid address of any supported payload is longer; rejecting early keeps the
-        # cost of base58-decoding untrusted input bounded.
-        raise ValueError("Invalid address length")
-
-    _validate_base58_charset(address)
-
-    checksum_prefix = b'SS58PRE'
-
-    address_decoded = base58.b58decode(address)
-
-    if len(address_decoded) < 2:
-        raise ValueError("Invalid address length")
-
-    if address_decoded[0] & 0b1000_0000:
-        # Per the SS58 specification the first byte must be in 0..=63 (single-byte format)
-        # or 64..=127 (two-byte format); first bytes 128..=255 are invalid.
-        raise ValueError("Invalid SS58 format prefix")
-
-    if address_decoded[0] & 0b0100_0000:
-        ss58_format_length = 2
-        ss58_format = ((address_decoded[0] & 0b0011_1111) << 2) | (address_decoded[1] >> 6) | \
-                      ((address_decoded[1] & 0b0011_1111) << 8)
+    if data[0] <= _SINGLE_BYTE_FORMAT_MAX:
+        prefix_length = 1
+        ss58_format = data[0]
+    elif data[0] <= _TWO_BYTE_PREFIX_FIRST_MAX:
+        if len(data) < 2:  # noqa: PLR2004 - the two-byte prefix needs a second byte
+            raise Ss58DecodeError.invalid_length()
+        prefix_length = 2
+        ss58_format = ((data[0] & 0b0011_1111) << 2) | (data[1] >> 6) | ((data[1] & 0b0011_1111) << 8)
     else:
-        ss58_format_length = 1
-        ss58_format = address_decoded[0]
+        # First bytes 128..=255 are not a valid SS58 prefix encoding.
+        raise Ss58DecodeError.invalid_format()
+    if _format_invalid(ss58_format):
+        raise Ss58DecodeError.invalid_format()
+    if len(data) != prefix_length + _ACCOUNT_ID_LENGTH + _SS58_CHECKSUM_LENGTH:
+        raise Ss58DecodeError.invalid_length()
 
-    if ss58_format in [46, 47]:
-        raise ValueError(f"{ss58_format} is a reserved SS58 format")
+    checksum_start = len(data) - _SS58_CHECKSUM_LENGTH
+    if data[checksum_start:] != _ss58_hash(data[:checksum_start])[:_SS58_CHECKSUM_LENGTH]:
+        raise Ss58DecodeError.invalid_checksum()
 
-    if valid_ss58_format is not None and ss58_format != valid_ss58_format:
-        raise ValueError("Invalid SS58 format")
-
-    # Determine checksum length according to length of address string
-    if len(address_decoded) in [3, 4, 6, 10]:
-        checksum_length = 1
-    elif len(address_decoded) in [5, 7, 11, 34 + ss58_format_length, 35 + ss58_format_length]:
-        checksum_length = 2
-    elif len(address_decoded) in [8, 12]:
-        checksum_length = 3
-    elif len(address_decoded) in [9, 13]:
-        checksum_length = 4
-    elif len(address_decoded) in [14]:
-        checksum_length = 5
-    elif len(address_decoded) in [15]:
-        checksum_length = 6
-    elif len(address_decoded) in [16]:
-        checksum_length = 7
-    elif len(address_decoded) in [17]:
-        checksum_length = 8
-    else:
-        raise ValueError("Invalid address length")
-
-    checksum = blake2b(checksum_prefix + address_decoded[0:-checksum_length]).digest()
-
-    if checksum[0:checksum_length] != address_decoded[-checksum_length:]:
-        raise ValueError("Invalid checksum")
-
-    return "0x" + address_decoded[ss58_format_length:len(address_decoded)-checksum_length].hex()
-
-
-def ss58_encode(address: Union[str, bytes], ss58_format: int = 42) -> str:
-    """
-    Encodes an account ID to an Substrate address according to provided address_type
-
-    Parameters
-    ----------
-    address
-    ss58_format
-
-    Returns
-    -------
-    str
-    """
-    checksum_prefix = b'SS58PRE'
-
-    if ss58_format < 0 or ss58_format > 16383 or ss58_format in [46, 47]:
-        raise ValueError("Invalid value for ss58_format")
-
-    if type(address) is bytes or type(address) is bytearray:
-        address_bytes = address
-    else:
-        # Strip only the optional "0x" prefix: str.replace would drop "0x" occurrences
-        # anywhere in the string, silently accepting malformed input such as
-        # "00...0x...00". The strict decode also rejects the whitespace that
-        # bytes.fromhex would otherwise tolerate.
-        address_bytes = _decode_hex_strict(address.removeprefix('0x'))  # type: ignore[arg-type]
-
-    if len(address_bytes) in [32, 33]:
-        # Checksum size is 2 bytes for public key
-        checksum_length = 2
-    elif len(address_bytes) in [1, 2, 4, 8]:
-        # Checksum size is 1 byte for account index
-        checksum_length = 1
-    else:
-        raise ValueError("Invalid length for address")
-
-    if ss58_format < 64:
-        ss58_format_bytes = bytes([ss58_format])
-    else:
-        ss58_format_bytes = bytes([
-            ((ss58_format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000,
-            (ss58_format >> 8) | ((ss58_format & 0b0000_0000_0000_0011) << 6)
-        ])
-
-    input_bytes = ss58_format_bytes + address_bytes
-    checksum = blake2b(checksum_prefix + input_bytes).digest()
-
-    return base58.b58encode(input_bytes + checksum[:checksum_length]).decode()
-
-
-def is_valid_ss58_address(value: str, valid_ss58_format: Optional[int] = None) -> bool:
-    """
-    Checks if given value is a valid SS58 formatted address, optionally check if address is valid for specified
-    ss58_format
-
-    Parameters
-    ----------
-    value: value to checked
-    valid_ss58_format: if valid_ss58_format is provided the address must be valid for specified ss58_format (network) as well
-
-    Returns
-    -------
-    bool
-    """
-
-    # Return False in case a public key is provided
-    if value.startswith('0x'):
-        return False
-
-    try:
-        ss58_decode(value, valid_ss58_format=valid_ss58_format)
-    except ValueError:
-        return False
-
-    return True
-
-
-def get_ss58_format(ss58_address: str) -> int:
-    """
-    Returns the SS58 format for given SS58 address
-
-    Parameters
-    ----------
-    ss58_address
-
-    Returns
-    -------
-    int
-    """
-    if len(ss58_address) > _MAX_SS58_ADDRESS_LENGTH:
-        # Same early bound as ss58_decode: keeps base58 decoding of untrusted input cheap.
-        raise ValueError("Invalid address length")
-
-    _validate_base58_charset(ss58_address)
-
-    address_decoded = base58.b58decode(ss58_address)
-
-    if len(address_decoded) < 2:
-        raise ValueError("Invalid address length")
-
-    if address_decoded[0] & 0b1000_0000:
-        # Per the SS58 specification the first byte must be in 0..=63 (single-byte format)
-        # or 64..=127 (two-byte format); first bytes 128..=255 are invalid.
-        raise ValueError("Invalid SS58 format prefix")
-
-    if address_decoded[0] & 0b0100_0000:
-        ss58_format = ((address_decoded[0] & 0b0011_1111) << 2) | (address_decoded[1] >> 6) | \
-                      ((address_decoded[1] & 0b0011_1111) << 8)
-    else:
-        ss58_format = address_decoded[0]
-
-    if ss58_format in [46, 47]:
-        raise ValueError(f"{ss58_format} is a reserved SS58 format")
-
-    return ss58_format
+    return bytes(data[prefix_length:checksum_start]), ss58_format

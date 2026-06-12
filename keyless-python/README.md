@@ -137,8 +137,12 @@ accepted on decode.) `is_keyless_address` likewise raises — rather than return
 
 Two `ValueError` subclasses carry structured details:
 
-- `Ss58FormatMismatchError` (`expected`/`found` attributes) when the address is a valid
-  SS58 string of a different format;
+- `Ss58DecodeError` for every SS58 decoding failure: its `kind` attribute mirrors the
+  variants of the Rust `Ss58Error` enum (`"InvalidBase58" | "InvalidLength" |
+  "InvalidChecksum" | "InvalidFormat" | "UnexpectedFormat"`). The `"UnexpectedFormat"`
+  case is raised as the subclass `Ss58FormatMismatchError` (`expected`/`found`
+  attributes) — raised only when the address is a fully valid SS58 string of a
+  different format; an invalid address always raises its validation kind instead.
 - `AddressTypeMismatchError` (`expected`/`found` attributes) from the typed decoders
   (`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
   when the address decodes to a different type.

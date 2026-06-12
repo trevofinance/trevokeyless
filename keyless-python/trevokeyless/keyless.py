@@ -22,7 +22,8 @@ from enum import Enum
 from hashlib import blake2b
 from typing import TypeAlias
 
-from ._ss58 import get_ss58_format, ss58_decode, ss58_encode
+from ._ss58 import SS58_FORMAT_MAX as _SS58_FORMAT_MAX
+from ._ss58 import Ss58DecodeError, ss58_decode, ss58_encode
 
 # Constants
 NAMED_ADDRESS_LENGTH = 10
@@ -32,19 +33,8 @@ SS58_FORMAT_TREVO_ASSET_HUB = 5335
 # Rust implementation and the `U32_MAX` bound of the TypeScript implementation.
 U32_MAX = 4294967295
 
-# Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the `SS58_FORMAT_MAX`
-# bound of the Rust implementation.
-_SS58_FORMAT_MAX = 16383
-
 # Length in bytes of a blockchain account id.
 ACCOUNT_ID_LENGTH = 32
-
-# Maximum length in characters of an SS58 address of a 32-byte account id: the payload is
-# at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
-# base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
-# ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-# whose cost grows quadratically with the input length. Mirrors the Rust implementation.
-SS58_MAX_ADDRESS_LENGTH = 50
 
 # A raw account id accepted by decode_account_id: "0x" followed by exactly 64 hex
 # characters. bytes.fromhex is lenient about ASCII whitespace, so the shape must be
@@ -90,12 +80,15 @@ class AddressTypeMismatchError(ValueError):
         super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}")
 
 
-class Ss58FormatMismatchError(ValueError):
+class Ss58FormatMismatchError(Ss58DecodeError):
     """Raised when an address is a valid SS58 string but uses a different format than expected.
 
-    Mirrors the ``Ss58Error::UnexpectedFormat`` variant of the Rust implementation (the
-    TypeScript implementation reports the same pair). Subclasses ``ValueError`` so
-    ``except ValueError`` handlers treat it like any other decoding failure.
+    The ``"UnexpectedFormat"`` case of :class:`Ss58DecodeError`, mirroring the
+    ``Ss58Error::UnexpectedFormat`` variant of the Rust implementation (the TypeScript
+    implementation reports the same pair). Raised only after the address has fully
+    validated — structure, length, and checksum — exactly like the Rust implementation,
+    which compares the format last; an address that fails validation raises the
+    corresponding :class:`Ss58DecodeError` instead.
 
     Attributes:
         expected (SS58Format): The SS58 format required by the caller.
@@ -105,7 +98,7 @@ class Ss58FormatMismatchError(ValueError):
     def __init__(self, expected: SS58Format, found: SS58Format) -> None:
         self.expected = expected
         self.found = found
-        super().__init__(f"Expected SS58 format {expected} but found {found}")
+        super().__init__("UnexpectedFormat", f"Expected SS58 format {expected} but found {found}")
 
 
 @dataclass(frozen=True)
@@ -439,8 +432,10 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
         bytes: The 32-byte account id.
 
     Raises:
-        ValueError: If ss58_format is not an integer in [0, 16383], or the input is not
-            a valid SS58 address of a 32-byte account id in the expected format.
+        Ss58DecodeError: If the input is not a valid SS58 address of a 32-byte account
+            id (``Ss58FormatMismatchError`` if it is valid but uses a different format
+            than expected).
+        ValueError: If ss58_format is not an integer in [0, 16383].
     """
     _validate_ss58_format(ss58_format)
 
@@ -450,27 +445,13 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
         # entry point for raw account ids.
         msg = "Raw account id hex is not an SS58 address; use decode_account_id"
         raise ValueError(msg)
-    if len(blockchain_address) > SS58_MAX_ADDRESS_LENGTH:
-        # No valid address of a 32-byte account id is longer; rejecting early keeps
-        # the cost of base58-decoding untrusted input bounded.
-        msg = "Invalid address length"
-        raise ValueError(msg)
-    try:
-        account_id = ss58_decode(blockchain_address, ss58_format)
-    except ValueError as error:
-        if str(error) == "Invalid SS58 format":
-            # The vendored decoder raises this message only on its expected-format
-            # comparison: the address itself decoded successfully (checksum and
-            # reserved-format checks passed) but carries a different format. Re-raise
-            # with the expected and found formats, mirroring the Rust UnexpectedFormat
-            # error.
-            raise Ss58FormatMismatchError(ss58_format, get_ss58_format(blockchain_address)) from error
-        raise
-    account_id_bytes = bytes.fromhex(account_id[2:])
 
-    if len(account_id_bytes) != ACCOUNT_ID_LENGTH:
-        msg = f"Invalid account id length: expected {ACCOUNT_ID_LENGTH} bytes, got {len(account_id_bytes)}"
-        raise ValueError(msg)
+    account_id_bytes, found_format = ss58_decode(blockchain_address)
+    # The expected format is compared only after the address has fully validated
+    # (structure, length, checksum), exactly like the Rust from_ss58check: an invalid
+    # address must raise its validation error, not a misleading format mismatch.
+    if found_format != ss58_format:
+        raise Ss58FormatMismatchError(ss58_format, found_format)
     return account_id_bytes
 
 
@@ -492,8 +473,11 @@ def decode_address(
         BlockchainAddressInfo: an object with info about the address.
 
     Raises:
-        ValueError: If ss58_format is not an integer in [0, 16383], or the address is
-            not a valid SS58 string of a 32-byte account id in the expected format.
+        Ss58DecodeError: If the address is not a valid SS58 string of a 32-byte account
+            id; its ``kind`` carries the failure classification
+            (``Ss58FormatMismatchError`` if the address is valid but uses a different
+            format than expected).
+        ValueError: If ss58_format is not an integer in [0, 16383].
     """
     account_id_bytes = _decode_ss58_account_id_bytes(blockchain_address, ss58_format)
     return _classify_account_id(blockchain_address, account_id_bytes)

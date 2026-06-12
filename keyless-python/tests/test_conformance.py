@@ -62,7 +62,7 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["ss58_formats"]:
             with self.subTest(hex=v["hex"], ss58_format=v["format"]):
                 self.assertEqual(ss58_encode(bytes.fromhex(v["hex"]), v["format"]), v["ss58"])
-                self.assertEqual(ss58_decode(v["ss58"], v["format"]), "0x" + v["hex"])
+                self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
                 info = trevokeyless.decode_address(v["ss58"], v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
 

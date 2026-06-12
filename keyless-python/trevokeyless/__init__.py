@@ -1,10 +1,17 @@
 # ruff: noqa: I001
 
+# The SS58 error types and the address length bound live in trevokeyless._ss58 (the
+# module that raises/applies them); they are deliberately part of the public API,
+# unlike the codec helpers of that module.
+from trevokeyless._ss58 import (
+    SS58_MAX_ADDRESS_LENGTH,
+    Ss58DecodeError,
+    Ss58ErrorKind,
+)
 from trevokeyless.keyless import (
     ACCOUNT_ID_LENGTH,
     NAMED_ADDRESS_LENGTH,
     SS58_FORMAT_TREVO_ASSET_HUB,
-    SS58_MAX_ADDRESS_LENGTH,
     U32_MAX,
     BlockchainAddress,
     BlockchainAccountId,
@@ -41,6 +48,8 @@ __all__ = [
     "BlockchainAddress",
     "BlockchainAddressInfo",
     "SS58Format",
+    "Ss58DecodeError",
+    "Ss58ErrorKind",
     "Ss58FormatMismatchError",
     "TransactionalAddressId",
     "decode_account_id",

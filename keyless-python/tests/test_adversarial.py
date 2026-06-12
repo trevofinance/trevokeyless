@@ -12,8 +12,8 @@ from hashlib import blake2b
 import base58
 
 import trevokeyless
-from trevokeyless import AddressType, AddressTypeMismatchError
-from trevokeyless._ss58 import get_ss58_format, is_valid_ss58_address, ss58_decode, ss58_encode
+from trevokeyless import AddressType, AddressTypeMismatchError, Ss58DecodeError
+from trevokeyless._ss58 import ss58_decode, ss58_encode
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -118,27 +118,30 @@ class TestAccountIdLength(unittest.TestCase):
     """Account ids must be exactly 32 bytes; the Rust AccountId32 makes this structural."""
 
     def test_rejects_short_ss58_payloads(self: "TestAccountIdLength") -> None:
-        # Valid SS58 envelopes (correct checksum, format 5335) around 1-, 4- and 8-byte
-        # payloads: legal "account index" lengths in the generic SS58 scheme, but never a
-        # 32-byte account id. Previously these raised IndexError or decoded as Regular.
+        # SS58 envelopes (correct checksum, format 5335) around 1-, 4- and 8-byte
+        # payloads with the one-byte checksum of the generic "account index" scheme:
+        # never a 32-byte account id. Built manually since ss58_encode refuses them.
         for payload in [b"\x07", b"\xde\xad\xbe\xef", bytes(8)]:
             with self.subTest(payload=payload):
-                address = ss58_encode(payload, SS58_FORMAT)
-                with self.assertRaises(ValueError):
+                address = _raw_ss58(_format_prefix(SS58_FORMAT) + payload, checksum_length=1)
+                with self.assertRaises(Ss58DecodeError) as ctx:
                     trevokeyless.decode_address(address, SS58_FORMAT)
+                self.assertEqual(ctx.exception.kind, "InvalidLength")
 
     def test_rejects_33_byte_payload(self: "TestAccountIdLength") -> None:
         # A 33-byte payload (ECDSA-style public key) is legal generic SS58 but never a
         # 32-byte account id; its address is 51 chars, so the length pre-bound fires.
-        address = ss58_encode(APP_AGENT_123 + b"\x00", SS58_FORMAT)
-        with self.assertRaises(ValueError):
+        address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123 + b"\x00")
+        with self.assertRaises(Ss58DecodeError) as ctx:
             trevokeyless.decode_address(address, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
 
     def test_rejects_31_byte_payload(self: "TestAccountIdLength") -> None:
-        # Not a legal SS58 length at all; built manually since ss58_encode refuses it.
+        # Not a legal SS58 length at all.
         address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123[:31])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(Ss58DecodeError) as ctx:
             trevokeyless.decode_address(address, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
 
 
 class TestMalformedSs58(unittest.TestCase):
@@ -149,8 +152,9 @@ class TestMalformedSs58(unittest.TestCase):
         payload = bytearray(base58.b58decode(address))
         payload[-1] ^= 0xFF
         tampered = base58.b58encode(bytes(payload)).decode()
-        with self.assertRaisesRegex(ValueError, "^Invalid checksum$"):
+        with self.assertRaisesRegex(Ss58DecodeError, "^Address has an invalid checksum$") as ctx:
             trevokeyless.decode_address(tampered, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidChecksum")
 
     def test_tampered_keyless_checksum_decodes_as_regular(self: "TestMalformedSs58") -> None:
         # Corrupt a byte in the keyless checksum region (open part of an AppAgent account
@@ -168,18 +172,21 @@ class TestMalformedSs58(unittest.TestCase):
         # produce it).
         reserved_format = 46
         address = _raw_ss58(_format_prefix(reserved_format) + APP_AGENT_123)
-        with self.assertRaisesRegex(ValueError, "reserved SS58 format"):
+        with self.assertRaisesRegex(Ss58DecodeError, "^SS58 format is invalid or reserved$") as ctx:
             trevokeyless.decode_address(address, reserved_format)
-        with self.assertRaises(ValueError):
+        self.assertEqual(ctx.exception.kind, "InvalidFormat")
+        with self.assertRaises(Ss58DecodeError) as encode_ctx:
             ss58_encode(APP_AGENT_123, reserved_format)
+        self.assertEqual(encode_ctx.exception.kind, "InvalidFormat")
 
     def test_rejects_prefix_byte_in_reserved_range(self: "TestMalformedSs58") -> None:
         # Per the SS58 spec the first byte must be 0..=63 or 64..=127. A crafted address
-        # with first byte 0x80 and a valid checksum must be rejected (the Rust and
-        # polkadot-js decoders reject it; this pins the fix of the vendored decoder).
+        # with first byte 0x80 and a valid checksum must be rejected, exactly like the
+        # Rust and TypeScript decoders.
         address = _raw_ss58(bytes([0x80]) + APP_AGENT_123)
-        with self.assertRaisesRegex(ValueError, "^Invalid SS58 format prefix$"):
+        with self.assertRaisesRegex(Ss58DecodeError, "^SS58 format is invalid or reserved$") as ctx:
             trevokeyless.decode_address(address, 128)
+        self.assertEqual(ctx.exception.kind, "InvalidFormat")
 
     def test_accepts_noncanonical_two_byte_prefix(self: "TestMalformedSs58") -> None:
         # The two-byte SS58 prefix can also (non-canonically) encode formats below 64.
@@ -204,8 +211,16 @@ class TestMalformedSs58(unittest.TestCase):
 
     def test_rejects_oversized_input_before_base58_decoding(self: "TestMalformedSs58") -> None:
         oversized = "1" * (trevokeyless.SS58_MAX_ADDRESS_LENGTH + 1)
-        with self.assertRaisesRegex(ValueError, "^Invalid address length$"):
+        with self.assertRaisesRegex(Ss58DecodeError, "^Address has an invalid length$") as ctx:
             trevokeyless.decode_address(oversized, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
+
+        # The codec applies the same bound before charset validation: oversized input
+        # full of out-of-alphabet characters is still classified as a length failure,
+        # exactly like the Rust decoder.
+        with self.assertRaises(Ss58DecodeError) as codec_ctx:
+            ss58_decode("$" * (trevokeyless.SS58_MAX_ADDRESS_LENGTH + 1))
+        self.assertEqual(codec_ctx.exception.kind, "InvalidLength")
 
     def test_longest_legitimate_address_still_decodes(self: "TestMalformedSs58") -> None:
         # The longest legitimate addresses (two-byte prefix, high account id bytes) stay
@@ -215,25 +230,6 @@ class TestMalformedSs58(unittest.TestCase):
         self.assertLessEqual(len(address), trevokeyless.SS58_MAX_ADDRESS_LENGTH)
         info = trevokeyless.decode_address(address, max_format)
         self.assertIs(info.address_type, AddressType.Regular)
-
-    def test_generic_ss58_helpers_reject_oversized_input(self: "TestMalformedSs58") -> None:
-        # The generic helpers of trevokeyless._ss58 support payloads up to 33 bytes, whose
-        # addresses reach 51 characters; anything longer must be rejected before base58
-        # decoding (whose cost grows quadratically), mirroring the bound inside the Rust
-        # SS58 decoder.
-        oversized = "z" * 52
-        with self.assertRaisesRegex(ValueError, "^Invalid address length$"):
-            ss58_decode(oversized)
-        with self.assertRaisesRegex(ValueError, "^Invalid address length$"):
-            get_ss58_format(oversized)
-        self.assertFalse(is_valid_ss58_address(oversized))
-
-        # The longest legitimate generic address (33-byte payload, two-byte prefix) is
-        # exactly 51 characters and must still decode.
-        longest = ss58_encode(b"\xff" * 33, 16383)
-        self.assertEqual(len(longest), 51)
-        self.assertEqual(ss58_decode(longest, 16383), "0x" + "ff" * 33)
-        self.assertEqual(get_ss58_format(longest), 16383)
 
 
 class TestSurroundingWhitespace(unittest.TestCase):
@@ -253,53 +249,48 @@ class TestSurroundingWhitespace(unittest.TestCase):
             address + "\u00a0",  # non-breaking space, also stripped by str.rstrip
         ]
         for spelling in spellings:
-            with self.subTest(spelling=spelling), self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
-                trevokeyless.decode_address(spelling, SS58_FORMAT)
-
-    def test_generic_ss58_helpers_reject_surrounding_whitespace(self: "TestSurroundingWhitespace") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
-        for spelling in [address + " ", address + "\n", " " + address]:
             with self.subTest(spelling=spelling):
-                with self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
-                    ss58_decode(spelling, SS58_FORMAT)
-                with self.assertRaisesRegex(ValueError, "^Invalid base58 character$"):
-                    get_ss58_format(spelling)
-                self.assertFalse(is_valid_ss58_address(spelling, SS58_FORMAT))
+                with self.assertRaisesRegex(Ss58DecodeError, "^Address is not valid base58$") as ctx:
+                    trevokeyless.decode_address(spelling, SS58_FORMAT)
+                self.assertEqual(ctx.exception.kind, "InvalidBase58")
+                # The codec itself applies the same charset check before base58.b58decode.
+                with self.assertRaises(Ss58DecodeError) as codec_ctx:
+                    ss58_decode(spelling)
+                self.assertEqual(codec_ctx.exception.kind, "InvalidBase58")
 
 
-class TestGenericSs58HexHandling(unittest.TestCase):
-    """The generic helpers of trevokeyless._ss58 accept "0x"-prefixed hex account ids;
-    the hex digits must be validated strictly. bytes.fromhex tolerates ASCII whitespace,
-    and str.replace would strip "0x" occurrences anywhere in the string - both would
-    silently accept malformed input."""
+class TestStrictCodecContract(unittest.TestCase):
+    """The private codec (trevokeyless._ss58) is a strict port of the Rust reference
+    decoder: bytes in, bytes out, 32-byte account ids only, no hex passthrough. The
+    historically vendored generic codec accepted "0x" strings and other payload sizes;
+    these tests pin their removal."""
 
-    def test_ss58_decode_validates_the_hex_passthrough(self: "TestGenericSs58HexHandling") -> None:
-        # Valid hex passes through unchanged (the historical contract).
-        hex_account = "0x" + APP_AGENT_123.hex()
-        self.assertEqual(ss58_decode(hex_account), hex_account)
+    def test_ss58_decode_has_no_hex_passthrough(self: "TestStrictCodecContract") -> None:
+        # "0x..." is not an SS58 address. A full 66-character account id hex string
+        # exceeds the 50-character bound (checked first, like in the Rust decoder);
+        # shorter "0x" strings fail the base58 charset ('0' and 'x' are excluded).
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            ss58_decode("0x" + APP_AGENT_123.hex())
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
 
-        # Malformed hex must raise instead of being returned verbatim: invalid digits,
-        # an odd digit count, and embedded whitespace.
-        for bad in ["0xzz", "0xabc", "0x" + "0" * 63, "0x12 34", "0x12\n34"]:
-            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
-                ss58_decode(bad)
+        with self.assertRaises(Ss58DecodeError) as short_ctx:
+            ss58_decode("0x" + APP_AGENT_123.hex()[:40])
+        self.assertEqual(short_ctx.exception.kind, "InvalidBase58")
 
-    def test_ss58_encode_strips_only_the_hex_prefix(self: "TestGenericSs58HexHandling") -> None:
-        # The canonical spellings: raw bytes, bare hex, and "0x"-prefixed hex must all
-        # produce the same address.
+    def test_ss58_decode_returns_account_bytes_and_format(self: "TestStrictCodecContract") -> None:
+        # The expected format is deliberately not checked by the codec: it returns the
+        # found format, and the caller compares only after full validation (the Rust
+        # from_ss58check_with_version contract).
         address = ss58_encode(APP_AGENT_123, SS58_FORMAT)
-        self.assertEqual(ss58_encode(APP_AGENT_123.hex(), SS58_FORMAT), address)
-        self.assertEqual(ss58_encode("0x" + APP_AGENT_123.hex(), SS58_FORMAT), address)
+        self.assertEqual(ss58_decode(address), (APP_AGENT_123, SS58_FORMAT))
 
-        # "0x" embedded in the middle of the string must raise, not be stripped
-        # (str.replace would silently accept this as a 32-byte account id).
-        embedded = "00" * 16 + "0x" + "00" * 16
-        with self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
-            ss58_encode(embedded, SS58_FORMAT)
-
-        # Whitespace inside the hex digits must raise (bytes.fromhex tolerates it).
-        with self.assertRaisesRegex(ValueError, "^Invalid hex account id$"):
-            ss58_encode("7b 00" + "00" * 30, SS58_FORMAT)
+    def test_ss58_encode_accepts_bytes_only(self: "TestStrictCodecContract") -> None:
+        # 32-byte payloads only; account-index and public-key sizes are rejected.
+        for bad_payload in [b"", b"\x07", bytes(8), APP_AGENT_123[:31], APP_AGENT_123 + b"\x00"]:
+            with self.subTest(bad_payload=bad_payload):
+                with self.assertRaises(Ss58DecodeError) as ctx:
+                    ss58_encode(bad_payload, SS58_FORMAT)
+                self.assertEqual(ctx.exception.kind, "InvalidLength")
 
 
 class TestSs58FormatValidation(unittest.TestCase):
@@ -342,8 +333,10 @@ class TestSs58FormatValidation(unittest.TestCase):
     def test_reserved_formats_still_rejected_by_the_ss58_layer(self: "TestSs58FormatValidation") -> None:
         # 46 and 47 pass the integer range validation; the SS58 layer rejects them.
         for reserved in [46, 47]:
-            with self.subTest(reserved=reserved), self.assertRaisesRegex(ValueError, "Invalid value for ss58_format"):
-                trevokeyless.encode_app_agent_address(123, reserved)
+            with self.subTest(reserved=reserved):
+                with self.assertRaisesRegex(Ss58DecodeError, "^SS58 format is invalid or reserved$") as ctx:
+                    trevokeyless.encode_app_agent_address(123, reserved)
+                self.assertEqual(ctx.exception.kind, "InvalidFormat")
 
 
 class TestHexAccountIdContract(unittest.TestCase):
@@ -457,7 +450,10 @@ class TestSs58FormatMismatchError(unittest.TestCase):
             trevokeyless.decode_address(substrate_generic, SS58_FORMAT)
         self.assertEqual(ctx.exception.expected, SS58_FORMAT)
         self.assertEqual(ctx.exception.found, 42)
-        # Remains a ValueError, like every other decoding failure.
+        # The "UnexpectedFormat" case of Ss58DecodeError; remains a ValueError, like
+        # every other decoding failure.
+        self.assertIsInstance(ctx.exception, Ss58DecodeError)
+        self.assertEqual(ctx.exception.kind, "UnexpectedFormat")
         self.assertIsInstance(ctx.exception, ValueError)
         self.assertEqual(str(ctx.exception), "Expected SS58 format 5335 but found 42")
 
@@ -466,6 +462,29 @@ class TestSs58FormatMismatchError(unittest.TestCase):
         with self.assertRaises(trevokeyless.Ss58FormatMismatchError) as ctx:
             trevokeyless.decode_address(trevo_address, 16383)
         self.assertEqual((ctx.exception.expected, ctx.exception.found), (16383, SS58_FORMAT))
+
+    def test_checksum_failure_wins_over_format_mismatch(self: "TestSs58FormatMismatchError") -> None:
+        # An invalid address must raise its validation error, never a format mismatch:
+        # the expected format is compared only after the checksum has verified, exactly
+        # like the Rust from_ss58check (the format mismatch error must not claim that a
+        # corrupt string is "a valid address of another network").
+        substrate_generic = trevokeyless.encode_app_agent_address(123, 42)
+        payload = bytearray(base58.b58decode(substrate_generic))
+        payload[-1] ^= 0xFF
+        corrupted = base58.b58encode(bytes(payload)).decode()
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address(corrupted, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidChecksum")
+        self.assertNotIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
+
+    def test_length_failure_wins_over_format_mismatch(self: "TestSs58FormatMismatchError") -> None:
+        # Same ordering for structurally invalid payloads of a non-expected format.
+        truncated_payload = _format_prefix(42) + APP_AGENT_123[:31]
+        address = _raw_ss58(truncated_payload)
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address(address, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
+        self.assertNotIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
 
 
 class TestAddressTypeMismatchError(unittest.TestCase):
