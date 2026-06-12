@@ -6,6 +6,7 @@ documents exactly what is being fed to the decoder.
 """
 
 import dataclasses
+import json
 import unittest
 from hashlib import blake2b
 
@@ -283,6 +284,53 @@ class TestSurroundingWhitespace(unittest.TestCase):
         with self.assertRaises(Ss58DecodeError) as ctx:
             trevokeyless.decode_address(address + "\u00a0", SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
+
+
+class TestUnpairedSurrogates(unittest.TestCase):
+    """Strings containing unpaired surrogates - a Python str can hold them, most
+    realistically from ``json.loads`` of a ``"\\ud800"`` escape - cannot be encoded by
+    the default UTF-8 codec. The byte-length bound counts them via ``surrogatepass``
+    (3 bytes each, the byte count ``TextEncoder`` gives the TypeScript implementation),
+    so such input classifies through the normal SS58 error taxonomy instead of leaking
+    ``UnicodeEncodeError``. Rust cannot represent these strings at all (``&str`` is
+    always valid UTF-8), so the classification is pinned here and in the TypeScript
+    suite rather than in the conformance fixture (the generator's serde_json cannot
+    emit lone surrogates)."""
+
+    def test_in_bound_surrogate_is_invalid_base58(self: "TestUnpairedSurrogates") -> None:
+        # One lone surrogate: 1 code point, 3 surrogatepass bytes - within the length
+        # bound, rejected by the base58 charset check, exactly like the TypeScript
+        # implementation classifies it.
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address("\ud800", SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidBase58")
+
+        with self.assertRaises(Ss58DecodeError) as codec_ctx:
+            ss58_decode("\ud800")
+        self.assertEqual(codec_ctx.exception.kind, "InvalidBase58")
+
+    def test_surrogates_over_the_byte_bound_are_invalid_length(self: "TestUnpairedSurrogates") -> None:
+        # 50 lone surrogates: 50 code points but 150 surrogatepass bytes - over the
+        # 50-byte bound, exactly like the TypeScript implementation classifies it.
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address("\ud800" * 50, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
+
+        # A canonical 49-character address with one appended surrogate: 50 code points
+        # but 52 bytes - the byte bound fires first, like for any non-ASCII suffix.
+        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        with self.assertRaises(Ss58DecodeError) as suffixed_ctx:
+            trevokeyless.decode_address(address + "\ud800", SS58_FORMAT)
+        self.assertEqual(suffixed_ctx.exception.kind, "InvalidLength")
+
+    def test_json_sourced_surrogate_classifies_via_the_taxonomy(self: "TestUnpairedSurrogates") -> None:
+        # json.loads turns a "\ud800" escape into a real lone surrogate; decoding such
+        # a string must classify through the SS58 taxonomy, never UnicodeEncodeError.
+        surrogate = json.loads('"\\ud800"')
+        self.assertEqual(len(surrogate), 1)
+        with self.assertRaises(Ss58DecodeError) as ctx:
+            trevokeyless.decode_address(surrogate, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidBase58")
 
 
 class TestVendoredBase58(unittest.TestCase):

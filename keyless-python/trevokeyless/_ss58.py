@@ -238,8 +238,19 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
     # the byte length of the &str): non-ASCII input can stay within 50 characters yet
     # exceed 50 bytes and must classify as a length failure in every implementation.
     # The code-point comparison short-circuits first, keeping the cost O(1) for huge
-    # input; the byte encoding only ever sees at most 50 characters.
-    if len(address) > SS58_MAX_ADDRESS_LENGTH or len(address.encode("utf-8")) > SS58_MAX_ADDRESS_LENGTH:
+    # input; the byte encoding only ever sees at most 50 characters. Unpaired
+    # surrogates - a str can hold them, e.g. from json.loads of a "\ud800" escape - are
+    # counted via surrogatepass (3 bytes each, the byte count TextEncoder gives the
+    # TypeScript implementation), so they classify through this error taxonomy (length
+    # here, charset below) instead of leaking UnicodeEncodeError. Rust cannot represent
+    # such strings at all (&str is always valid UTF-8). Best-effort caveat: a *paired*
+    # surrogate stays two code points in Python (6 bytes) where JavaScript sees one
+    # astral character (4 bytes); such strings cannot reach this code from UTF-8 or
+    # JSON input.
+    if (
+        len(address) > SS58_MAX_ADDRESS_LENGTH
+        or len(address.encode("utf-8", errors="surrogatepass")) > SS58_MAX_ADDRESS_LENGTH
+    ):
         raise Ss58DecodeError.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
         raise Ss58DecodeError.invalid_base58()
