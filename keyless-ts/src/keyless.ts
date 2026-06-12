@@ -97,6 +97,20 @@ interface BlockchainAddressInfo {
 }
 
 /**
+ * Renders a rejected parameter for an error message: numbers verbatim (including NaN
+ * and non-integers), anything else by its type, so a JavaScript caller passing e.g.
+ * the string "123" sees `got string` rather than a message that looks like a valid
+ * number was rejected. (The Python implementation reports the type the same way; the
+ * Rust implementation enforces the types at compile time.)
+ *
+ * @param {unknown} value - The rejected value.
+ * @returns {string} - The rendering for the error message.
+ */
+function describeRejectedValue(value: unknown): string {
+  return typeof value === "number" ? String(value) : typeof value;
+}
+
+/**
  * Encodes a u32 value to its 4-byte little-endian representation.
  *
  * @param {number} value - The value to encode.
@@ -107,7 +121,7 @@ interface BlockchainAddressInfo {
 function u32ToLeBytes(value: number, label: string): Uint8Array {
   if (!Number.isInteger(value) || value < 0 || value > U32_MAX) {
     throw new RangeError(
-      `${label} must be an integer in [0, ${U32_MAX}], got ${value}`,
+      `${label} must be an integer in [0, ${U32_MAX}], got ${describeRejectedValue(value)}`,
     );
   }
   const bytes = new Uint8Array(4);
@@ -149,7 +163,7 @@ function validateSs58Format(ss58Format: number): void {
     ss58Format > SS58_FORMAT_MAX
   ) {
     throw new Error(
-      `ss58Format must be an integer in [0, ${SS58_FORMAT_MAX}], got ${ss58Format}`,
+      `ss58Format must be an integer in [0, ${SS58_FORMAT_MAX}], got ${describeRejectedValue(ss58Format)}`,
     );
   }
 }

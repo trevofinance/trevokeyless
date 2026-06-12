@@ -126,6 +126,24 @@ describe("Boundary values", () => {
     });
   });
 
+  it("names the offending value or type in rejection messages", () => {
+    // Numbers render verbatim; anything else renders by type, so a JavaScript caller
+    // passing the string "123" is not shown a message that looks like a valid number
+    // was rejected. (The Python implementation reports the type the same way; the
+    // Rust implementation enforces the types at compile time.)
+    expect(() => encodeAppAgentAddress(1.5)).toThrow("got 1.5");
+    expect(() => encodeAppAgentAddress(NaN)).toThrow("got NaN");
+    expect(() => encodeAppAgentAddress("123" as unknown as number)).toThrow(
+      "appAgentId must be an integer in [0, 4294967295], got string",
+    );
+    expect(() =>
+      encodeTransactionalAddress(1, null as unknown as number),
+    ).toThrow("taId must be an integer in [0, 4294967295], got object");
+    expect(() =>
+      encodeAppAgentAddress(123, "5335" as unknown as number),
+    ).toThrow("ss58Format must be an integer in [0, 16383], got string");
+  });
+
   it("rejects a fractional ss58Format at encoding time", () => {
     // The SS58 layer range-checks the format but its bitwise prefix arithmetic would
     // silently truncate fractional values to an integer format.
