@@ -12,7 +12,7 @@ This makes the keyless addresses convenient for use in off-chain applications.
 
 You can install the library using pip:
 
-``` python3
+```shell
 pip install trevokeyless
 ```
 
