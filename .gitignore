@@ -10,6 +10,11 @@ keyless-python/dist/
 keyless-python/trevokeyless.egg-info/
 
 keyless-rust/target
+keyless-rust/fuzz/target
+keyless-rust/fuzz/corpus
+keyless-rust/fuzz/artifacts
+keyless-rust/fuzz/coverage
+keyless-rust/fuzz/Cargo.lock
 
 keyless-ts/dist
 */node_modules

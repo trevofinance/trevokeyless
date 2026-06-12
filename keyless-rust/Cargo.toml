@@ -10,8 +10,9 @@ repository = "https://github.com/trevo-finance/trevo-keyless/"
 readme = "README.md"
 keywords = ["trevo", "blockchain", "substrate", "no-std", "scale"]
 categories = ["encoding", "wasm"]
-# Repository-internal documentation; keep it out of the published crate.
-exclude = ["CLAUDE.md"]
+# Repository-internal documentation and the fuzzing harness; keep both out of the
+# published crate.
+exclude = ["CLAUDE.md", "fuzz"]
 
 [package.metadata.docs.rs]
 all-features = true
