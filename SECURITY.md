@@ -2,8 +2,10 @@
 
 ## Reporting a vulnerability
 
-Please report suspected security issues privately to **support@trevo.finance**.
-Do not open a public issue for anything you believe has security impact.
+Please report suspected security issues privately to **support@trevo.finance**, or use
+GitHub's private vulnerability reporting on this repository (Security → Report a
+vulnerability). Do not open a public issue for anything you believe has security
+impact.
 
 We will acknowledge your report, keep you informed of the progress, and credit you in
 the fix release unless you prefer otherwise.

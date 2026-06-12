@@ -101,8 +101,11 @@ language's info object and parse it in another; exchange addresses or account id
 - **AppAgent**: on-chain entity that serves as a blockchain representation of an off-chain application;
 - **Keyless address**: an address with unknown private key controlled by an AppAgent;
 - **Address**: an SS58-encoded address string (49 characters in the Trevo SS58 format, 5335);
-- **Account**: a 32-byte public key of an address;
-- **Address type**: one of the possible address types;
+- **Account**: the 32-byte account identifier behind an address — an opaque public key
+  or hash for regular accounts, deterministically derived bytes (no key exists) for
+  keyless accounts;
+- **Address type**: the classification of an address — Regular, AppAgent,
+  Transactional, or Named;
 - **AppAgent ID**: an identifier of an AppAgent `uint32`;
 - **TA ID**: an identifier of a Transactional address, `uint32`;
 - **Address name**: a name of a Named address, 10 ASCII characters from the list `0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#`;
