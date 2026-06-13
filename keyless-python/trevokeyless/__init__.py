@@ -1,10 +1,10 @@
 # ruff: noqa: I001
 
-from importlib.metadata import version as _version
-
-# Resolved from the installed package metadata, so pyproject.toml stays the single
-# source of the version.
-__version__ = _version("trevokeyless")
+# Hardcoded rather than resolved from importlib.metadata: the lookup raises
+# PackageNotFoundError when the package is imported from a source tree, a vendored
+# copy, or a frozen build without installed dist-info. tests/test_version.py pins this
+# string to the pyproject.toml version so the two cannot drift.
+__version__ = "1.0.0"
 
 # The SS58 error types and the address length bound live in trevokeyless._ss58 (the
 # module that raises/applies them); they are deliberately part of the public API,
