@@ -718,7 +718,7 @@ class TestAddressTypeMismatchError(unittest.TestCase):
         self.assertIsInstance(ctx.exception, ValueError)
         self.assertEqual(
             str(ctx.exception),
-            "Provided address is not an AppAgent address but is instance of Named",
+            "Provided address is not an AppAgent address but is a Named address",
         )
 
 

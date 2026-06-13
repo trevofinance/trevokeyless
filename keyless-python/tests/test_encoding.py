@@ -156,7 +156,7 @@ class TestKeylessAddresses(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ValueError,
-                "^Provided address is not a Named address but is instance of Regular$",
+                "^Provided address is not a Named address but is a Regular address$",
                 msg="Named address with invalid name bytes must not decode as a Named address.",
             ):
                 trevokeyless.decode_named_address(address, ss58_format)
@@ -172,21 +172,21 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not an AppAgent address but is instance of Regular$",
+            "^Provided address is not an AppAgent address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_app_agent_address(regular_address, ss58_format)
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not a Transactional address but is instance of Regular$",
+            "^Provided address is not a Transactional address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_transactional_address(regular_address, ss58_format)
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not a Named address but is instance of Regular$",
+            "^Provided address is not a Named address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_named_address(regular_address, ss58_format)

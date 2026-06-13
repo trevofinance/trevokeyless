@@ -77,7 +77,7 @@ class AddressTypeMismatchError(ValueError):
         self.expected = expected
         self.found = found
         article = "an" if expected is AddressType.AppAgent else "a"
-        super().__init__(f"Provided address is not {article} {expected.name} address but is instance of {found.name}")
+        super().__init__(f"Provided address is not {article} {expected.name} address but is a {found.name} address")
 
 
 class Ss58FormatMismatchError(Ss58Error):

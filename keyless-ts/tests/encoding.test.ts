@@ -177,7 +177,7 @@ describe("Named address with invalid name bytes", () => {
       const address = buildNamedAddress(nameBytes);
       expect(() => decodeNamedAddress(address, ss58_format)).toThrow(
         new Error(
-          "Provided address is not a Named address but is instance of Regular",
+          "Provided address is not a Named address but is a Regular address",
         ),
       );
     },
@@ -203,7 +203,7 @@ describe("Mismatch of address type", () => {
   it("Checks that regular address can not be decoded as an AppAgent address", () => {
     expect(() => decodeAppAgentAddress(regular_address, ss58_format)).toThrow(
       new Error(
-        "Provided address is not an AppAgent address but is instance of Regular",
+        "Provided address is not an AppAgent address but is a Regular address",
       ),
     );
   });
@@ -213,7 +213,7 @@ describe("Mismatch of address type", () => {
       decodeTransactionalAddress(regular_address, ss58_format),
     ).toThrow(
       new Error(
-        "Provided address is not a Transactional address but is instance of Regular",
+        "Provided address is not a Transactional address but is a Regular address",
       ),
     );
   });
@@ -221,7 +221,7 @@ describe("Mismatch of address type", () => {
   it("Checks that regular address can not be decoded as a Named address", () => {
     expect(() => decodeNamedAddress(regular_address, ss58_format)).toThrow(
       new Error(
-        "Provided address is not a Named address but is instance of Regular",
+        "Provided address is not a Named address but is a Regular address",
       ),
     );
   });

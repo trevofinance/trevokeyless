@@ -71,7 +71,7 @@ class AddressTypeMismatchError extends Error {
   constructor(expected: AddressType, found: AddressType) {
     const article = expected === AddressType.AppAgent ? "an" : "a";
     super(
-      `Provided address is not ${article} ${ADDRESS_TYPE_NAMES[expected]} address but is instance of ${ADDRESS_TYPE_NAMES[found]}`,
+      `Provided address is not ${article} ${ADDRESS_TYPE_NAMES[expected]} address but is a ${ADDRESS_TYPE_NAMES[found]} address`,
     );
     this.name = "AddressTypeMismatchError";
     this.expected = expected;
