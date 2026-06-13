@@ -153,6 +153,15 @@ describe("Boundary values", () => {
       );
     });
   });
+
+  it("validates appAgentId before the name in encodeNamedAddress", () => {
+    // When both the id and the name are invalid, the id is reported first (argument
+    // order), matching the Python implementation. "bad@name!!" is 10 characters but
+    // carries out-of-charset bytes, so the order decides which error wins.
+    expect(() => encodeNamedAddress(-1, "bad@name!!")).toThrow(
+      "appAgentId must be an integer in [0, 4294967295], got -1",
+    );
+  });
 });
 
 describe("ss58Format validation", () => {

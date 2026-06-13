@@ -308,12 +308,16 @@ function encodeNamedAddress(
   name: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
+  // appAgentId is validated before the name, matching the Python implementation
+  // (encode_named_address validates app_agent_id first): when both arguments are
+  // invalid, the offending id is reported first, in declaration order.
+  const appAgentIdBytes = u32ToLeBytes(appAgentId, "appAgentId");
   validateAddressName(name);
 
   // The name is validated ASCII, so the char codes are exactly the encoded bytes.
   const nameBytes = Uint8Array.from(name, (c) => c.charCodeAt(0));
   const openPart = concatBytes(
-    u32ToLeBytes(appAgentId, "appAgentId"),
+    appAgentIdBytes,
     Uint8Array.of(NAMED_ADDRESS_IDENTIFIER),
     nameBytes,
   );

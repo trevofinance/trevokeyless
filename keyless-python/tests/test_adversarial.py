@@ -115,6 +115,13 @@ class TestEncodeIdValidation(unittest.TestCase):
                 trevokeyless.encode_transactional_address(good_id, good_id, SS58_FORMAT)
                 trevokeyless.encode_named_address(good_id, "example123", SS58_FORMAT)
 
+    def test_named_validates_id_before_name(self: "TestEncodeIdValidation") -> None:
+        # When both the id and the name are invalid, the id is reported first (argument
+        # order), matching the TypeScript implementation. "bad@name!!" is 10 characters
+        # but carries out-of-charset bytes, so the order decides which error wins.
+        with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+            trevokeyless.encode_named_address(-1, "bad@name!!", SS58_FORMAT)
+
 
 class TestAccountIdLength(unittest.TestCase):
     """Account ids must be exactly 32 bytes; the Rust AccountId32 makes this structural."""
