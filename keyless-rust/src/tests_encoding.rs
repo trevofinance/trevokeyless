@@ -76,7 +76,10 @@ mod tests {
         let decoded_ids = decode_transactional_account(&account_id);
         assert_eq!(
             decoded_ids.unwrap(),
-            (app_agent_id, transactional_account_id),
+            DecodedTransactionalAccount {
+                app_agent_id,
+                ta_id: transactional_account_id
+            },
             "Couldn't decode Transactional account to Transactional ID."
         );
 
@@ -125,7 +128,10 @@ mod tests {
         let decoded_ids = decode_named_account(&account_id);
         assert_eq!(
             decoded_ids.unwrap(),
-            (app_agent_id, account_name),
+            DecodedNamedAccount {
+                app_agent_id,
+                account_name
+            },
             "Couldn't decode Named account to Named ID."
         );
 
@@ -168,13 +174,22 @@ mod tests {
 
         // TransactionalId = 0
         let account = encode_transactional_account(0, 0);
-        assert_eq!(decode_transactional_account(&account).unwrap(), (0, 0));
+        assert_eq!(
+            decode_transactional_account(&account).unwrap(),
+            DecodedTransactionalAccount {
+                app_agent_id: 0,
+                ta_id: 0
+            }
+        );
 
         // TransactionalId = u32::MAX, AppAgentId = u32::MAX
         let account = encode_transactional_account(u32::MAX, u32::MAX);
         assert_eq!(
             decode_transactional_account(&account).unwrap(),
-            (u32::MAX, u32::MAX)
+            DecodedTransactionalAccount {
+                app_agent_id: u32::MAX,
+                ta_id: u32::MAX
+            }
         );
     }
 
@@ -184,11 +199,23 @@ mod tests {
 
         // AppAgentId = 0
         let account = encode_named_account(0, name);
-        assert_eq!(decode_named_account(&account).unwrap(), (0, name));
+        assert_eq!(
+            decode_named_account(&account).unwrap(),
+            DecodedNamedAccount {
+                app_agent_id: 0,
+                account_name: name
+            }
+        );
 
         // AppAgentId = u32::MAX
         let account = encode_named_account(u32::MAX, name);
-        assert_eq!(decode_named_account(&account).unwrap(), (u32::MAX, name));
+        assert_eq!(
+            decode_named_account(&account).unwrap(),
+            DecodedNamedAccount {
+                app_agent_id: u32::MAX,
+                account_name: name
+            }
+        );
     }
 
     #[test]

@@ -92,7 +92,13 @@ mod tests {
             let ta = v["ta"].as_u64().unwrap() as u32;
             let account = encode_transactional_account(aa, ta);
             assert_eq!(account_hex(&account), v["hex"].as_str().unwrap());
-            assert_eq!(decode_transactional_account(&account), Ok((aa, ta)));
+            assert_eq!(
+                decode_transactional_account(&account),
+                Ok(DecodedTransactionalAccount {
+                    app_agent_id: aa,
+                    ta_id: ta
+                })
+            );
             #[cfg(feature = "ss58")]
             assert_eq!(account.to_ss58check(), v["ss58"].as_str().unwrap());
         }
@@ -102,7 +108,13 @@ mod tests {
             let name = AccountName::try_from(v["name"].as_str().unwrap()).unwrap();
             let account = encode_named_account(aa, name);
             assert_eq!(account_hex(&account), v["hex"].as_str().unwrap());
-            assert_eq!(decode_named_account(&account), Ok((aa, name)));
+            assert_eq!(
+                decode_named_account(&account),
+                Ok(DecodedNamedAccount {
+                    app_agent_id: aa,
+                    account_name: name
+                })
+            );
             #[cfg(feature = "ss58")]
             assert_eq!(account.to_ss58check(), v["ss58"].as_str().unwrap());
         }

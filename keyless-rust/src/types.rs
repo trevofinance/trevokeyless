@@ -396,6 +396,44 @@ impl core::fmt::Display for KeylessDecodeError {
     }
 }
 
+/// The identifiers embedded in a Transactional keyless account, returned by
+/// [`decode_transactional_account`](crate::decode_transactional_account).
+///
+/// A named struct rather than a bare `(AppAgentId, TransactionalId)` tuple, so the two
+/// `u32` identifiers cannot be silently transposed at the call site. Mirrors the object the
+/// TypeScript `decodeTransactionalAddress` returns and the Python `DecodedTransactionalAddress`
+/// named tuple.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
+)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DecodedTransactionalAccount {
+    /// The App Agent that controls the account.
+    pub app_agent_id: AppAgentId,
+    /// The transactional sub-account id.
+    pub ta_id: TransactionalId,
+}
+
+/// The identifiers embedded in a Named keyless account, returned by
+/// [`decode_named_account`](crate::decode_named_account).
+///
+/// A named struct rather than a bare `(AppAgentId, AccountName)` tuple. Mirrors the object the
+/// TypeScript `decodeNamedAddress` returns and the Python `DecodedNamedAddress` named tuple.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(
+    feature = "scale",
+    derive(Encode, Decode, DecodeWithMemTracking, TypeInfo, MaxEncodedLen)
+)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DecodedNamedAccount {
+    /// The App Agent that controls the account.
+    pub app_agent_id: AppAgentId,
+    /// The name embedded in the account bytes.
+    pub account_name: AccountName,
+}
+
 /// Decoded identity of a blockchain account.
 ///
 /// Returned by [`decode_account_info`](crate::decode_account_info). The caller can
@@ -722,6 +760,8 @@ mod tests_display {
         assert_impl::<AccountType>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
+        assert_impl::<DecodedTransactionalAccount>();
+        assert_impl::<DecodedNamedAccount>();
         assert_impl::<ParseAccountIdError>();
     }
 }
@@ -932,5 +972,7 @@ mod tests_scale_codec {
         assert_impl::<AccountType>();
         assert_impl::<KeylessDecodeError>();
         assert_impl::<BlockchainAccountInfo>();
+        assert_impl::<DecodedTransactionalAccount>();
+        assert_impl::<DecodedNamedAccount>();
     }
 }

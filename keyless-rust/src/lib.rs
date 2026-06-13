@@ -64,8 +64,8 @@
 //! - [`decode_account_info`] — classify any account and extract its embedded identifiers.
 //! - [`decode_app_agent_account`] — decode and return only the `AppAgentId` (errors if not an
 //!   App Agent account).
-//! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
-//! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
+//! - [`decode_transactional_account`] — decode and return a [`DecodedTransactionalAccount`].
+//! - [`decode_named_account`] — decode and return a [`DecodedNamedAccount`].
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
 //!   (performs up to one Blake2b-256 hash internally).
 //! - [`AccountId32`] renders as, and parses from, the raw interchange form `0x` + 64 hex

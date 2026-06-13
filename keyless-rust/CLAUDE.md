@@ -46,7 +46,8 @@ same rules.
 src/
   lib.rs           — crate-level docs, module declarations
   types.rs         — AppAgentId, TransactionalId, AccountId32, AccountName, AccountType,
-                     BlockchainAccountInfo, error types
+                     BlockchainAccountInfo, DecodedTransactionalAccount, DecodedNamedAccount,
+                     error types
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
   tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
@@ -111,8 +112,8 @@ encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> AccountId32
 // Decoding (all take &AccountId32)
 decode_account_info(account: &AccountId32) -> BlockchainAccountInfo  // classifies any account
 decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError>
-decode_transactional_account(account: &AccountId32) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError>
-decode_named_account(account: &AccountId32) -> Result<(AppAgentId, AccountName), KeylessDecodeError>
+decode_transactional_account(account: &AccountId32) -> Result<DecodedTransactionalAccount, KeylessDecodeError>
+decode_named_account(account: &AccountId32) -> Result<DecodedNamedAccount, KeylessDecodeError>
 is_keyless_account(account: &AccountId32) -> bool
 
 // Classification helpers

@@ -202,18 +202,22 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 ///
 /// # Returns
 ///
-/// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
-/// verification, or `Err(KeylessDecodeError::WrongAccountType { expected: Transactional, found })`
-/// carrying the account's actual classification otherwise.
+/// Returns `Ok(DecodedTransactionalAccount { app_agent_id, ta_id })` if the account passes the
+/// Transactional checksum verification, or
+/// `Err(KeylessDecodeError::WrongAccountType { expected: Transactional, found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_transactional_account(
     account: &AccountId32,
-) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
+) -> Result<DecodedTransactionalAccount, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
             app_agent_id,
             ta_id,
             ..
-        } => Ok((app_agent_id, ta_id)),
+        } => Ok(DecodedTransactionalAccount {
+            app_agent_id,
+            ta_id,
+        }),
         other => Err(KeylessDecodeError::WrongAccountType {
             expected: AccountType::Transactional,
             found: other.account_type(),
@@ -229,18 +233,22 @@ pub fn decode_transactional_account(
 ///
 /// # Returns
 ///
-/// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
-/// or `Err(KeylessDecodeError::WrongAccountType { expected: Named, found })` carrying the
+/// Returns `Ok(DecodedNamedAccount { app_agent_id, account_name })` if the account passes the
+/// Named checksum verification, or
+/// `Err(KeylessDecodeError::WrongAccountType { expected: Named, found })` carrying the
 /// account's actual classification otherwise.
 pub fn decode_named_account(
     account: &AccountId32,
-) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
+) -> Result<DecodedNamedAccount, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Named {
             app_agent_id,
             account_name,
             ..
-        } => Ok((app_agent_id, account_name)),
+        } => Ok(DecodedNamedAccount {
+            app_agent_id,
+            account_name,
+        }),
         other => Err(KeylessDecodeError::WrongAccountType {
             expected: AccountType::Named,
             found: other.account_type(),

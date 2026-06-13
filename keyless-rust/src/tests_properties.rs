@@ -97,7 +97,10 @@ mod tests {
             );
             assert_eq!(
                 decode_transactional_account(&account),
-                Ok((app_agent_id, ta_id))
+                Ok(DecodedTransactionalAccount {
+                    app_agent_id,
+                    ta_id
+                })
             );
             assert_eq!(
                 decode_app_agent_account(&account),
@@ -125,7 +128,13 @@ mod tests {
                     account_name: name
                 }
             );
-            assert_eq!(decode_named_account(&account), Ok((app_agent_id, name)));
+            assert_eq!(
+                decode_named_account(&account),
+                Ok(DecodedNamedAccount {
+                    app_agent_id,
+                    account_name: name
+                })
+            );
             assert_eq!(
                 decode_app_agent_account(&account),
                 Err(KeylessDecodeError::WrongAccountType {
