@@ -137,6 +137,16 @@ class TestAccountIdLength(unittest.TestCase):
                     trevokeyless.decode_address(address, SS58_FORMAT)
                 self.assertEqual(ctx.exception.kind, "InvalidLength")
 
+    def test_rejects_one_byte_checksum_on_full_account(self: "TestAccountIdLength") -> None:
+        # A full 32-byte account under the Trevo prefix but with only a one-byte checksum
+        # (decoded length 35, not the canonical 36). Permissive decoders that derive the
+        # checksum length from the payload would accept this; it must be InvalidLength.
+        # Mirrors the TypeScript one-byte-checksum test and the first ss58_invalid vector.
+        address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123, checksum_length=1)
+        with self.assertRaises(Ss58Error) as ctx:
+            trevokeyless.decode_address(address, SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
+
     def test_rejects_33_byte_payload(self: "TestAccountIdLength") -> None:
         # A 33-byte payload (ECDSA-style public key) is legal generic SS58 but never a
         # 32-byte account id; its address is 51 chars, so the length pre-bound fires.
@@ -412,7 +422,10 @@ class TestSs58FormatValidation(unittest.TestCase):
     must not be silently encoded as format 1; an out-of-range int raises ValueError."""
 
     def test_encode_rejects_wrong_type_formats(self: "TestSs58FormatValidation") -> None:
-        for bad_format in [True, False, 5335.0, "5335", None]:
+        # 5335.5 and NaN are genuinely fractional floats: the SS58 layer's bitwise prefix
+        # arithmetic would silently truncate them, so they must be rejected as a wrong
+        # type (mirrors the TypeScript "rejects a fractional ss58Format" test).
+        for bad_format in [True, False, 5335.0, 5335.5, float("nan"), "5335", None]:
             with self.subTest(bad_format=bad_format):
                 with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
                     trevokeyless.encode_app_agent_address(123, bad_format)  # type: ignore[arg-type]
@@ -433,7 +446,7 @@ class TestSs58FormatValidation(unittest.TestCase):
 
     def test_decode_rejects_wrong_type_formats(self: "TestSs58FormatValidation") -> None:
         address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
-        for bad_format in [True, 5335.0, None]:
+        for bad_format in [True, 5335.0, 5335.5, float("nan"), None]:
             with (
                 self.subTest(bad_format=bad_format),
                 self.assertRaisesRegex(TypeError, "^ss58_format must be an int"),
