@@ -472,6 +472,21 @@ describe("Hex account id contract", () => {
       expect(() => decodeAccountId(badHex)).toThrow(/Invalid hex account id/);
     });
   });
+
+  it("rejects hex with whitespace at any position", () => {
+    // The contract is exactly 64 hex characters; whitespace anywhere must be rejected
+    // (mirrors the Python test_rejects_hex_with_whitespace).
+    const clean = u8aToHex(appAgent123).slice(2);
+    [
+      `0x${clean.slice(0, 8)} ${clean.slice(8)}`, // space inside
+      `0x${clean} `, // trailing space
+      `0x ${clean}`, // space after the prefix
+      `0x${clean.slice(0, 32)}\t${clean.slice(32)}`, // tab inside
+      `0x${clean}\n`, // trailing newline
+    ].forEach((spaced) => {
+      expect(() => decodeAccountId(spaced)).toThrow(/Invalid hex account id/);
+    });
+  });
 });
 
 describe("encodeAddress", () => {
@@ -590,6 +605,39 @@ describe("Ss58Error", () => {
       expect(thrown).toBeInstanceOf(Ss58Error);
       expect((thrown as Ss58Error).kind).toEqual(expectedKind);
     });
+  });
+
+  it("reports a checksum failure rather than a format mismatch for a corrupt address", () => {
+    // The expected format is compared only after the checksum verifies (like the Rust
+    // from_ss58check): a corrupt address of another format must raise its validation
+    // error, never claim to be "a valid address of another network". Mirrors the Python
+    // test_checksum_failure_wins_over_format_mismatch.
+    const payload = base58.decode(encodeAppAgentAddress(123, 42));
+    payload[payload.length - 1] ^= 0xff;
+    let thrown: unknown;
+    try {
+      decodeAddress(base58.encode(payload), ss58Format);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Ss58Error);
+    expect((thrown as Ss58Error).kind).toEqual("InvalidChecksum");
+  });
+
+  it("reports a length failure rather than a format mismatch for a truncated payload", () => {
+    // Same ordering for structurally invalid payloads of a non-expected format. Mirrors
+    // the Python test_length_failure_wins_over_format_mismatch.
+    const address = rawSs58(
+      concatBytes(formatPrefix(42), appAgent123.slice(0, 31)),
+    );
+    let thrown: unknown;
+    try {
+      decodeAddress(address, ss58Format);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Ss58Error);
+    expect((thrown as Ss58Error).kind).toEqual("InvalidLength");
   });
 });
 
