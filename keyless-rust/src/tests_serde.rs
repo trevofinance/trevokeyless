@@ -149,13 +149,16 @@ mod tests {
     #[test]
     fn test_keyless_decode_error_serde() {
         for error in [
-            KeylessDecodeError::NotAnAppAgentAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::AppAgent,
                 found: AccountType::Regular,
             },
-            KeylessDecodeError::NotATransactionalAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Transactional,
                 found: AccountType::AppAgent,
             },
-            KeylessDecodeError::NotANamedAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Named,
                 found: AccountType::Transactional,
             },
         ] {

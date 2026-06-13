@@ -118,7 +118,8 @@ is_keyless_account(account: &AccountId32) -> bool
 // Classification helpers
 AccountType — Regular | AppAgent | Transactional | Named (mirrors the Python/TS AddressType)
 BlockchainAccountInfo::{account_id, account_type, app_agent_id, ta_id, account_name, is_keyless_account}
-// KeylessDecodeError variants each carry `found: AccountType` — the actual classification.
+// KeylessDecodeError::WrongAccountType carries `expected` + `found: AccountType` — the
+// requested keyless type and the account's actual classification.
 
 // AccountName
 AccountName::{new, as_bytes, as_str} (+ TryFrom, FromStr, Display)

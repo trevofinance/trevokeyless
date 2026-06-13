@@ -356,12 +356,13 @@ impl core::fmt::Display for AccountType {
 /// Error returned by the typed `decode_*` functions when the account is not of the expected
 /// keyless variant.
 ///
-/// Each variant carries the actual classification of the account in its `found` field, as
-/// determined by [`decode_account_info`](crate::decode_account_info).
+/// Carries both the keyless type the called decoder is for (`expected`) and the account's
+/// actual classification (`found`), as determined by
+/// [`decode_account_info`](crate::decode_account_info) — the same `(expected, found)` pair
+/// the Python/TypeScript `AddressTypeMismatchError` exposes.
 ///
-/// Deliberately exhaustive (no `#[non_exhaustive]`): one variant per typed decoder, mirrored
-/// by the Python/TypeScript `AddressTypeMismatchError`; the set only changes if the frozen
-/// encoding gains an account type.
+/// Deliberately exhaustive (no `#[non_exhaustive]`): the single variant is closed over the
+/// account-type taxonomy, so it does not grow if the frozen encoding gains a type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[cfg_attr(
     feature = "scale",
@@ -369,18 +370,11 @@ impl core::fmt::Display for AccountType {
 )]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeylessDecodeError {
-    /// The account does not decode as an App Agent root account.
-    NotAnAppAgentAccount {
-        /// The actual classification of the account.
-        found: AccountType,
-    },
-    /// The account does not decode as a Transactional account.
-    NotATransactionalAccount {
-        /// The actual classification of the account.
-        found: AccountType,
-    },
-    /// The account does not decode as a Named account.
-    NotANamedAccount {
+    /// The account does not decode as the keyless type the called decoder expects.
+    WrongAccountType {
+        /// The keyless type the called decoder is for (`AppAgent`, `Transactional`, or
+        /// `Named`).
+        expected: AccountType,
         /// The actual classification of the account.
         found: AccountType,
     },
@@ -391,20 +385,14 @@ impl std::error::Error for KeylessDecodeError {}
 
 impl core::fmt::Display for KeylessDecodeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::NotAnAppAgentAccount { found } => {
-                write!(
-                    f,
-                    "Account is not an App Agent root account (found: {found})"
-                )
-            }
-            Self::NotATransactionalAccount { found } => {
-                write!(f, "Account is not a Transactional account (found: {found})")
-            }
-            Self::NotANamedAccount { found } => {
-                write!(f, "Account is not a Named account (found: {found})")
-            }
-        }
+        let Self::WrongAccountType { expected, found } = self;
+        let expected_phrase = match expected {
+            AccountType::Regular => "a Regular account",
+            AccountType::AppAgent => "an App Agent root account",
+            AccountType::Transactional => "a Transactional account",
+            AccountType::Named => "a Named account",
+        };
+        write!(f, "Account is not {expected_phrase} (found: {found})")
     }
 }
 
@@ -692,7 +680,8 @@ mod tests_display {
         assert_eq!(
             format!(
                 "{}",
-                KeylessDecodeError::NotAnAppAgentAccount {
+                KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::AppAgent,
                     found: AccountType::Regular
                 }
             ),
@@ -701,7 +690,8 @@ mod tests_display {
         assert_eq!(
             format!(
                 "{}",
-                KeylessDecodeError::NotATransactionalAccount {
+                KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Transactional,
                     found: AccountType::Named
                 }
             ),
@@ -710,7 +700,8 @@ mod tests_display {
         assert_eq!(
             format!(
                 "{}",
-                KeylessDecodeError::NotANamedAccount {
+                KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Named,
                     found: AccountType::AppAgent
                 }
             ),
@@ -840,19 +831,23 @@ mod tests_scale_codec {
     #[test]
     fn test_keyless_decode_error_scale_codec() {
         for error in [
-            KeylessDecodeError::NotAnAppAgentAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::AppAgent,
                 found: AccountType::Regular,
             },
-            KeylessDecodeError::NotATransactionalAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Transactional,
                 found: AccountType::AppAgent,
             },
-            KeylessDecodeError::NotANamedAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Named,
                 found: AccountType::Transactional,
             },
         ] {
             let encoded = error.encode();
-            // One byte for the error variant, one for the embedded `AccountType`.
-            assert_eq!(encoded.len(), 2);
+            // One byte for the error variant, one for each embedded `AccountType`
+            // (`expected` and `found`).
+            assert_eq!(encoded.len(), 3);
             let decoded = KeylessDecodeError::decode(&mut &encoded[..]).unwrap();
             assert_eq!(decoded, error);
         }

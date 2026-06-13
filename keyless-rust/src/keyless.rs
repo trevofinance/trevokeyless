@@ -182,12 +182,13 @@ pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
 /// # Returns
 ///
 /// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
-/// `Err(KeylessDecodeError::NotAnAppAgentAccount { found })` carrying the account's actual
-/// classification otherwise.
+/// `Err(KeylessDecodeError::WrongAccountType { expected: AppAgent, found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
-        other => Err(KeylessDecodeError::NotAnAppAgentAccount {
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::AppAgent,
             found: other.account_type(),
         }),
     }
@@ -202,8 +203,8 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 /// # Returns
 ///
 /// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
-/// verification, or `Err(KeylessDecodeError::NotATransactionalAccount { found })` carrying the
-/// account's actual classification otherwise.
+/// verification, or `Err(KeylessDecodeError::WrongAccountType { expected: Transactional, found })`
+/// carrying the account's actual classification otherwise.
 pub fn decode_transactional_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
@@ -213,7 +214,8 @@ pub fn decode_transactional_account(
             ta_id,
             ..
         } => Ok((app_agent_id, ta_id)),
-        other => Err(KeylessDecodeError::NotATransactionalAccount {
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::Transactional,
             found: other.account_type(),
         }),
     }
@@ -228,8 +230,8 @@ pub fn decode_transactional_account(
 /// # Returns
 ///
 /// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
-/// or `Err(KeylessDecodeError::NotANamedAccount { found })` carrying the account's actual
-/// classification otherwise.
+/// or `Err(KeylessDecodeError::WrongAccountType { expected: Named, found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_named_account(
     account: &AccountId32,
 ) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
@@ -239,7 +241,8 @@ pub fn decode_named_account(
             account_name,
             ..
         } => Ok((app_agent_id, account_name)),
-        other => Err(KeylessDecodeError::NotANamedAccount {
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::Named,
             found: other.account_type(),
         }),
     }

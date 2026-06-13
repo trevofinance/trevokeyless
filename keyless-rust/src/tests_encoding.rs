@@ -196,14 +196,16 @@ mod tests {
         let account_aa = encode_app_agent_account(1);
         assert_eq!(
             decode_transactional_account(&account_aa).unwrap_err(),
-            KeylessDecodeError::NotATransactionalAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Transactional,
                 found: AccountType::AppAgent
             },
             "AppAgent account can not be considered as a Transactional account"
         );
         assert_eq!(
             decode_named_account(&account_aa).unwrap_err(),
-            KeylessDecodeError::NotANamedAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Named,
                 found: AccountType::AppAgent
             },
             "AppAgent account can not be considered as a Named account"
@@ -212,14 +214,16 @@ mod tests {
         let account_ta = encode_transactional_account(1, 0);
         assert_eq!(
             decode_app_agent_account(&account_ta).unwrap_err(),
-            KeylessDecodeError::NotAnAppAgentAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::AppAgent,
                 found: AccountType::Transactional
             },
             "Transactional account can not be considered as an AppAgent account"
         );
         assert_eq!(
             decode_named_account(&account_ta).unwrap_err(),
-            KeylessDecodeError::NotANamedAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Named,
                 found: AccountType::Transactional
             },
             "Transactional account can not be considered as a Named account"
@@ -228,14 +232,16 @@ mod tests {
         let account_named = encode_named_account(1, AccountName::new(b"test123456").unwrap());
         assert_eq!(
             decode_app_agent_account(&account_named).unwrap_err(),
-            KeylessDecodeError::NotAnAppAgentAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::AppAgent,
                 found: AccountType::Named
             },
             "Named account can not be considered as an AppAgent account"
         );
         assert_eq!(
             decode_transactional_account(&account_named).unwrap_err(),
-            KeylessDecodeError::NotATransactionalAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Transactional,
                 found: AccountType::Named
             },
             "Named account can not be considered as a Transactional account"
@@ -245,7 +251,8 @@ mod tests {
         let regular = AccountId32::from([0u8; 32]);
         assert_eq!(
             decode_app_agent_account(&regular).unwrap_err(),
-            KeylessDecodeError::NotAnAppAgentAccount {
+            KeylessDecodeError::WrongAccountType {
+                expected: AccountType::AppAgent,
                 found: AccountType::Regular
             },
             "Regular account can not be considered as an AppAgent account"

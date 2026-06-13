@@ -60,13 +60,15 @@ mod tests {
             assert_eq!(decode_app_agent_account(&account), Ok(app_agent_id));
             assert_eq!(
                 decode_transactional_account(&account),
-                Err(KeylessDecodeError::NotATransactionalAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Transactional,
                     found: AccountType::AppAgent
                 })
             );
             assert_eq!(
                 decode_named_account(&account),
-                Err(KeylessDecodeError::NotANamedAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Named,
                     found: AccountType::AppAgent
                 })
             );
@@ -99,7 +101,8 @@ mod tests {
             );
             assert_eq!(
                 decode_app_agent_account(&account),
-                Err(KeylessDecodeError::NotAnAppAgentAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::AppAgent,
                     found: AccountType::Transactional
                 })
             );
@@ -125,7 +128,8 @@ mod tests {
             assert_eq!(decode_named_account(&account), Ok((app_agent_id, name)));
             assert_eq!(
                 decode_app_agent_account(&account),
-                Err(KeylessDecodeError::NotAnAppAgentAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::AppAgent,
                     found: AccountType::Named
                 })
             );
