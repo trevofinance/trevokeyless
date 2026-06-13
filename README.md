@@ -10,13 +10,13 @@ This makes the keyless addresses convenient for use in off-chain applications.
 
 For more detailed docs, visit the README of the specific library:
 
-- Typescript
+- Typescript (requires Node.js 22+)
   - Sources: [GitHub](./keyless-ts/)
   - Package: [NPM](https://www.npmjs.com/package/@trevofinance/trevokeyless)
-- Python 
+- Python (requires Python 3.10+)
   - Sources: [GitHub](./keyless-python/)
   - Package: [PyPI](https://pypi.org/project/trevokeyless/)
-- Rust
+- Rust (MSRV 1.79)
   - Sources: [GitHub](./keyless-rust/)
   - Package: [Crates.io](https://crates.io/crates/trevokeyless)
 

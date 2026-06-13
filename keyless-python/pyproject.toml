@@ -7,7 +7,7 @@ license = "Apache-2.0"
 authors = [
   { name="Trevo Ltd", email="support@trevo.finance" },
 ]
-description = "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses."
+description = "Encoding, decoding, and classification of Trevo keyless addresses: application agent, transactional, and named."
 readme = "README.md"
 keywords = ["trevo", "blockchain", "substrate", "ss58", "keyless", "address"]
 classifiers = [
