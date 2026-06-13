@@ -124,12 +124,12 @@ class TestConformanceVectors(unittest.TestCase):
         # Raw account id strings that violate the "0x" + 64 hex contract of
         # decode_account_id.
         for v in _VECTORS["hex_invalid"]:
-            with self.subTest(hex=v["hex"], reason=v["reason"]):
-                with self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"):
-                    trevokeyless.decode_account_id(v["hex"])
+            with self.subTest(input=v["input"], reason=v["reason"]):
+                with self.assertRaises(ValueError, msg=f"{v['input']!r} must be rejected: {v['reason']}"):
+                    trevokeyless.decode_account_id(v["input"])
                 # encode_address shares the input contract of decode_account_id.
-                with self.assertRaises(ValueError, msg=f"{v['hex']!r} must be rejected: {v['reason']}"):
-                    trevokeyless.encode_address(v["hex"])
+                with self.assertRaises(ValueError, msg=f"{v['input']!r} must be rejected: {v['reason']}"):
+                    trevokeyless.encode_address(v["input"])
 
     def test_hex_not_an_address_vectors(self: "TestConformanceVectors") -> None:
         # Raw account id hex strings fed to the SS58 address entry point: SS58
@@ -154,8 +154,8 @@ class TestConformanceVectors(unittest.TestCase):
         # lowercase.
         for v in _VECTORS["hex_valid"]:
             expected = v["expected"]
-            with self.subTest(hex=v["hex"]):
-                info = trevokeyless.decode_account_id(v["hex"])
+            with self.subTest(input=v["input"]):
+                info = trevokeyless.decode_account_id(v["input"])
                 self.assertEqual(info.account_id, v["account_id"])
                 self.assertEqual(info.account_type.name, expected["type"])
                 self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
@@ -163,7 +163,7 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertEqual(info.account_name, expected.get("name"))
                 # encode_address accepts both spellings and produces the same address.
                 self.assertEqual(
-                    trevokeyless.encode_address(v["hex"]),
+                    trevokeyless.encode_address(v["input"]),
                     trevokeyless.encode_address(v["account_id"]),
                 )
 

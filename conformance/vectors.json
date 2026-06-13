@@ -740,27 +740,27 @@
 {"name":"héllo12345","reason":"10 code points, 'é' outside the charset (11 UTF-8 bytes)"}
 ],
 "hex_invalid": [
-{"hex":"","reason":"empty string"},
-{"hex":"0x","reason":"prefix only"},
-{"hex":"0xabc","reason":"odd number of hex digits"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63","reason":"62 hex characters"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e","reason":"63 hex characters"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e20","reason":"65 hex characters"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63zz","reason":"characters outside the hex alphabet"},
-{"hex":"0X7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"uppercase 0X prefix"},
-{"hex":"7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"missing 0x prefix"},
-{"hex":"0x7b000000 1293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"embedded space (bytes.fromhex would tolerate it)"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2 ","reason":"trailing space"},
-{"hex":" 0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"leading space"},
-{"hex":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2\n","reason":"trailing newline"}
+{"input":"","reason":"empty string"},
+{"input":"0x","reason":"prefix only"},
+{"input":"0xabc","reason":"odd number of hex digits"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63","reason":"62 hex characters"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e","reason":"63 hex characters"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e20","reason":"65 hex characters"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63zz","reason":"characters outside the hex alphabet"},
+{"input":"0X7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"uppercase 0X prefix"},
+{"input":"7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"missing 0x prefix"},
+{"input":"0x7b000000 1293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"embedded space (bytes.fromhex would tolerate it)"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2 ","reason":"trailing space"},
+{"input":" 0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"leading space"},
+{"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2\n","reason":"trailing newline"}
 ],
 "hex_valid": [
-{"hex":"0x7B00000001293833058FC7DB52FC03F6CE344BCA98BD7825FF747743F1FF63E2","account_id":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","expected":{"type":"AppAgent","app_agent_id":123}},
-{"hex":"0x7b00000001293833058fC7Db52Fc03F6Ce344bCa98Bd7825Ff747743F1Ff63E2","account_id":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","expected":{"type":"AppAgent","app_agent_id":123}},
-{"hex":"0x7B00000002C801000033399AEB61B087F1A20A58C41EA5FF1B7BFB2FDA27BFC0","account_id":"0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0","expected":{"type":"Transactional","app_agent_id":123,"ta_id":456}},
-{"hex":"0x7b00000002C801000033399aEb61B087F1A20a58C41eA5Ff1b7bFb2fDa27BfC0","account_id":"0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0","expected":{"type":"Transactional","app_agent_id":123,"ta_id":456}},
-{"hex":"0x7B000000036578616D706C653132330A72315ABA532DE9903C05A71E7D2D0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}},
-{"hex":"0x7b000000036578616d706c653132330a72315aBa532dE9903c05A71e7d2d0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}}
+{"input":"0x7B00000001293833058FC7DB52FC03F6CE344BCA98BD7825FF747743F1FF63E2","account_id":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","expected":{"type":"AppAgent","app_agent_id":123}},
+{"input":"0x7b00000001293833058fC7Db52Fc03F6Ce344bCa98Bd7825Ff747743F1Ff63E2","account_id":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","expected":{"type":"AppAgent","app_agent_id":123}},
+{"input":"0x7B00000002C801000033399AEB61B087F1A20A58C41EA5FF1B7BFB2FDA27BFC0","account_id":"0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0","expected":{"type":"Transactional","app_agent_id":123,"ta_id":456}},
+{"input":"0x7b00000002C801000033399aEb61B087F1A20a58C41eA5Ff1b7bFb2fDa27BfC0","account_id":"0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0","expected":{"type":"Transactional","app_agent_id":123,"ta_id":456}},
+{"input":"0x7B000000036578616D706C653132330A72315ABA532DE9903C05A71E7D2D0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}},
+{"input":"0x7b000000036578616d706c653132330a72315aBa532dE9903c05A71e7d2d0409","account_id":"0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409","expected":{"type":"Named","app_agent_id":123,"name":"example123"}}
 ],
 "hex_not_an_address": [
 {"input":"0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2","reason":"the canonical raw account id of AppAgent(123)"},

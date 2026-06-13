@@ -730,7 +730,7 @@ fn main() {
                 !is_valid_hex_account_id(&input),
                 "self check: {reason:?} must not be a valid hex account id"
             );
-            format!(r#"{{"hex":{},"reason":{}}}"#, js(&input), js(reason))
+            format!(r#"{{"input":{},"reason":{}}}"#, js(&input), js(reason))
         })
         .collect();
 
@@ -767,7 +767,7 @@ fn main() {
                 "self check: {input:?} must be a valid hex account id"
             );
             hex_valid.push(format!(
-                r#"{{"hex":{},"account_id":{},"expected":{}}}"#,
+                r#"{{"input":{},"account_id":{},"expected":{}}}"#,
                 js(&input),
                 js(&format!("0x{lower}")),
                 classification_json(&account)

@@ -212,7 +212,7 @@ mod tests {
         // Python decode_account_id / TypeScript decodeAccountId entry points
         // (rejection and mixed-case acceptance respectively).
         for v in vectors["hex_invalid"].as_array().unwrap() {
-            let input = v["hex"].as_str().unwrap();
+            let input = v["input"].as_str().unwrap();
             let reason = v["reason"].as_str().unwrap();
             assert!(
                 input.parse::<AccountId32>().is_err(),
@@ -220,7 +220,7 @@ mod tests {
             );
         }
         for v in vectors["hex_valid"].as_array().unwrap() {
-            let input = v["hex"].as_str().unwrap();
+            let input = v["input"].as_str().unwrap();
             let account: AccountId32 = input
                 .parse()
                 .unwrap_or_else(|_| panic!("{input:?} must parse as an account id"));
