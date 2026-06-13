@@ -10,9 +10,10 @@ packages must reproduce its behavior exactly.
 the matching Python/TypeScript changes, in the same pull request.**
 
 The shared fixture [`conformance/vectors.json`](./conformance/vectors.json) is the
-executable specification. It is generated from the Rust crate and verified by all three
-test suites; CI additionally checks that the committed fixture matches the generator
-output byte for byte. Regenerate it with:
+executable specification (its per-group JSON schema is documented in
+[`conformance/README.md`](./conformance/README.md)). It is generated from the Rust crate
+and verified by all three test suites; CI additionally checks that the committed fixture
+matches the generator output byte for byte. Regenerate it with:
 
 ```
 cd keyless-rust
