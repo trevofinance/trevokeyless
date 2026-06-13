@@ -2,6 +2,12 @@
 //! of arbitrary byte patterns. A deterministic PRNG (fixed seeds, xorshift64*) is used instead
 //! of a property-testing dependency, so failures are exactly reproducible and the crate keeps
 //! its minimal dependency footprint.
+//!
+//! The PRNG construction and seeds are shared verbatim with the Python and TypeScript suites,
+//! so the three exercise the *same* generated cases and together act as a cross-language
+//! differential fuzzer (a reference-sequence test below pins the stream). Keep the construction
+//! byte-for-byte identical across the three languages when refactoring — otherwise they
+//! silently stop testing the same inputs.
 
 #[cfg(test)]
 mod tests {

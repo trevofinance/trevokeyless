@@ -3,9 +3,12 @@
  *
  * The same deterministic xorshift64* PRNG construction and seeds are used in the Rust,
  * Python, and TypeScript suites, so a failure in one implementation reproduces
- * bit-for-bit in the others. Iteration counts are reduced where they would otherwise
- * dominate the suite runtime; since the PRNG streams are identical, the reduced runs
- * cover a prefix of the Rust runs.
+ * bit-for-bit in the others — the three suites together act as a cross-language
+ * differential fuzzer (the "PRNG reference sequence" test below pins the stream). Keep
+ * the construction byte-for-byte identical across the languages when refactoring, or
+ * they silently stop testing the same inputs. Iteration counts are reduced where they
+ * would otherwise dominate the suite runtime; since the PRNG streams are identical, the
+ * reduced runs cover a prefix of the Rust runs.
  */
 import { bytesToHex } from "@noble/hashes/utils";
 import {
