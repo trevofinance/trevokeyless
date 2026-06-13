@@ -29,8 +29,8 @@ const {
   encodeAppAgentAddress,
   encodeTransactionalAddress,
   encodeNamedAddress,
-  AddressType,
-  AddressTypeMismatchError,
+  AccountType,
+  AccountTypeMismatchError,
   Ss58Error,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
@@ -43,7 +43,7 @@ const {
 ```
 
 TypeScript users can additionally import the type-only declarations
-`BlockchainAddressInfo`, `DecodedTransactionalAddress`, `DecodedNamedAddress`, and
+`BlockchainAccountInfo`, `DecodedTransactionalAddress`, `DecodedNamedAddress`, and
 `Ss58ErrorKind` (types are erased at runtime, so they are not available from
 `require`).
 
@@ -80,8 +80,8 @@ Example for Named addresses
 
 ```javascript
 const appAgentId = 123;
-const addressName = "hot-wallet";
-const encodedNamedAddress = encodeNamedAddress(appAgentId, addressName);
+const accountName = "hot-wallet";
+const encodedNamedAddress = encodeNamedAddress(appAgentId, accountName);
 console.log("Encoded Named address [123, 'hot-wallet']:", encodedNamedAddress);
 
 const decodedAddressName = decodeNamedAddress(encodedNamedAddress);
@@ -107,7 +107,7 @@ takes none)
 const info = decodeAccountId(
   "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2",
 );
-console.log(info.addressType === AddressType.AppAgent); // true
+console.log(info.accountType === AccountType.AppAgent); // true
 console.log(info.appAgentId); // 123
 ```
 
@@ -142,7 +142,7 @@ classified with `decodeAccountId` instead; raw account bytes carry no SS58 forma
 that function takes no `ss58Format` argument, and `decodeAddress` rejects `0x` input
 outright. `encodeAddress` is the reverse direction: it takes the same raw account id
 form and renders the SS58 address for the given format. The `address` field of the
-returned `BlockchainAddressInfo` holds the SS58 address for `decodeAddress` and is
+returned `BlockchainAccountInfo` holds the SS58 address for `decodeAddress` and is
 `null` for `decodeAccountId` (raw account bytes carry no address; render one with
 `encodeAddress`); `accountId` is normalized `0x` + lowercase hex. `address` is the
 input spelling verbatim: for the one accepted non-canonical spelling (the
@@ -163,7 +163,7 @@ Two error classes carry structured details:
   Rust `Ss58Error` enum (`"InvalidBase58" | "InvalidLength" | "InvalidChecksum" |
 "InvalidFormat" | "UnexpectedFormat"`), and for `"UnexpectedFormat"` the `expected`
   and `found` fields carry the two formats;
-- `AddressTypeMismatchError` (carrying the `expected` and `found` address types) from
+- `AccountTypeMismatchError` (carrying the `expected` and `found` address types) from
   the typed decoders (`decodeAppAgentAddress`, `decodeTransactionalAddress`,
   `decodeNamedAddress`) when the address decodes to a different type.
 

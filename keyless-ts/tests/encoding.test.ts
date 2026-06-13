@@ -4,8 +4,8 @@ import {
   encodeAppAgentAddress,
   encodeTransactionalAddress,
   encodeNamedAddress,
-  AddressType,
-  BlockchainAddressInfo,
+  AccountType,
+  BlockchainAccountInfo,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
   decodeNamedAddress,
@@ -36,13 +36,13 @@ describe("AppAgent", () => {
 
   it("Decodes AppAgent address to address info correctly", () => {
     const decoded_info = decodeAddress(blockchain_address, ss58_format);
-    const expected_info: BlockchainAddressInfo = {
+    const expected_info: BlockchainAccountInfo = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.AppAgent,
+      accountType: AccountType.AppAgent,
       appAgentId: app_agent_id,
       taId: null,
-      addressName: null,
+      accountName: null,
     };
     expect(decoded_info).toEqual(expected_info);
   });
@@ -80,13 +80,13 @@ describe("Transactional", () => {
 
   it("Decodes Transactional address to address info correctly", () => {
     const decoded_info = decodeAddress(blockchain_address, ss58_format);
-    const expected_info: BlockchainAddressInfo = {
+    const expected_info: BlockchainAccountInfo = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.Transactional,
+      accountType: AccountType.Transactional,
       appAgentId: app_agent_id,
       taId: transactional_address_id,
-      addressName: null,
+      accountName: null,
     };
     expect(decoded_info).toEqual(expected_info);
   });
@@ -115,19 +115,19 @@ describe("Named", () => {
     const decoded_ids = decodeNamedAddress(blockchain_address, ss58_format);
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
-      addressName: address_name,
+      accountName: address_name,
     });
   });
 
   it("Decodes Named address to address info correctly", () => {
     const decoded_info = decodeAddress(blockchain_address, ss58_format);
-    const expected_info: BlockchainAddressInfo = {
+    const expected_info: BlockchainAccountInfo = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.Named,
+      accountType: AccountType.Named,
       appAgentId: app_agent_id,
       taId: null,
-      addressName: address_name,
+      accountName: address_name,
     };
     expect(decoded_info).toEqual(expected_info);
   });
@@ -143,7 +143,7 @@ describe("Named address with invalid name bytes", () => {
     appAgentIdBytes.writeUInt32LE(1, 0);
     const openPart = Buffer.concat([
       appAgentIdBytes,
-      Buffer.from([AddressType.Named]),
+      Buffer.from([AccountType.Named]),
       Buffer.from(nameBytes),
     ]);
     const checksum = blake2b(openPart, { dkLen: 32 });
@@ -165,9 +165,9 @@ describe("Named address with invalid name bytes", () => {
     (_description, nameBytes) => {
       const address = buildNamedAddress(nameBytes);
       const decoded_info = decodeAddress(address, ss58_format);
-      expect(decoded_info.addressType).toEqual(AddressType.Regular);
+      expect(decoded_info.accountType).toEqual(AccountType.Regular);
       expect(decoded_info.appAgentId).toBeNull();
-      expect(decoded_info.addressName).toBeNull();
+      expect(decoded_info.accountName).toBeNull();
     },
   );
 
@@ -186,9 +186,9 @@ describe("Named address with invalid name bytes", () => {
   it("decodes an address with valid name bytes built the same way as Named", () => {
     const address = buildNamedAddress(Buffer.from("example123"));
     const decoded_info = decodeAddress(address, ss58_format);
-    expect(decoded_info.addressType).toEqual(AddressType.Named);
+    expect(decoded_info.accountType).toEqual(AccountType.Named);
     expect(decoded_info.appAgentId).toEqual(1);
-    expect(decoded_info.addressName).toEqual("example123");
+    expect(decoded_info.accountName).toEqual("example123");
   });
 });
 

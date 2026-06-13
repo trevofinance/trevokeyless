@@ -4,7 +4,7 @@
  *
  * `src/keyless.ts` is the package's single entry point (`package.json` `exports`), so
  * its runtime exports are exactly what `require("@trevofinance/trevokeyless")`
- * resolves. The type-only exports (`BlockchainAddressInfo`,
+ * resolves. The type-only exports (`BlockchainAccountInfo`,
  * `DecodedTransactionalAddress`, `DecodedNamedAddress`, `Ss58ErrorKind`) are erased at
  * compile time and must not appear at runtime.
  */
@@ -14,8 +14,8 @@ describe("Public surface", () => {
   it("exports exactly the documented runtime values", () => {
     const expected = [
       "ACCOUNT_ID_LENGTH",
-      "AddressType",
-      "AddressTypeMismatchError",
+      "AccountType",
+      "AccountTypeMismatchError",
       "NAMED_ADDRESS_LENGTH",
       "SS58_FORMAT_TREVO_ASSET_HUB",
       "SS58_MAX_ADDRESS_LENGTH",
@@ -37,7 +37,7 @@ describe("Public surface", () => {
 
   it("erases the type-only exports at runtime", () => {
     for (const typeOnly of [
-      "BlockchainAddressInfo",
+      "BlockchainAccountInfo",
       "DecodedTransactionalAddress",
       "DecodedNamedAddress",
       "Ss58ErrorKind",

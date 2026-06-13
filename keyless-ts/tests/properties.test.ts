@@ -9,8 +9,8 @@
  */
 import { bytesToHex } from "@noble/hashes/utils";
 import {
-  AddressType,
-  AddressTypeMismatchError,
+  AccountType,
+  AccountTypeMismatchError,
   decodeAccountId,
   decodeAddress,
   decodeAppAgentAddress,
@@ -104,16 +104,16 @@ describe("Round-trip properties", () => {
     ids.forEach((appAgentId) => {
       const address = encodeAppAgentAddress(appAgentId, ss58Format);
       const info = decodeAddress(address, ss58Format);
-      expect(info.addressType).toEqual(AddressType.AppAgent);
+      expect(info.accountType).toEqual(AccountType.AppAgent);
       expect(info.appAgentId).toEqual(appAgentId);
       expect(info.taId).toBeNull();
-      expect(info.addressName).toBeNull();
+      expect(info.accountName).toBeNull();
       expect(decodeAppAgentAddress(address, ss58Format)).toEqual(appAgentId);
       expect(() => decodeTransactionalAddress(address, ss58Format)).toThrow(
-        AddressTypeMismatchError,
+        AccountTypeMismatchError,
       );
       expect(() => decodeNamedAddress(address, ss58Format)).toThrow(
-        AddressTypeMismatchError,
+        AccountTypeMismatchError,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
     });
@@ -129,7 +129,7 @@ describe("Round-trip properties", () => {
     ids.forEach(([appAgentId, taId]) => {
       const address = encodeTransactionalAddress(appAgentId, taId, ss58Format);
       const info = decodeAddress(address, ss58Format);
-      expect(info.addressType).toEqual(AddressType.Transactional);
+      expect(info.accountType).toEqual(AccountType.Transactional);
       expect(info.appAgentId).toEqual(appAgentId);
       expect(info.taId).toEqual(taId);
       expect(decodeTransactionalAddress(address, ss58Format)).toEqual({
@@ -137,7 +137,7 @@ describe("Round-trip properties", () => {
         taId,
       });
       expect(() => decodeAppAgentAddress(address, ss58Format)).toThrow(
-        AddressTypeMismatchError,
+        AccountTypeMismatchError,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
     });
@@ -150,15 +150,15 @@ describe("Round-trip properties", () => {
       const name = randomName(rng);
       const address = encodeNamedAddress(appAgentId, name, ss58Format);
       const info = decodeAddress(address, ss58Format);
-      expect(info.addressType).toEqual(AddressType.Named);
+      expect(info.accountType).toEqual(AccountType.Named);
       expect(info.appAgentId).toEqual(appAgentId);
-      expect(info.addressName).toEqual(name);
+      expect(info.accountName).toEqual(name);
       expect(decodeNamedAddress(address, ss58Format)).toEqual({
         appAgentId,
-        addressName: name,
+        accountName: name,
       });
       expect(() => decodeAppAgentAddress(address, ss58Format)).toThrow(
-        AddressTypeMismatchError,
+        AccountTypeMismatchError,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
     }
@@ -178,7 +178,7 @@ describe("Classification properties", () => {
       const info = decodeAccountId(`0x${bytesToHex(account)}`);
       // Random bytes must classify as Regular (a checksum match has probability
       // ~2^-136 at best).
-      expect(info.addressType).toEqual(AddressType.Regular);
+      expect(info.accountType).toEqual(AccountType.Regular);
     }
   });
 
@@ -203,7 +203,7 @@ describe("Classification properties", () => {
         );
         corrupted[position] ^= xor;
         const info = decodeAccountId(`0x${bytesToHex(corrupted)}`);
-        expect(info.addressType).toEqual(AddressType.Regular);
+        expect(info.accountType).toEqual(AccountType.Regular);
       }
     });
   });

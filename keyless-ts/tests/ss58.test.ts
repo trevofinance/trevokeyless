@@ -2,7 +2,7 @@ import {
   encodeAppAgentAddress,
   encodeTransactionalAddress,
   encodeNamedAddress,
-  AddressType,
+  AccountType,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
   decodeNamedAddress,
@@ -44,10 +44,10 @@ describe("AppAgent", () => {
     const expected_address_info = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.AppAgent,
+      accountType: AccountType.AppAgent,
       appAgentId: app_agent_id,
       taId: null,
-      addressName: null,
+      accountName: null,
     };
     expect(decoded_address_info).toEqual(expected_address_info);
   });
@@ -105,10 +105,10 @@ describe("Transactional", () => {
     const expected_address_info = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.Transactional,
+      accountType: AccountType.Transactional,
       appAgentId: app_agent_id,
       taId: transactional_address_id,
-      addressName: null,
+      accountName: null,
     };
     expect(decoded_address_info).toEqual(expected_address_info);
   });
@@ -144,7 +144,7 @@ describe("Named", () => {
     const decoded_ids = decodeNamedAddress(blockchain_address);
     expect(decoded_ids).toEqual({
       appAgentId: app_agent_id,
-      addressName: address_name,
+      accountName: address_name,
     });
   });
 
@@ -159,10 +159,10 @@ describe("Named", () => {
     const expected_address_info = {
       address: blockchain_address,
       accountId: account_id,
-      addressType: AddressType.Named,
+      accountType: AccountType.Named,
       appAgentId: app_agent_id,
       taId: null,
-      addressName: address_name,
+      accountName: address_name,
     };
     expect(decoded_address_info).toEqual(expected_address_info);
   });

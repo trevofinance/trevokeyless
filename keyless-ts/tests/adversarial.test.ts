@@ -11,8 +11,8 @@ import { bytesToHex, concatBytes } from "@noble/hashes/utils";
 import { base58 } from "@scure/base";
 import { ss58Encode } from "../src/ss58";
 import {
-  AddressType,
-  AddressTypeMismatchError,
+  AccountType,
+  AccountTypeMismatchError,
   decodeAccountId,
   decodeAddress,
   decodeAppAgentAddress,
@@ -96,16 +96,16 @@ describe("Boundary values", () => {
 
   it("round-trips Named boundary names", () => {
     ["0000000000", "##########", "----------", "ZZZZZZZZZZ"].forEach(
-      (addressName) => {
+      (accountName) => {
         [0, U32_MAX].forEach((appAgentId) => {
           const address = encodeNamedAddress(
             appAgentId,
-            addressName,
+            accountName,
             ss58Format,
           );
           expect(decodeNamedAddress(address, ss58Format)).toEqual({
             appAgentId,
-            addressName,
+            accountName,
           });
         });
       },
@@ -275,7 +275,7 @@ describe("Malformed SS58 input", () => {
     account[10] ^= 0xff;
     const address = ss58Encode(account, ss58Format);
     const info = decodeAddress(address, ss58Format);
-    expect(info.addressType).toEqual(AddressType.Regular);
+    expect(info.accountType).toEqual(AccountType.Regular);
     expect(info.appAgentId).toBeNull();
   });
 
@@ -329,7 +329,7 @@ describe("Malformed SS58 input", () => {
     );
     const address = rawSs58(concatBytes(nonCanonicalPrefix, appAgent123));
     const info = decodeAddress(address, smallFormat);
-    expect(info.addressType).toEqual(AddressType.AppAgent);
+    expect(info.accountType).toEqual(AccountType.AppAgent);
     expect(info.appAgentId).toEqual(123);
   });
 
@@ -421,7 +421,7 @@ describe("Malformed SS58 input", () => {
     const address = ss58Encode(new Uint8Array(32).fill(0xff), maxFormat);
     expect(address.length).toBeLessThanOrEqual(SS58_MAX_ADDRESS_LENGTH);
     const info = decodeAddress(address, maxFormat);
-    expect(info.addressType).toEqual(AddressType.Regular);
+    expect(info.accountType).toEqual(AccountType.Regular);
   });
 });
 
@@ -439,7 +439,7 @@ describe("Hex account id contract", () => {
 
   it("classifies a valid hex account id", () => {
     const info = decodeAccountId(u8aToHex(appAgent123));
-    expect(info.addressType).toEqual(AddressType.AppAgent);
+    expect(info.accountType).toEqual(AccountType.AppAgent);
     expect(info.appAgentId).toEqual(123);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
     // Raw account bytes carry no address; encodeAddress renders one explicitly.
@@ -449,7 +449,7 @@ describe("Hex account id contract", () => {
   it("normalizes uppercase hex", () => {
     const upper = `0x${u8aToHex(appAgent123).slice(2).toUpperCase()}`;
     const info = decodeAccountId(upper);
-    expect(info.addressType).toEqual(AddressType.AppAgent);
+    expect(info.accountType).toEqual(AccountType.AppAgent);
     expect(info.accountId).toEqual(u8aToHex(appAgent123));
     expect(info.address).toBeNull();
   });
@@ -546,7 +546,7 @@ describe("isKeylessAddress", () => {
     // A zeroed account has no valid keyless discriminant; raw account ids are
     // classified via decodeAccountId.
     const info = decodeAccountId(`0x${"00".repeat(32)}`);
-    expect(info.addressType).toEqual(AddressType.Regular);
+    expect(info.accountType).toEqual(AccountType.Regular);
   });
 });
 
@@ -593,7 +593,7 @@ describe("Ss58Error", () => {
   });
 });
 
-describe("AddressTypeMismatchError", () => {
+describe("AccountTypeMismatchError", () => {
   it("carries the expected and found address types", () => {
     const namedAddress = encodeNamedAddress(1, "test123456", ss58Format);
 
@@ -604,10 +604,10 @@ describe("AddressTypeMismatchError", () => {
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(AddressTypeMismatchError);
-    const mismatch = thrown as AddressTypeMismatchError;
-    expect(mismatch.expected).toEqual(AddressType.AppAgent);
-    expect(mismatch.found).toEqual(AddressType.Named);
+    expect(thrown).toBeInstanceOf(AccountTypeMismatchError);
+    const mismatch = thrown as AccountTypeMismatchError;
+    expect(mismatch.expected).toEqual(AccountType.AppAgent);
+    expect(mismatch.found).toEqual(AccountType.Named);
     // The message is identical across the Python and TypeScript implementations.
     expect(mismatch.message).toEqual(
       "Provided address is not an AppAgent address but is a Named address",

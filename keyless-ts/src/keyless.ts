@@ -34,26 +34,26 @@ const SS58_FORMAT_MAX = 16383;
  * `decodeAccountId`.
  *
  * An erasable `const` object plus union type rather than a TS `enum`, so the package
- * contains no non-erasable syntax. The numeric values match the Python `AddressType`
+ * contains no non-erasable syntax. The numeric values match the Python `AccountType`
  * enum and the SCALE variant indices of the Rust `AccountType`; for the keyless
  * variants they coincide with the type discriminant stored at byte [4] of a keyless
- * account id. There is no numeric reverse lookup (`AddressType[1]`); derive names via
- * `Object.entries(AddressType)` if needed.
+ * account id. There is no numeric reverse lookup (`AccountType[1]`); derive names via
+ * `Object.entries(AccountType)` if needed.
  */
-const AddressType = {
+const AccountType = {
   Regular: 0,
   AppAgent: 1,
   Transactional: 2,
   Named: 3,
 } as const;
-type AddressType = (typeof AddressType)[keyof typeof AddressType];
+type AccountType = (typeof AccountType)[keyof typeof AccountType];
 
-/** Name of each `AddressType` value, for error messages. */
-const ADDRESS_TYPE_NAMES: Record<AddressType, keyof typeof AddressType> = {
-  [AddressType.Regular]: "Regular",
-  [AddressType.AppAgent]: "AppAgent",
-  [AddressType.Transactional]: "Transactional",
-  [AddressType.Named]: "Named",
+/** Name of each `AccountType` value, for error messages. */
+const ACCOUNT_TYPE_NAMES: Record<AccountType, keyof typeof AccountType> = {
+  [AccountType.Regular]: "Regular",
+  [AccountType.AppAgent]: "AppAgent",
+  [AccountType.Transactional]: "Transactional",
+  [AccountType.Named]: "Named",
 };
 
 /**
@@ -63,17 +63,17 @@ const ADDRESS_TYPE_NAMES: Record<AddressType, keyof typeof AddressType> = {
  * the `KeylessDecodeError` of the Rust implementation. The message is identical to the
  * Python implementation's.
  */
-class AddressTypeMismatchError extends Error {
-  readonly expected: AddressType;
+class AccountTypeMismatchError extends Error {
+  readonly expected: AccountType;
 
-  readonly found: AddressType;
+  readonly found: AccountType;
 
-  constructor(expected: AddressType, found: AddressType) {
-    const article = expected === AddressType.AppAgent ? "an" : "a";
+  constructor(expected: AccountType, found: AccountType) {
+    const article = expected === AccountType.AppAgent ? "an" : "a";
     super(
-      `Provided address is not ${article} ${ADDRESS_TYPE_NAMES[expected]} address but is a ${ADDRESS_TYPE_NAMES[found]} address`,
+      `Provided address is not ${article} ${ACCOUNT_TYPE_NAMES[expected]} address but is a ${ACCOUNT_TYPE_NAMES[found]} address`,
     );
-    this.name = "AddressTypeMismatchError";
+    this.name = "AccountTypeMismatchError";
     this.expected = expected;
     this.found = found;
   }
@@ -93,13 +93,13 @@ class AddressTypeMismatchError extends Error {
  * caches and lookups on `accountId` — the canonical cross-language form — and render
  * the canonical address with `encodeAddress`.
  */
-interface BlockchainAddressInfo {
+interface BlockchainAccountInfo {
   address: string | null;
   accountId: string;
-  addressType: AddressType;
+  accountType: AccountType;
   appAgentId: number | null;
   taId: number | null;
-  addressName: string | null;
+  accountName: string | null;
 }
 
 /**
@@ -363,18 +363,18 @@ function decodeSs58AccountId(address: string, ss58Format: number): Uint8Array {
  *   stored in the `address` field of the result; null when the input was a raw
  *   account id.
  * @param {Uint8Array} accountId - The 32-byte account id.
- * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
+ * @returns {BlockchainAccountInfo} - An object containing the decoded address type and data.
  */
 function classifyAccountId(
   address: string | null,
   accountId: Uint8Array,
-): BlockchainAddressInfo {
+): BlockchainAccountInfo {
   const accountIdHex = `0x${bytesToHex(accountId)}`;
 
   // Read the byte that encodes type of the address
-  const addressTypeByte = accountId[4];
+  const accountTypeByte = accountId[4];
 
-  if (addressTypeByte === APP_AGENT_ADDRESS_IDENTIFIER) {
+  if (accountTypeByte === APP_AGENT_ADDRESS_IDENTIFIER) {
     // Verify checksum
     const openPartSize = 5;
     const openPart = accountId.slice(0, openPartSize);
@@ -387,15 +387,15 @@ function classifyAccountId(
       return {
         address,
         accountId: accountIdHex,
-        addressType: AddressType.AppAgent,
+        accountType: AccountType.AppAgent,
         appAgentId,
         taId: null,
-        addressName: null,
+        accountName: null,
       };
     }
   }
 
-  if (addressTypeByte === TRANSACTIONAL_ADDRESS_IDENTIFIER) {
+  if (accountTypeByte === TRANSACTIONAL_ADDRESS_IDENTIFIER) {
     // Verify checksum
     const openPartSize = 9;
     const openPart = accountId.slice(0, openPartSize);
@@ -409,15 +409,15 @@ function classifyAccountId(
       return {
         address,
         accountId: accountIdHex,
-        addressType: AddressType.Transactional,
+        accountType: AccountType.Transactional,
         appAgentId,
         taId,
-        addressName: null,
+        accountName: null,
       };
     }
   }
 
-  if (addressTypeByte === NAMED_ADDRESS_IDENTIFIER) {
+  if (accountTypeByte === NAMED_ADDRESS_IDENTIFIER) {
     // Verify checksum
     const openPartSize = 15;
     const openPart = accountId.slice(0, openPartSize);
@@ -431,17 +431,17 @@ function classifyAccountId(
       bytesEqual(checksum, checksumCalculated) &&
       isValidAddressNameBytes(nameBytes)
     ) {
-      // Extract and decode appAgentId and addressName
+      // Extract and decode appAgentId and accountName
       const appAgentId = u32FromLeBytes(accountId, 0);
-      const addressName = String.fromCharCode(...nameBytes);
+      const accountName = String.fromCharCode(...nameBytes);
 
       return {
         address,
         accountId: accountIdHex,
-        addressType: AddressType.Named,
+        accountType: AccountType.Named,
         appAgentId,
         taId: null,
-        addressName,
+        accountName,
       };
     }
   }
@@ -449,10 +449,10 @@ function classifyAccountId(
   return {
     address,
     accountId: accountIdHex,
-    addressType: AddressType.Regular,
+    accountType: AccountType.Regular,
     appAgentId: null,
     taId: null,
-    addressName: null,
+    accountName: null,
   };
 }
 
@@ -464,14 +464,14 @@ function classifyAccountId(
  * `decodeAccountId` for those.
  *
  * @param {string} address - The SS58 address to decode.
- * @returns {BlockchainAddressInfo} - An object containing the decoded address type and data.
+ * @returns {BlockchainAccountInfo} - An object containing the decoded address type and data.
  * @throws {Error} - Thrown if ss58Format is not an integer in [0, 16383], or the
  *   address is not a valid SS58 string of a 32-byte account id in the expected format.
  */
 function decodeAddress(
   address: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
-): BlockchainAddressInfo {
+): BlockchainAccountInfo {
   return classifyAccountId(address, decodeSs58AccountId(address, ss58Format));
 }
 
@@ -484,13 +484,13 @@ function decodeAddress(
  *
  * @param {string} accountId - The account id: `0x` followed by exactly 64 hex
  *   characters.
- * @returns {BlockchainAddressInfo} - An object containing the decoded address type and
+ * @returns {BlockchainAccountInfo} - An object containing the decoded address type and
  *   data; its `address` field is `null` (raw account bytes carry no address; render
  *   one with `encodeAddress`).
  * @throws {Error} - Thrown if the input is not `0x` followed by exactly 64 hex
  *   characters.
  */
-function decodeAccountId(accountId: string): BlockchainAddressInfo {
+function decodeAccountId(accountId: string): BlockchainAccountInfo {
   if (!HEX_ACCOUNT_ID.test(accountId)) {
     throw new Error(
       "Invalid hex account id: expected 0x followed by 64 hex characters",
@@ -503,7 +503,7 @@ function decodeAccountId(accountId: string): BlockchainAddressInfo {
  * Encodes a raw 32-byte account id as an SS58 address.
  *
  * The counterpart of `decodeAddress`: any account id obtained from
- * `BlockchainAddressInfo.accountId` (or from chain state) renders as its canonical
+ * `BlockchainAccountInfo.accountId` (or from chain state) renders as its canonical
  * address string. Mirrors `AccountId32::to_ss58check_with_version` of the Rust
  * implementation. The input contract is `decodeAccountId`'s: `0x` followed by exactly
  * 64 hex characters (both digit cases accepted).
@@ -534,7 +534,7 @@ function encodeAddress(
  *
  * @param {string} address - The SS58 address to decode.
  * @returns {number} - The ID of the application agent.
- * @throws {AddressTypeMismatchError} - Thrown if the address is not an AppAgent address.
+ * @throws {AccountTypeMismatchError} - Thrown if the address is not an AppAgent address.
  */
 function decodeAppAgentAddress(
   address: string,
@@ -542,10 +542,10 @@ function decodeAppAgentAddress(
 ): number {
   const decodingResult = decodeAddress(address, ss58Format);
 
-  if (decodingResult.addressType !== AddressType.AppAgent) {
-    throw new AddressTypeMismatchError(
-      AddressType.AppAgent,
-      decodingResult.addressType,
+  if (decodingResult.accountType !== AccountType.AppAgent) {
+    throw new AccountTypeMismatchError(
+      AccountType.AppAgent,
+      decodingResult.accountType,
     );
   }
   if (
@@ -576,7 +576,7 @@ interface DecodedTransactionalAddress {
  * @param {string} address - The SS58 address to decode.
  * @returns {DecodedTransactionalAddress} - An object containing the IDs of the app agent
  *   and transactional address.
- * @throws {AddressTypeMismatchError} - Thrown if the address is not a Transactional address.
+ * @throws {AccountTypeMismatchError} - Thrown if the address is not a Transactional address.
  */
 function decodeTransactionalAddress(
   address: string,
@@ -584,10 +584,10 @@ function decodeTransactionalAddress(
 ): DecodedTransactionalAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
-  if (decodingResult.addressType !== AddressType.Transactional) {
-    throw new AddressTypeMismatchError(
-      AddressType.Transactional,
-      decodingResult.addressType,
+  if (decodingResult.accountType !== AccountType.Transactional) {
+    throw new AccountTypeMismatchError(
+      AccountType.Transactional,
+      decodingResult.accountType,
     );
   }
   if (
@@ -616,7 +616,7 @@ function decodeTransactionalAddress(
  */
 interface DecodedNamedAddress {
   appAgentId: number;
-  addressName: string;
+  accountName: string;
 }
 
 /**
@@ -625,7 +625,7 @@ interface DecodedNamedAddress {
  * @param {string} address - The SS58 address to decode.
  * @returns {DecodedNamedAddress} - An object containing the ID of the application agent
  *   and the address name.
- * @throws {AddressTypeMismatchError} - Thrown if the address is not a Named address.
+ * @throws {AccountTypeMismatchError} - Thrown if the address is not a Named address.
  */
 function decodeNamedAddress(
   address: string,
@@ -633,10 +633,10 @@ function decodeNamedAddress(
 ): DecodedNamedAddress {
   const decodingResult = decodeAddress(address, ss58Format);
 
-  if (decodingResult.addressType !== AddressType.Named) {
-    throw new AddressTypeMismatchError(
-      AddressType.Named,
-      decodingResult.addressType,
+  if (decodingResult.accountType !== AccountType.Named) {
+    throw new AccountTypeMismatchError(
+      AccountType.Named,
+      decodingResult.accountType,
     );
   }
   if (
@@ -648,17 +648,17 @@ function decodeNamedAddress(
     );
   }
   if (
-    decodingResult.addressName === undefined ||
-    decodingResult.addressName === null
+    decodingResult.accountName === undefined ||
+    decodingResult.accountName === null
   ) {
     throw new Error(
-      "Internal error in trevokeyless - addressName of Named address is undefined",
+      "Internal error in trevokeyless - accountName of Named address is undefined",
     );
   }
 
   return {
     appAgentId: decodingResult.appAgentId,
-    addressName: decodingResult.addressName,
+    accountName: decodingResult.accountName,
   };
 }
 
@@ -677,15 +677,15 @@ function isKeylessAddress(
   address: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): boolean {
-  return decodeAddress(address, ss58Format).addressType !== AddressType.Regular;
+  return decodeAddress(address, ss58Format).accountType !== AccountType.Regular;
 }
 
 export {
-  AddressType,
-  AddressTypeMismatchError,
+  AccountType,
+  AccountTypeMismatchError,
   Ss58Error,
   Ss58ErrorKind,
-  BlockchainAddressInfo,
+  BlockchainAccountInfo,
   DecodedTransactionalAddress,
   DecodedNamedAddress,
   encodeAppAgentAddress,
