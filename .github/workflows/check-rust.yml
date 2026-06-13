@@ -132,7 +132,9 @@ jobs:
         with:
           tool: cargo-fuzz
       - name: Fuzz the SS58 decoder (smoke run)
-        run: cargo +nightly fuzz run ss58_decode -- -max_total_time=60
+        run: cargo +nightly fuzz run ss58_decode -- -max_total_time=30
+      - name: Fuzz the AccountId32 hex parser (smoke run)
+        run: cargo +nightly fuzz run accountid_from_str -- -max_total_time=30
 
   rust-audit:
     concurrency:

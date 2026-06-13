@@ -30,6 +30,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
         with:
           toolchain: stable
+          components: clippy
 
       - name: Tag must match the crate version
         run: |
@@ -37,8 +38,19 @@ jobs:
           crate_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$tag_version" = "$crate_version" || { echo "tag $tag_version != Cargo.toml $crate_version"; exit 1; }
 
+      # Re-run the release-critical gates on the tagged commit: a tag can point at any
+      # commit, not necessarily one that passed check-rust on a PR.
+      - name: Clippy (all features)
+        run: cargo clippy --all-features --all-targets -- -D warnings
+
       - name: Run test suite (all features)
         run: cargo test --all-features
+
+      - name: Run test suite (no default features)
+        run: cargo test --no-default-features
+
+      - name: Conformance fixture is up to date
+        run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
 
       - name: Authenticate with crates.io (trusted publishing)
         uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
