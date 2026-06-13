@@ -3,6 +3,28 @@ mod tests {
     use crate::keyless::*;
     use crate::types::*;
 
+    /// BLAKE2b-256 known-answer test. The expected digests come from an independent
+    /// implementation (Python's `hashlib.blake2b(..., digest_size=32)`) and are the
+    /// canonical unkeyed BLAKE2b-256 vectors for the empty input and `"abc"`. This pins
+    /// the hash primitive the entire keyless encoding is built on, so a future
+    /// `blake2b_simd` change (or a wrong parameterization) cannot silently shift every
+    /// account id.
+    #[test]
+    fn test_blake2_256_known_answers() {
+        assert_eq!(
+            blake2_256(b""),
+            array_bytes::hex2array_unchecked(
+                "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"
+            )
+        );
+        assert_eq!(
+            blake2_256(b"abc"),
+            array_bytes::hex2array_unchecked(
+                "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319"
+            )
+        );
+    }
+
     #[test]
     fn test_app_agent_structure() {
         let account = encode_app_agent_account(123456789);
