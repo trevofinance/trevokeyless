@@ -11,7 +11,7 @@ import unittest
 from hashlib import blake2b
 
 import trevokeyless
-from trevokeyless import AddressType, AddressTypeMismatchError, Ss58Error
+from trevokeyless import AccountType, AccountTypeMismatchError, Ss58Error
 from trevokeyless._ss58 import _b58decode, _b58encode, ss58_decode, ss58_encode
 
 SS58_FORMAT = 5335
@@ -173,7 +173,7 @@ class TestMalformedSs58(unittest.TestCase):
         account[10] ^= 0xFF
         address = ss58_encode(bytes(account), SS58_FORMAT)
         info = trevokeyless.decode_address(address, SS58_FORMAT)
-        self.assertIs(info.address_type, AddressType.Regular)
+        self.assertIs(info.account_type, AccountType.Regular)
         self.assertIsNone(info.app_agent_id)
 
     def test_rejects_reserved_format(self: "TestMalformedSs58") -> None:
@@ -209,7 +209,7 @@ class TestMalformedSs58(unittest.TestCase):
         )
         address = _raw_ss58(noncanonical_prefix + APP_AGENT_123)
         info = trevokeyless.decode_address(address, small_format)
-        self.assertIs(info.address_type, AddressType.AppAgent)
+        self.assertIs(info.account_type, AccountType.AppAgent)
         self.assertEqual(info.app_agent_id, 123)
 
     def test_rejects_garbage_input(self: "TestMalformedSs58") -> None:
@@ -252,7 +252,7 @@ class TestMalformedSs58(unittest.TestCase):
         address = ss58_encode(b"\xff" * 32, max_format)
         self.assertLessEqual(len(address), trevokeyless.SS58_MAX_ADDRESS_LENGTH)
         info = trevokeyless.decode_address(address, max_format)
-        self.assertIs(info.address_type, AddressType.Regular)
+        self.assertIs(info.account_type, AccountType.Regular)
 
 
 class TestSurroundingWhitespace(unittest.TestCase):
@@ -476,7 +476,7 @@ class TestHexAccountIdContract(unittest.TestCase):
 
     def test_valid_hex_account_id_is_classified(self: "TestHexAccountIdContract") -> None:
         info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex())
-        self.assertIs(info.address_type, AddressType.AppAgent)
+        self.assertIs(info.account_type, AccountType.AppAgent)
         self.assertEqual(info.app_agent_id, 123)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
         # Raw account bytes carry no address; encode_address renders one explicitly.
@@ -484,7 +484,7 @@ class TestHexAccountIdContract(unittest.TestCase):
 
     def test_uppercase_hex_is_normalized(self: "TestHexAccountIdContract") -> None:
         info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex().upper())
-        self.assertIs(info.address_type, AddressType.AppAgent)
+        self.assertIs(info.account_type, AccountType.AppAgent)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
         self.assertIsNone(info.address)
 
@@ -639,19 +639,19 @@ class TestIsKeylessAddress(unittest.TestCase):
         # A zeroed account has no valid keyless discriminant; raw account ids are
         # classified via decode_account_id.
         info = trevokeyless.decode_account_id("0x" + "00" * 32)
-        self.assertIs(info.address_type, AddressType.Regular)
+        self.assertIs(info.account_type, AccountType.Regular)
 
 
-class TestBlockchainAddressInfoValueSemantics(unittest.TestCase):
-    """BlockchainAddressInfo is a frozen dataclass: immutable and hashable, mirroring
+class TestBlockchainAccountInfoValueSemantics(unittest.TestCase):
+    """BlockchainAccountInfo is a frozen dataclass: immutable and hashable, mirroring
     the Rust BlockchainAccountInfo (Copy + Eq + Hash)."""
 
-    def test_is_immutable(self: "TestBlockchainAddressInfoValueSemantics") -> None:
+    def test_is_immutable(self: "TestBlockchainAccountInfoValueSemantics") -> None:
         info = trevokeyless.decode_address(trevokeyless.encode_app_agent_address(123, SS58_FORMAT), SS58_FORMAT)
         with self.assertRaises(dataclasses.FrozenInstanceError):
             info.app_agent_id = 124  # type: ignore[misc]
 
-    def test_is_hashable(self: "TestBlockchainAddressInfoValueSemantics") -> None:
+    def test_is_hashable(self: "TestBlockchainAccountInfoValueSemantics") -> None:
         address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
         info_a = trevokeyless.decode_address(address, SS58_FORMAT)
         info_b = trevokeyless.decode_address(address, SS58_FORMAT)
@@ -706,13 +706,13 @@ class TestSs58FormatMismatchError(unittest.TestCase):
         self.assertNotIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
 
 
-class TestAddressTypeMismatchError(unittest.TestCase):
-    def test_carries_expected_and_found(self: "TestAddressTypeMismatchError") -> None:
+class TestAccountTypeMismatchError(unittest.TestCase):
+    def test_carries_expected_and_found(self: "TestAccountTypeMismatchError") -> None:
         named_address = trevokeyless.encode_named_address(1, "test123456", SS58_FORMAT)
-        with self.assertRaises(AddressTypeMismatchError) as ctx:
+        with self.assertRaises(AccountTypeMismatchError) as ctx:
             trevokeyless.decode_app_agent_address(named_address, SS58_FORMAT)
-        self.assertIs(ctx.exception.expected, AddressType.AppAgent)
-        self.assertIs(ctx.exception.found, AddressType.Named)
+        self.assertIs(ctx.exception.expected, AccountType.AppAgent)
+        self.assertIs(ctx.exception.found, AccountType.Named)
         # Backwards compatibility: the error is still a ValueError. The message renders
         # the plain type name ("Named"), like the TypeScript implementation.
         self.assertIsInstance(ctx.exception, ValueError)

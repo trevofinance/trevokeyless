@@ -57,10 +57,10 @@ assert decoded_data == (123, 456)
 import trevokeyless
 
 app_agent_id = 123
-address_name = "hot-wallet"
+account_name = "hot-wallet"
 
 # Encode a Named address
-encoded_address = trevokeyless.encode_named_address(app_agent_id, address_name)
+encoded_address = trevokeyless.encode_named_address(app_agent_id, account_name)
 assert encoded_address == "ttowKp8Ams1q53N3APEt8PQi8hJ57WjQ92KQTtJrY574nomqv"
 
 # Decode the Named address
@@ -81,13 +81,13 @@ assert encoded_address == "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp"
 
 # Decode the address and classify it
 decoded_data = trevokeyless.decode_address(encoded_address)
-expected_data = trevokeyless.BlockchainAddressInfo(
+expected_data = trevokeyless.BlockchainAccountInfo(
     address=encoded_address,
     account_id="0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2",
-    address_type=trevokeyless.AddressType.AppAgent,
+    account_type=trevokeyless.AccountType.AppAgent,
     app_agent_id=123,
     ta_id=None,
-    address_name=None,
+    account_name=None,
 )
 assert decoded_data == expected_data
 ```
@@ -99,7 +99,7 @@ import trevokeyless
 
 # Raw account bytes carry no SS58 format, so decode_account_id takes none.
 info = trevokeyless.decode_account_id("0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2")
-assert info.address_type is trevokeyless.AddressType.AppAgent
+assert info.account_type is trevokeyless.AccountType.AppAgent
 assert info.app_agent_id == 123
 ```
 
@@ -138,7 +138,7 @@ is classified with `decode_account_id` instead; raw account bytes carry no SS58 
 so that function takes no `ss58_format` argument, and `decode_address` rejects `0x`
 input outright. `encode_address` is the reverse direction: it takes the same raw
 account id form and renders the SS58 address for the given format. The `address` field
-of the returned `BlockchainAddressInfo` holds the SS58 address for `decode_address`
+of the returned `BlockchainAccountInfo` holds the SS58 address for `decode_address`
 and is `None` for `decode_account_id` (raw account bytes carry no address; render one
 with `encode_address`); `account_id` is normalized `0x` + lowercase hex. `address` is
 the input spelling verbatim: for the one accepted non-canonical spelling (the
@@ -161,7 +161,7 @@ Two `ValueError` subclasses carry structured details:
   case is raised as the subclass `Ss58FormatMismatchError` (`expected`/`found`
   attributes) — raised only when the address is a fully valid SS58 string of a
   different format; an invalid address always raises its validation kind instead.
-- `AddressTypeMismatchError` (`expected`/`found` attributes) from the typed decoders
+- `AccountTypeMismatchError` (`expected`/`found` attributes) from the typed decoders
   (`decode_app_agent_address`, `decode_transactional_address`, `decode_named_address`)
   when the address decodes to a different type.
 

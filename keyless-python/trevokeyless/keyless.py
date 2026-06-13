@@ -49,18 +49,18 @@ BlockchainAddress: TypeAlias = str
 BlockchainAccountId: TypeAlias = str
 AppAgentId: TypeAlias = int
 TransactionalId: TypeAlias = int
-AddressName: TypeAlias = str
+AccountName: TypeAlias = str
 SS58Format: TypeAlias = int
 
 
-class AddressType(Enum):
+class AccountType(Enum):
     Regular = 0
     AppAgent = 1
     Transactional = 2
     Named = 3
 
 
-class AddressTypeMismatchError(ValueError):
+class AccountTypeMismatchError(ValueError):
     """Raised by the typed decode_* functions when the address is of a different type.
 
     Carries the expected and the actual (found) classification of the address, mirroring
@@ -69,14 +69,14 @@ class AddressTypeMismatchError(ValueError):
     is identical to the TypeScript implementation's.
 
     Attributes:
-        expected (AddressType): The address type required by the caller.
-        found (AddressType): The actual classification of the address.
+        expected (AccountType): The address type required by the caller.
+        found (AccountType): The actual classification of the address.
     """
 
-    def __init__(self, expected: AddressType, found: AddressType) -> None:
+    def __init__(self, expected: AccountType, found: AccountType) -> None:
         self.expected = expected
         self.found = found
-        article = "an" if expected is AddressType.AppAgent else "a"
+        article = "an" if expected is AccountType.AppAgent else "a"
         super().__init__(f"Provided address is not {article} {expected.name} address but is a {found.name} address")
 
 
@@ -102,7 +102,7 @@ class Ss58FormatMismatchError(Ss58Error):
 
 
 @dataclass(frozen=True)
-class BlockchainAddressInfo:
+class BlockchainAccountInfo:
     """Decoded identity of a blockchain address.
 
     Immutable (and therefore hashable), mirroring the value semantics of the Rust
@@ -123,10 +123,10 @@ class BlockchainAddressInfo:
 
     address: BlockchainAddress | None
     account_id: BlockchainAccountId
-    address_type: AddressType
+    account_type: AccountType
     app_agent_id: AppAgentId | None
     ta_id: TransactionalId | None
-    address_name: AddressName | None
+    account_name: AccountName | None
 
 
 def _blake2_256(data: bytes) -> bytes:
@@ -222,7 +222,7 @@ def _validate_ss58_format(ss58_format: int) -> None:
 __allowed_chars = set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#")
 
 
-def _validate_address_name(name: str) -> None:
+def _validate_account_name(name: str) -> None:
     """
     Validates that a name is exactly 10 characters long and contains only allowed ASCII
     characters (`0-9 a-z A-Z - #`).
@@ -244,7 +244,7 @@ def _validate_address_name(name: str) -> None:
         raise ValueError(msg)
 
 
-def _decode_address_name(name_bytes: bytes) -> AddressName | None:
+def _decode_account_name(name_bytes: bytes) -> AccountName | None:
     """
     Decodes the raw name bytes of a Named address, validating the character set.
 
@@ -316,7 +316,7 @@ def encode_app_agent_address(
     app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
 
     # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AddressType.AppAgent.value])
+    open_part = app_agent_id_bytes + bytes([AccountType.AppAgent.value])
 
     return _encode_address(open_part, ss58_format)
 
@@ -334,13 +334,13 @@ def decode_app_agent_address(
         int: Decoded AppAgent ID.
 
     Raises:
-        AddressTypeMismatchError: If the address is not an AppAgent address.
+        AccountTypeMismatchError: If the address is not an AppAgent address.
         ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
-    if decoding_result.address_type is not AddressType.AppAgent:
-        raise AddressTypeMismatchError(AddressType.AppAgent, decoding_result.address_type)
+    if decoding_result.account_type is not AccountType.AppAgent:
+        raise AccountTypeMismatchError(AccountType.AppAgent, decoding_result.account_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of AppAgent address is None"
         raise ValueError(msg)
@@ -376,7 +376,7 @@ def encode_transactional_address(
     ta_id_bytes = ta_id.to_bytes(4, byteorder="little")
 
     # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AddressType.Transactional.value]) + ta_id_bytes
+    open_part = app_agent_id_bytes + bytes([AccountType.Transactional.value]) + ta_id_bytes
 
     return _encode_address(open_part, ss58_format)
 
@@ -394,13 +394,13 @@ def decode_transactional_address(
         Tuple[int, int]: Decoded AppAgent ID and Transactional address ID.
 
     Raises:
-        AddressTypeMismatchError: If the address is not a Transactional address.
+        AccountTypeMismatchError: If the address is not a Transactional address.
         ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
-    if decoding_result.address_type is not AddressType.Transactional:
-        raise AddressTypeMismatchError(AddressType.Transactional, decoding_result.address_type)
+    if decoding_result.account_type is not AccountType.Transactional:
+        raise AccountTypeMismatchError(AccountType.Transactional, decoding_result.account_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of Transactional address is None"
         raise ValueError(msg)
@@ -412,7 +412,7 @@ def decode_transactional_address(
 
 
 def encode_named_address(
-    app_agent_id: AppAgentId, name: AddressName, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
+    app_agent_id: AppAgentId, name: AccountName, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
 ) -> BlockchainAddress:
     """
     Encode a Named address.
@@ -431,20 +431,20 @@ def encode_named_address(
             SS58 format.
     """
     _validate_u32(app_agent_id, "app_agent_id")
-    _validate_address_name(name)
+    _validate_account_name(name)
 
     # Convert app_agent_id to little-endian bytes
     app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
 
     # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AddressType.Named.value]) + name.encode()
+    open_part = app_agent_id_bytes + bytes([AccountType.Named.value]) + name.encode()
 
     return _encode_address(open_part, ss58_format)
 
 
 def decode_named_address(
     encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
-) -> tuple[AppAgentId, AddressName]:
+) -> tuple[AppAgentId, AccountName]:
     """
     Decode an encoded Named address.
 
@@ -455,21 +455,21 @@ def decode_named_address(
         Tuple[int, str]: Decoded AppAgent ID and address name.
 
     Raises:
-        AddressTypeMismatchError: If the address is not a Named address.
+        AccountTypeMismatchError: If the address is not a Named address.
         ValueError: If the address cannot be decoded at all.
     """
     decoding_result = decode_address(encoded_address, ss58_format)
 
-    if decoding_result.address_type is not AddressType.Named:
-        raise AddressTypeMismatchError(AddressType.Named, decoding_result.address_type)
+    if decoding_result.account_type is not AccountType.Named:
+        raise AccountTypeMismatchError(AccountType.Named, decoding_result.account_type)
     if decoding_result.app_agent_id is None:
         msg = "Internal error in trevokeyless - app_agent_id of Named address is None"
         raise ValueError(msg)
-    if decoding_result.address_name is None:
+    if decoding_result.account_name is None:
         msg = "Internal error in trevokeyless - name of Named address is None"
         raise ValueError(msg)
 
-    return decoding_result.app_agent_id, decoding_result.address_name
+    return decoding_result.app_agent_id, decoding_result.account_name
 
 
 def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_format: SS58Format) -> bytes:
@@ -511,7 +511,7 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
 
 def decode_address(
     blockchain_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
-) -> BlockchainAddressInfo:
+) -> BlockchainAccountInfo:
     """
     Decode an SS58 blockchain address and classify it.
 
@@ -524,7 +524,7 @@ def decode_address(
         ss58_format (int): SS58 format (network prefix) the address must use.
 
     Returns:
-        BlockchainAddressInfo: an object with info about the address.
+        BlockchainAccountInfo: an object with info about the address.
 
     Raises:
         TypeError: If blockchain_address is not a str, or ss58_format is not an int.
@@ -538,7 +538,7 @@ def decode_address(
     return _classify_account_id(blockchain_address, account_id_bytes)
 
 
-def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
+def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAccountInfo:
     """
     Decode a raw 32-byte account id and classify it.
 
@@ -550,7 +550,7 @@ def decode_account_id(account_id: BlockchainAccountId) -> BlockchainAddressInfo:
         account_id (str): The account id: `0x` followed by exactly 64 hex characters.
 
     Returns:
-        BlockchainAddressInfo: an object with info about the account id. The `address`
+        BlockchainAccountInfo: an object with info about the account id. The `address`
             field is `None` (raw account bytes carry no address; render one with
             `encode_address`).
 
@@ -572,7 +572,7 @@ def encode_address(
     Encode a raw 32-byte account id as an SS58 address.
 
     The counterpart of `decode_address`: any account id obtained from
-    `BlockchainAddressInfo.account_id` (or from chain state) renders as its canonical
+    `BlockchainAccountInfo.account_id` (or from chain state) renders as its canonical
     address string. Mirrors `AccountId32::to_ss58check_with_version` of the Rust
     implementation. The input contract is `decode_account_id`'s: `0x` followed by
     exactly 64 hex characters (both digit cases accepted).
@@ -600,7 +600,7 @@ def encode_address(
 
 def _classify_account_id(
     blockchain_address: BlockchainAddress | None, account_id_bytes: bytes
-) -> BlockchainAddressInfo:
+) -> BlockchainAccountInfo:
     """
     Classifies a 32-byte account id and extracts any embedded keyless identifiers.
 
@@ -611,14 +611,14 @@ def _classify_account_id(
         account_id_bytes (bytes): The 32-byte account id.
 
     Returns:
-        BlockchainAddressInfo: an object with info about the account id.
+        BlockchainAccountInfo: an object with info about the account id.
     """
     account_id = "0x" + account_id_bytes.hex()
 
     # Read the byte that encodes type of the address
-    address_type_byte = account_id_bytes[4]
+    account_type_byte = account_id_bytes[4]
 
-    if address_type_byte == AddressType.AppAgent.value:
+    if account_type_byte == AccountType.AppAgent.value:
         # Verify checksum
         open_part_size = 5
         open_part = account_id_bytes[:open_part_size]
@@ -629,16 +629,16 @@ def _classify_account_id(
             app_agent_id_bytes = account_id_bytes[:4]
             app_agent_id = int.from_bytes(app_agent_id_bytes, byteorder="little")
 
-            return BlockchainAddressInfo(
+            return BlockchainAccountInfo(
                 address=blockchain_address,
                 account_id=account_id,
-                address_type=AddressType.AppAgent,
+                account_type=AccountType.AppAgent,
                 app_agent_id=app_agent_id,
                 ta_id=None,
-                address_name=None,
+                account_name=None,
             )
 
-    if address_type_byte == AddressType.Transactional.value:
+    if account_type_byte == AccountType.Transactional.value:
         # Verify checksum
         open_part_size = 9
         open_part = account_id_bytes[:open_part_size]
@@ -651,48 +651,48 @@ def _classify_account_id(
             app_agent_id = int.from_bytes(app_agent_id_bytes, byteorder="little")
             ta_id = int.from_bytes(ta_id_bytes, byteorder="little")
 
-            return BlockchainAddressInfo(
+            return BlockchainAccountInfo(
                 address=blockchain_address,
                 account_id=account_id,
-                address_type=AddressType.Transactional,
+                account_type=AccountType.Transactional,
                 app_agent_id=app_agent_id,
                 ta_id=ta_id,
-                address_name=None,
+                account_name=None,
             )
 
-    if address_type_byte == AddressType.Named.value:
+    if account_type_byte == AccountType.Named.value:
         # Verify checksum
         open_part_size = 15
         open_part = account_id_bytes[:open_part_size]
         checksum = account_id_bytes[open_part_size:]
         checksum_calculated = _blake2_256(open_part)[open_part_size:]
         if checksum == checksum_calculated:
-            # Extract and decode app_agent_id and address_name.
+            # Extract and decode app_agent_id and account_name.
             # The name bytes must additionally pass charset validation: an address with a
             # valid checksum over invalid name bytes is classified as Regular, in line with
             # the Rust implementation.
             app_agent_id_bytes = account_id_bytes[:4]
             name_bytes = account_id_bytes[5:15]
             app_agent_id = int.from_bytes(app_agent_id_bytes, byteorder="little")
-            address_name = _decode_address_name(name_bytes)
+            account_name = _decode_account_name(name_bytes)
 
-            if address_name is not None:
-                return BlockchainAddressInfo(
+            if account_name is not None:
+                return BlockchainAccountInfo(
                     address=blockchain_address,
                     account_id=account_id,
-                    address_type=AddressType.Named,
+                    account_type=AccountType.Named,
                     app_agent_id=app_agent_id,
                     ta_id=None,
-                    address_name=address_name,
+                    account_name=account_name,
                 )
 
-    return BlockchainAddressInfo(
+    return BlockchainAccountInfo(
         address=blockchain_address,
         account_id=account_id,
-        address_type=AddressType.Regular,
+        account_type=AccountType.Regular,
         app_agent_id=None,
         ta_id=None,
-        address_name=None,
+        account_name=None,
     )
 
 
@@ -718,4 +718,4 @@ def is_keyless_address(
     Raises:
         ValueError: If the address cannot be decoded at all.
     """
-    return decode_address(blockchain_address, ss58_format).address_type is not AddressType.Regular
+    return decode_address(blockchain_address, ss58_format).account_type is not AccountType.Regular

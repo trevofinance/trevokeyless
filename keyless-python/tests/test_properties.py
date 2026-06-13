@@ -10,7 +10,7 @@ reduced runs cover a prefix of the Rust runs.
 import unittest
 
 import trevokeyless
-from trevokeyless import AddressType, AddressTypeMismatchError
+from trevokeyless import AccountType, AccountTypeMismatchError
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -77,15 +77,15 @@ class TestRoundTripProperties(unittest.TestCase):
         for app_agent_id in ids:
             address = trevokeyless.encode_app_agent_address(app_agent_id, SS58_FORMAT)
             info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.address_type, AddressType.AppAgent)
+            self.assertIs(info.account_type, AccountType.AppAgent)
             self.assertEqual(info.app_agent_id, app_agent_id)
             self.assertIsNone(info.ta_id)
-            self.assertIsNone(info.address_name)
+            self.assertIsNone(info.account_name)
             self.assertEqual(trevokeyless.decode_app_agent_address(address, SS58_FORMAT), app_agent_id)
-            with self.assertRaises(AddressTypeMismatchError) as ctx:
+            with self.assertRaises(AccountTypeMismatchError) as ctx:
                 trevokeyless.decode_transactional_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AddressType.AppAgent)
-            with self.assertRaises(AddressTypeMismatchError):
+            self.assertIs(ctx.exception.found, AccountType.AppAgent)
+            with self.assertRaises(AccountTypeMismatchError):
                 trevokeyless.decode_named_address(address, SS58_FORMAT)
             self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
 
@@ -96,15 +96,15 @@ class TestRoundTripProperties(unittest.TestCase):
         for app_agent_id, ta_id in ids:
             address = trevokeyless.encode_transactional_address(app_agent_id, ta_id, SS58_FORMAT)
             info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.address_type, AddressType.Transactional)
+            self.assertIs(info.account_type, AccountType.Transactional)
             self.assertEqual((info.app_agent_id, info.ta_id), (app_agent_id, ta_id))
             self.assertEqual(
                 trevokeyless.decode_transactional_address(address, SS58_FORMAT),
                 (app_agent_id, ta_id),
             )
-            with self.assertRaises(AddressTypeMismatchError) as ctx:
+            with self.assertRaises(AccountTypeMismatchError) as ctx:
                 trevokeyless.decode_app_agent_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AddressType.Transactional)
+            self.assertIs(ctx.exception.found, AccountType.Transactional)
             self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
 
     def test_prop_named_roundtrip(self: "TestRoundTripProperties") -> None:
@@ -114,15 +114,15 @@ class TestRoundTripProperties(unittest.TestCase):
             name = _random_name(rng)
             address = trevokeyless.encode_named_address(app_agent_id, name, SS58_FORMAT)
             info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.address_type, AddressType.Named)
-            self.assertEqual((info.app_agent_id, info.address_name), (app_agent_id, name))
+            self.assertIs(info.account_type, AccountType.Named)
+            self.assertEqual((info.app_agent_id, info.account_name), (app_agent_id, name))
             self.assertEqual(
                 trevokeyless.decode_named_address(address, SS58_FORMAT),
                 (app_agent_id, name),
             )
-            with self.assertRaises(AddressTypeMismatchError) as ctx:
+            with self.assertRaises(AccountTypeMismatchError) as ctx:
                 trevokeyless.decode_app_agent_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AddressType.Named)
+            self.assertIs(ctx.exception.found, AccountType.Named)
             self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
 
 
@@ -140,8 +140,8 @@ class TestClassificationProperties(unittest.TestCase):
             account[4] = i % 6
             info = trevokeyless.decode_account_id("0x" + bytes(account).hex())
             self.assertIs(
-                info.address_type,
-                AddressType.Regular,
+                info.account_type,
+                AccountType.Regular,
                 "random bytes must classify as Regular (a checksum match has probability ~2^-136 at best)",
             )
 
@@ -165,12 +165,12 @@ class TestClassificationProperties(unittest.TestCase):
                 corrupted[position] ^= xor
                 info = trevokeyless.decode_account_id("0x" + bytes(corrupted).hex())
                 self.assertIs(
-                    info.address_type,
-                    AddressType.Regular,
+                    info.account_type,
+                    AccountType.Regular,
                     f"corrupting byte {position} of {address} must demote it to Regular",
                 )
 
-    def test_prop_address_name_validation(self: "TestClassificationProperties") -> None:
+    def test_prop_account_name_validation(self: "TestClassificationProperties") -> None:
         # Mirrors prop_account_name_construction: every generated name encodes, and
         # replacing any character with an out-of-charset byte is rejected (Rust runs
         # 500 iterations over the same stream).
