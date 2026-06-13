@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from hashlib import blake2b
-from typing import TypeAlias
+from typing import NamedTuple, TypeAlias
 
 from ._ss58 import SS58_FORMAT_MAX as _SS58_FORMAT_MAX
 from ._ss58 import Ss58Error, ss58_decode, ss58_encode
@@ -381,9 +381,24 @@ def encode_transactional_address(
     return _encode_address(open_part, ss58_format)
 
 
+class DecodedTransactionalAddress(NamedTuple):
+    """The identifiers embedded in a Transactional address, returned by
+    :func:`decode_transactional_address`.
+
+    A :class:`typing.NamedTuple` rather than a bare ``(app_agent_id, ta_id)`` tuple, so
+    the two integer fields can be accessed by name and not silently transposed; it stays
+    backward compatible with tuple unpacking and indexing. Mirrors the object the
+    TypeScript ``decodeTransactionalAddress`` returns and the Rust
+    ``DecodedTransactionalAccount`` struct.
+    """
+
+    app_agent_id: AppAgentId
+    ta_id: TransactionalId
+
+
 def decode_transactional_address(
     encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
-) -> tuple[AppAgentId, TransactionalId]:
+) -> DecodedTransactionalAddress:
     """
     Decode an encoded Transactional address.
 
@@ -391,7 +406,8 @@ def decode_transactional_address(
         encoded_address (str): Encoded Transactional address.
 
     Returns:
-        Tuple[int, int]: Decoded AppAgent ID and Transactional address ID.
+        DecodedTransactionalAddress: The decoded AppAgent ID and Transactional address ID
+            (a named tuple; unpacks as ``app_agent_id, ta_id``).
 
     Raises:
         AccountTypeMismatchError: If the address is not a Transactional address.
@@ -408,7 +424,7 @@ def decode_transactional_address(
         msg = "Internal error in trevokeyless - ta_id of Transactional address is None"
         raise ValueError(msg)
 
-    return decoding_result.app_agent_id, decoding_result.ta_id
+    return DecodedTransactionalAddress(decoding_result.app_agent_id, decoding_result.ta_id)
 
 
 def encode_named_address(
@@ -442,9 +458,23 @@ def encode_named_address(
     return _encode_address(open_part, ss58_format)
 
 
+class DecodedNamedAddress(NamedTuple):
+    """The identifiers embedded in a Named address, returned by
+    :func:`decode_named_address`.
+
+    A :class:`typing.NamedTuple` rather than a bare ``(app_agent_id, account_name)``
+    tuple; stays backward compatible with tuple unpacking and indexing. Mirrors the
+    object the TypeScript ``decodeNamedAddress`` returns and the Rust
+    ``DecodedNamedAccount`` struct.
+    """
+
+    app_agent_id: AppAgentId
+    account_name: AccountName
+
+
 def decode_named_address(
     encoded_address: BlockchainAddress, ss58_format: SS58Format = SS58_FORMAT_TREVO_ASSET_HUB
-) -> tuple[AppAgentId, AccountName]:
+) -> DecodedNamedAddress:
     """
     Decode an encoded Named address.
 
@@ -452,7 +482,8 @@ def decode_named_address(
         encoded_address (str): Encoded Named address.
 
     Returns:
-        Tuple[int, str]: Decoded AppAgent ID and address name.
+        DecodedNamedAddress: The decoded AppAgent ID and address name (a named tuple;
+            unpacks as ``app_agent_id, account_name``).
 
     Raises:
         AccountTypeMismatchError: If the address is not a Named address.
@@ -469,7 +500,7 @@ def decode_named_address(
         msg = "Internal error in trevokeyless - name of Named address is None"
         raise ValueError(msg)
 
-    return decoding_result.app_agent_id, decoding_result.account_name
+    return DecodedNamedAddress(decoding_result.app_agent_id, decoding_result.account_name)
 
 
 def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_format: SS58Format) -> bytes:

@@ -26,6 +26,8 @@ class TestPublicSurface(unittest.TestCase):
             "BlockchainAccountId",
             "BlockchainAddress",
             "BlockchainAccountInfo",
+            "DecodedTransactionalAddress",
+            "DecodedNamedAddress",
             "SS58Format",
             "Ss58Error",
             "Ss58ErrorKind",

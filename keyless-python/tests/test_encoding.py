@@ -71,6 +71,9 @@ class TestKeylessAddresses(unittest.TestCase):
             (app_agent_id, transactional_address_id),
             "Couldn't decode Transactional address to AppAgent ID & Transactional address ID.",
         )
+        # Named-field access (the result is a NamedTuple, still tuple-compatible above).
+        self.assertEqual(transactional_address_data.app_agent_id, app_agent_id)
+        self.assertEqual(transactional_address_data.ta_id, transactional_address_id)
 
         decoded_address_info = trevokeyless.decode_address(encoded_address, ss58_format)
         expected_address_info = trevokeyless.BlockchainAccountInfo(
@@ -110,6 +113,9 @@ class TestKeylessAddresses(unittest.TestCase):
             (app_agent_id, account_name),
             "Couldn't decode Named address to AppAgent ID & address name.",
         )
+        # Named-field access (the result is a NamedTuple, still tuple-compatible above).
+        self.assertEqual(named_address_data.app_agent_id, app_agent_id)
+        self.assertEqual(named_address_data.account_name, account_name)
 
         decoded_address_info = trevokeyless.decode_address(encoded_address, ss58_format)
         expected_address_info = trevokeyless.BlockchainAccountInfo(
