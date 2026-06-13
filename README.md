@@ -67,6 +67,12 @@ Additional properties:
   untrusted input stays small. One deliberate, Substrate-compatible exception: the
   two-byte-prefix encoding of SS58 formats below 64 is accepted on decode (the Trevo
   format 5335 is unaffected — its two-byte prefix *is* the canonical form).
+- **Named account names are case-sensitive, exact byte strings.** The 10 name bytes are
+  embedded and compared verbatim, so `Treasury-1`, `treasury-1`, and `TREASURY-1` are
+  three *different* accounts of the same App Agent. Treat a name as an opaque identifier,
+  not a display label: never case-fold, trim, or otherwise normalize it before encoding,
+  and compare decoded names exactly. Two names that look alike to a human can be distinct
+  accounts — relevant wherever a name drives payment routing or access decisions.
 - **Non-goals.** These libraries do not manage keys, sign anything, talk to a chain, or
   prove authorship. They encode, decode, and classify addresses.
 
