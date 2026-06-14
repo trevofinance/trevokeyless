@@ -1,0 +1,30 @@
+name: check-docs
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale-symbols:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: No references to pre-1.0 renamed symbols (outside CHANGELOG)
+        # CHANGELOG.md keeps the rename history, and this workflow names the dead
+        # symbols in its own pattern/comment; both are excluded from the search.
+        run: |
+          if git grep -nE 'AddressType|BlockchainAddressInfo' -- ':!CHANGELOG.md' ':!.github/workflows/check-docs.yml'; then
+            echo "::error::Found references to pre-1.0 renamed symbols. Use AccountType / AccountTypeMismatchError / BlockchainAccountInfo (old names allowed only in CHANGELOG.md)." >&2
+            exit 1
+          fi
+          echo "No stale renamed-symbol references found."
