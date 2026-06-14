@@ -122,6 +122,11 @@ mod tests {
         for v in vectors["classify"].as_array().unwrap() {
             let account = account_from_hex(v["hex"].as_str().unwrap());
             assert_classification(&account, &v["expected"]);
+            assert_eq!(
+                is_keyless_account(&account),
+                v["expected"]["type"].as_str().unwrap() != "Regular",
+                "is_keyless_account of {account} must match the classification"
+            );
         }
 
         #[cfg(feature = "ss58")]

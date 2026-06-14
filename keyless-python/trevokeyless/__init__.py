@@ -41,6 +41,10 @@ from trevokeyless.keyless import (
     decode_account_id,
     encode_address,
     is_keyless_address,
+    encode_app_agent_account_id,
+    encode_transactional_account_id,
+    encode_named_account_id,
+    is_keyless_account_id,
 )
 
 __all__ = [
@@ -70,8 +74,12 @@ __all__ = [
     "decode_named_address",
     "decode_transactional_address",
     "encode_address",
+    "encode_app_agent_account_id",
     "encode_app_agent_address",
+    "encode_named_account_id",
     "encode_named_address",
+    "encode_transactional_account_id",
     "encode_transactional_address",
+    "is_keyless_account_id",
     "is_keyless_address",
 ]

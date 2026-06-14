@@ -39,9 +39,13 @@ class TestPublicSurface(unittest.TestCase):
             "decode_named_address",
             "decode_transactional_address",
             "encode_address",
+            "encode_app_agent_account_id",
             "encode_app_agent_address",
+            "encode_named_account_id",
             "encode_named_address",
+            "encode_transactional_account_id",
             "encode_transactional_address",
+            "is_keyless_account_id",
             "is_keyless_address",
         }
         self.assertEqual(set(trevokeyless.__all__), expected)

@@ -271,12 +271,55 @@ def _decode_account_name(name_bytes: bytes) -> AccountName | None:
     return name_bytes.decode("ascii")
 
 
+def _account_id_from_open_part(open_part: bytes) -> bytes:
+    """
+    Builds the 32-byte keyless account id from its open part.
+
+    The account id is `open_part + blake2_256(open_part)[len(open_part):]` — the trailing
+    bytes of the hash serve as the checksum.
+
+    Args:
+        open_part (bytes): The open (plain-text) part of the account id.
+
+    Returns:
+        bytes: The 32-byte account id.
+    """
+    checksum = _blake2_256(open_part)
+    return open_part + checksum[len(open_part) :]
+
+
+def _hex_account_id(open_part: bytes) -> BlockchainAccountId:
+    """The normalized `0x` + lowercase hex account id for the given open part."""
+    return "0x" + _account_id_from_open_part(open_part).hex()
+
+
+def _app_agent_open_part(app_agent_id: AppAgentId) -> bytes:
+    """The open part of an AppAgent account: AppAgent ID (LE) + the type identifier."""
+    _validate_u32(app_agent_id, "app_agent_id")
+    return app_agent_id.to_bytes(4, byteorder="little") + bytes([AccountType.AppAgent.value])
+
+
+def _transactional_open_part(app_agent_id: AppAgentId, ta_id: TransactionalId) -> bytes:
+    """The open part of a Transactional account: AppAgent ID, type identifier, TA ID."""
+    _validate_u32(app_agent_id, "app_agent_id")
+    _validate_u32(ta_id, "ta_id")
+    return (
+        app_agent_id.to_bytes(4, byteorder="little")
+        + bytes([AccountType.Transactional.value])
+        + ta_id.to_bytes(4, byteorder="little")
+    )
+
+
+def _named_open_part(app_agent_id: AppAgentId, name: AccountName) -> bytes:
+    """The open part of a Named account: AppAgent ID, type identifier, the 10 name bytes."""
+    _validate_u32(app_agent_id, "app_agent_id")
+    _validate_account_name(name)
+    return app_agent_id.to_bytes(4, byteorder="little") + bytes([AccountType.Named.value]) + name.encode()
+
+
 def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddress:
     """
-    Builds a keyless account id from its open part and wraps it in an SS58 address.
-
-    The 32-byte account id is `open_part + blake2_256(open_part)[len(open_part):]` —
-    the trailing bytes of the hash serve as the checksum.
+    Wraps a keyless account id (built from its open part) in an SS58 address.
 
     Args:
         open_part (bytes): The open (plain-text) part of the account id.
@@ -290,14 +333,7 @@ def _encode_address(open_part: bytes, ss58_format: SS58Format) -> BlockchainAddr
         ValueError: If ss58_format is outside [0, 16383], or is reserved.
     """
     _validate_ss58_format(ss58_format)
-
-    # Calculate checksum using blake2_256
-    checksum = _blake2_256(open_part)
-
-    # Construct address_encoded
-    address_encoded = open_part + checksum[len(open_part) :]
-
-    return ss58_encode(address_encoded, ss58_format)
+    return ss58_encode(_account_id_from_open_part(open_part), ss58_format)
 
 
 def encode_app_agent_address(
@@ -317,15 +353,29 @@ def encode_app_agent_address(
         ValueError: If app_agent_id is outside [0, 4294967295], or ss58_format is
             not a valid SS58 format.
     """
-    _validate_u32(app_agent_id, "app_agent_id")
+    return _encode_address(_app_agent_open_part(app_agent_id), ss58_format)
 
-    # Convert app_agent_id to little-endian bytes
-    app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
 
-    # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AccountType.AppAgent.value])
+def encode_app_agent_account_id(app_agent_id: AppAgentId) -> BlockchainAccountId:
+    """
+    Encode an AppAgent account id (the raw `0x` + 64 hex interchange form).
 
-    return _encode_address(open_part, ss58_format)
+    The account-id counterpart of `encode_app_agent_address`: it returns the raw account
+    id (which carries no SS58 format) instead of an SS58 address - the form accepted by
+    `decode_account_id` and `encode_address` and exposed as the `account_id` field of a
+    decode result. Mirrors `encode_app_agent_account` of the Rust implementation.
+
+    Args:
+        app_agent_id (int): AppAgent ID.
+
+    Returns:
+        str: The account id: `0x` followed by 64 lowercase hex characters.
+
+    Raises:
+        TypeError: If app_agent_id is not an int.
+        ValueError: If app_agent_id is outside [0, 4294967295].
+    """
+    return _hex_account_id(_app_agent_open_part(app_agent_id))
 
 
 def decode_app_agent_address(
@@ -375,17 +425,28 @@ def encode_transactional_address(
         ValueError: If app_agent_id or ta_id is outside [0, 4294967295], or
             ss58_format is not a valid SS58 format.
     """
-    _validate_u32(app_agent_id, "app_agent_id")
-    _validate_u32(ta_id, "ta_id")
+    return _encode_address(_transactional_open_part(app_agent_id, ta_id), ss58_format)
 
-    # Convert app_agent_id and ta_id to little-endian bytes
-    app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
-    ta_id_bytes = ta_id.to_bytes(4, byteorder="little")
 
-    # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AccountType.Transactional.value]) + ta_id_bytes
+def encode_transactional_account_id(app_agent_id: AppAgentId, ta_id: TransactionalId) -> BlockchainAccountId:
+    """
+    Encode a Transactional account id (the raw `0x` + 64 hex interchange form).
 
-    return _encode_address(open_part, ss58_format)
+    The account-id counterpart of `encode_transactional_address`. Mirrors
+    `encode_transactional_account` of the Rust implementation.
+
+    Args:
+        app_agent_id (int): AppAgent ID.
+        ta_id (int): Transactional address ID.
+
+    Returns:
+        str: The account id: `0x` followed by 64 lowercase hex characters.
+
+    Raises:
+        TypeError: If app_agent_id or ta_id is not an int.
+        ValueError: If app_agent_id or ta_id is outside [0, 4294967295].
+    """
+    return _hex_account_id(_transactional_open_part(app_agent_id, ta_id))
 
 
 class DecodedTransactionalAddress(NamedTuple):
@@ -453,16 +514,29 @@ def encode_named_address(
             length or contains invalid characters, or ss58_format is not a valid
             SS58 format.
     """
-    _validate_u32(app_agent_id, "app_agent_id")
-    _validate_account_name(name)
+    return _encode_address(_named_open_part(app_agent_id, name), ss58_format)
 
-    # Convert app_agent_id to little-endian bytes
-    app_agent_id_bytes = app_agent_id.to_bytes(4, byteorder="little")
 
-    # Construct open_part
-    open_part = app_agent_id_bytes + bytes([AccountType.Named.value]) + name.encode()
+def encode_named_account_id(app_agent_id: AppAgentId, name: AccountName) -> BlockchainAccountId:
+    """
+    Encode a Named account id (the raw `0x` + 64 hex interchange form).
 
-    return _encode_address(open_part, ss58_format)
+    The account-id counterpart of `encode_named_address`. Mirrors `encode_named_account`
+    of the Rust implementation.
+
+    Args:
+        app_agent_id (int): AppAgent ID.
+        name (str): Address name.
+
+    Returns:
+        str: The account id: `0x` followed by 64 lowercase hex characters.
+
+    Raises:
+        TypeError: If app_agent_id is not an int, or name is not a str.
+        ValueError: If app_agent_id is outside [0, 4294967295], or the name has a wrong
+            length or contains invalid characters.
+    """
+    return _hex_account_id(_named_open_part(app_agent_id, name))
 
 
 class DecodedNamedAddress(NamedTuple):
@@ -761,3 +835,27 @@ def is_keyless_address(
         ValueError: If the address cannot be decoded at all.
     """
     return decode_address(blockchain_address, ss58_format).account_type is not AccountType.Regular
+
+
+def is_keyless_account_id(account_id: BlockchainAccountId) -> bool:
+    """
+    Returns True if the raw account id passes the keyless checksum verification (AppAgent,
+    Transactional, or Named), False for a Regular account id - including a Named layout
+    whose checksum is valid but whose name bytes fail charset validation.
+
+    The account-id counterpart of `is_keyless_address`: it classifies the raw `0x` + 64
+    hex account id form (which carries no SS58 format) instead of an SS58 address, and is
+    total over well-formed account ids. Mirrors `is_keyless_account` of the Rust
+    implementation.
+
+    Args:
+        account_id (str): The account id: `0x` followed by exactly 64 hex characters.
+
+    Returns:
+        bool: True if the account id is keyless.
+
+    Raises:
+        TypeError: If account_id is not a str.
+        ValueError: If the input is not `0x` followed by exactly 64 hex characters.
+    """
+    return decode_account_id(account_id).account_type is not AccountType.Regular

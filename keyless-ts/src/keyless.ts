@@ -164,7 +164,7 @@ function u32FromLeBytes(bytes: Uint8Array, offset: number): number {
  * the reserved formats 46 and 47 separately.
  *
  * @param {number} ss58Format - The SS58 format to validate.
- * @throws {Error} - Thrown if the format is not an integer in [0, 16383].
+ * @throws {RangeError} - Thrown if the format is not an integer in [0, 16383].
  */
 function validateSs58Format(ss58Format: number): void {
   if (
@@ -244,10 +244,24 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /**
- * Builds a keyless account id from its open part and wraps it in an SS58 address.
+ * Builds the 32-byte keyless account id from its open part: the open part followed by the
+ * trailing bytes of its blake2b-256 hash (the checksum).
  *
- * The 32-byte account id is `openPart ++ blake2_256(openPart)[openPart.length..]` —
- * the trailing bytes of the hash serve as the checksum.
+ * @param {Uint8Array} openPart - The open (plain-text) part of the account id.
+ * @returns {Uint8Array} - The 32-byte account id.
+ */
+function accountIdFromOpenPart(openPart: Uint8Array): Uint8Array {
+  const checksum = blake2b256(openPart);
+  return concatBytes(openPart, checksum.slice(openPart.length));
+}
+
+/** The normalized `0x` + lowercase hex account id for the given open part. */
+function hexAccountId(openPart: Uint8Array): string {
+  return `0x${bytesToHex(accountIdFromOpenPart(openPart))}`;
+}
+
+/**
+ * Builds a keyless account id from its open part and wraps it in an SS58 address.
  *
  * @param {Uint8Array} openPart - The open (plain-text) part of the account id.
  * @param {number} ss58Format - SS58 format (network prefix) to use for the address.
@@ -258,9 +272,39 @@ function encodeKeylessAccount(
   ss58Format: number,
 ): string {
   validateSs58Format(ss58Format);
-  const checksum = blake2b256(openPart);
-  const accountId = concatBytes(openPart, checksum.slice(openPart.length));
-  return ss58Encode(accountId, ss58Format);
+  return ss58Encode(accountIdFromOpenPart(openPart), ss58Format);
+}
+
+/** The open part of an AppAgent account: AppAgent ID (LE) + the type identifier. */
+function appAgentOpenPart(appAgentId: number): Uint8Array {
+  return concatBytes(
+    u32ToLeBytes(appAgentId, "appAgentId"),
+    Uint8Array.of(APP_AGENT_ADDRESS_IDENTIFIER),
+  );
+}
+
+/** The open part of a Transactional account: AppAgent ID, type identifier, TA ID. */
+function transactionalOpenPart(appAgentId: number, taId: number): Uint8Array {
+  return concatBytes(
+    u32ToLeBytes(appAgentId, "appAgentId"),
+    Uint8Array.of(TRANSACTIONAL_ADDRESS_IDENTIFIER),
+    u32ToLeBytes(taId, "taId"),
+  );
+}
+
+/** The open part of a Named account: AppAgent ID, type identifier, the 10 name bytes. */
+function namedOpenPart(appAgentId: number, name: string): Uint8Array {
+  // appAgentId is validated before the name, matching the Python implementation: when
+  // both arguments are invalid, the offending id is reported first, in declaration order.
+  const appAgentIdBytes = u32ToLeBytes(appAgentId, "appAgentId");
+  validateAddressName(name);
+  // The name is validated ASCII, so the char codes are exactly the encoded bytes.
+  const nameBytes = Uint8Array.from(name, (c) => c.charCodeAt(0));
+  return concatBytes(
+    appAgentIdBytes,
+    Uint8Array.of(NAMED_ADDRESS_IDENTIFIER),
+    nameBytes,
+  );
 }
 
 /**
@@ -273,11 +317,22 @@ function encodeAppAgentAddress(
   appAgentId: number,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
-  const openPart = concatBytes(
-    u32ToLeBytes(appAgentId, "appAgentId"),
-    Uint8Array.of(APP_AGENT_ADDRESS_IDENTIFIER),
-  );
-  return encodeKeylessAccount(openPart, ss58Format);
+  return encodeKeylessAccount(appAgentOpenPart(appAgentId), ss58Format);
+}
+
+/**
+ * Encodes an AppAgent account id (the raw `0x` + 64 hex interchange form).
+ *
+ * The account-id counterpart of `encodeAppAgentAddress`: it returns the raw account id
+ * (which carries no SS58 format) instead of an SS58 address — the form accepted by
+ * `decodeAccountId` and `encodeAddress` and exposed as the `accountId` field of a decode
+ * result. Mirrors `encode_app_agent_account` of the Rust implementation.
+ *
+ * @param {number} appAgentId - The ID of the application agent.
+ * @returns {string} - The account id: `0x` followed by 64 lowercase hex characters.
+ */
+function encodeAppAgentAccountId(appAgentId: number): string {
+  return hexAccountId(appAgentOpenPart(appAgentId));
 }
 
 /**
@@ -292,12 +347,27 @@ function encodeTransactionalAddress(
   taId: number,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
-  const openPart = concatBytes(
-    u32ToLeBytes(appAgentId, "appAgentId"),
-    Uint8Array.of(TRANSACTIONAL_ADDRESS_IDENTIFIER),
-    u32ToLeBytes(taId, "taId"),
+  return encodeKeylessAccount(
+    transactionalOpenPart(appAgentId, taId),
+    ss58Format,
   );
-  return encodeKeylessAccount(openPart, ss58Format);
+}
+
+/**
+ * Encodes a Transactional account id (the raw `0x` + 64 hex interchange form).
+ *
+ * The account-id counterpart of `encodeTransactionalAddress`. Mirrors
+ * `encode_transactional_account` of the Rust implementation.
+ *
+ * @param {number} appAgentId - The ID of the application agent.
+ * @param {number} taId - The ID of the transactional address.
+ * @returns {string} - The account id: `0x` followed by 64 lowercase hex characters.
+ */
+function encodeTransactionalAccountId(
+  appAgentId: number,
+  taId: number,
+): string {
+  return hexAccountId(transactionalOpenPart(appAgentId, taId));
 }
 
 /**
@@ -312,20 +382,21 @@ function encodeNamedAddress(
   name: string,
   ss58Format: number = SS58_FORMAT_TREVO_ASSET_HUB,
 ): string {
-  // appAgentId is validated before the name, matching the Python implementation
-  // (encode_named_address validates app_agent_id first): when both arguments are
-  // invalid, the offending id is reported first, in declaration order.
-  const appAgentIdBytes = u32ToLeBytes(appAgentId, "appAgentId");
-  validateAddressName(name);
+  return encodeKeylessAccount(namedOpenPart(appAgentId, name), ss58Format);
+}
 
-  // The name is validated ASCII, so the char codes are exactly the encoded bytes.
-  const nameBytes = Uint8Array.from(name, (c) => c.charCodeAt(0));
-  const openPart = concatBytes(
-    appAgentIdBytes,
-    Uint8Array.of(NAMED_ADDRESS_IDENTIFIER),
-    nameBytes,
-  );
-  return encodeKeylessAccount(openPart, ss58Format);
+/**
+ * Encodes a Named account id (the raw `0x` + 64 hex interchange form).
+ *
+ * The account-id counterpart of `encodeNamedAddress`. Mirrors `encode_named_account` of
+ * the Rust implementation.
+ *
+ * @param {number} appAgentId - The ID of the application agent.
+ * @param {string} name - The name of the address.
+ * @returns {string} - The account id: `0x` followed by 64 lowercase hex characters.
+ */
+function encodeNamedAccountId(appAgentId: number, name: string): string {
+  return hexAccountId(namedOpenPart(appAgentId, name));
 }
 
 /**
@@ -684,6 +755,23 @@ function isKeylessAddress(
   return decodeAddress(address, ss58Format).accountType !== AccountType.Regular;
 }
 
+/**
+ * Returns true if the raw account id passes the keyless checksum verification (AppAgent,
+ * Transactional, or Named), false for a Regular account id — including a Named layout
+ * whose checksum is valid but whose name bytes fail charset validation.
+ *
+ * The account-id counterpart of `isKeylessAddress`: it classifies the raw `0x` + 64 hex
+ * account id form (which carries no SS58 format) instead of an SS58 address, and is total
+ * over well-formed account ids. Mirrors `is_keyless_account` of the Rust implementation.
+ *
+ * @param {string} accountId - The account id: `0x` followed by exactly 64 hex characters.
+ * @returns {boolean} - True if the account id is keyless.
+ * @throws {Error} - Thrown if the input is not `0x` followed by exactly 64 hex characters.
+ */
+function isKeylessAccountId(accountId: string): boolean {
+  return decodeAccountId(accountId).accountType !== AccountType.Regular;
+}
+
 export {
   AccountType,
   AccountTypeMismatchError,
@@ -695,6 +783,9 @@ export {
   encodeAppAgentAddress,
   encodeTransactionalAddress,
   encodeNamedAddress,
+  encodeAppAgentAccountId,
+  encodeTransactionalAccountId,
+  encodeNamedAccountId,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
   decodeNamedAddress,
@@ -702,6 +793,7 @@ export {
   decodeAccountId,
   encodeAddress,
   isKeylessAddress,
+  isKeylessAccountId,
   ACCOUNT_ID_LENGTH,
   NAMED_ADDRESS_LENGTH,
   SS58_FORMAT_TREVO_ASSET_HUB,

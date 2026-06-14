@@ -27,9 +27,13 @@ describe("Public surface", () => {
       "decodeNamedAddress",
       "decodeTransactionalAddress",
       "encodeAddress",
+      "encodeAppAgentAccountId",
       "encodeAppAgentAddress",
+      "encodeNamedAccountId",
       "encodeNamedAddress",
+      "encodeTransactionalAccountId",
       "encodeTransactionalAddress",
+      "isKeylessAccountId",
       "isKeylessAddress",
     ];
     expect(Object.keys(keyless).sort()).toEqual(expected);

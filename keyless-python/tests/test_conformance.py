@@ -26,6 +26,8 @@ class TestConformanceVectors(unittest.TestCase):
             with self.subTest(id=v["id"]):
                 self.assertEqual(trevokeyless.encode_app_agent_address(v["id"]), v["ss58"])
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_app_agent_account_id(v["id"]), "0x" + v["hex"])
+                self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.account_type, trevokeyless.AccountType.AppAgent)
@@ -37,6 +39,8 @@ class TestConformanceVectors(unittest.TestCase):
             with self.subTest(aa=v["aa"], ta=v["ta"]):
                 self.assertEqual(trevokeyless.encode_transactional_address(v["aa"], v["ta"]), v["ss58"])
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_transactional_account_id(v["aa"], v["ta"]), "0x" + v["hex"])
+                self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.account_type, trevokeyless.AccountType.Transactional)
@@ -47,6 +51,8 @@ class TestConformanceVectors(unittest.TestCase):
             with self.subTest(aa=v["aa"], name=v["name"]):
                 self.assertEqual(trevokeyless.encode_named_address(v["aa"], v["name"]), v["ss58"])
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_named_account_id(v["aa"], v["name"]), "0x" + v["hex"])
+                self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 self.assertIs(info.account_type, trevokeyless.AccountType.Named)
@@ -61,6 +67,7 @@ class TestConformanceVectors(unittest.TestCase):
                 self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
                 self.assertEqual(info.ta_id, expected.get("ta_id"))
                 self.assertEqual(info.account_name, expected.get("name"))
+                self.assertEqual(trevokeyless.is_keyless_account_id("0x" + v["hex"]), expected["type"] != "Regular")
 
     def test_ss58_format_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["ss58_formats"]:
