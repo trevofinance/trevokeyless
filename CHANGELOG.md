@@ -22,6 +22,9 @@ and integrity, **not** authentication — see the
 - The typed mismatch error message is `"Provided address is not <a/an> X address but is
   <a/an> Y address"` (Python and TypeScript), where the indefinite article agrees with
   each type name ("an" before AppAgent).
+- The typed-decoder mismatch additionally carries a structured `(expected, found)` pair —
+  the cross-language contract (the rendered message is per-language) — pinned by the
+  `type_mismatch` group of the fixture.
 
 ### Rust (`trevokeyless`)
 First release under the name `trevokeyless` (previously `trevo-keyless`).
@@ -55,6 +58,12 @@ Migrating from the 0.1.x line:
   with tuple unpacking and equality).
 - `__version__` is no longer resolved from installed package metadata, so `import
   trevokeyless` works from a source tree or vendored copy.
+- Raw account-id entry points `encode_app_agent_account_id` /
+  `encode_transactional_account_id` / `encode_named_account_id` (the `0x` + 64 hex
+  interchange form) and the total `is_keyless_account_id` predicate, mirroring the Rust
+  `encode_*_account` / `is_keyless_account`.
+- The decode entry points validate the `ss58_format` parameter before the address, so a
+  bad format is reported before a bad address (matching Rust and TypeScript).
 - Zero runtime dependencies; ships `py.typed`.
 
 ### TypeScript (`@trevofinance/trevokeyless`)
@@ -66,5 +75,11 @@ First release under the name `@trevofinance/trevokeyless` (previously
   `AccountTypeMismatchError`. Function names and `NAMED_ADDRESS_LENGTH` are unchanged.
 - `encodeNamedAddress` validates `appAgentId` before the name (argument order), matching
   Python.
+- Raw account-id entry points `encodeAppAgentAccountId` /
+  `encodeTransactionalAccountId` / `encodeNamedAccountId` and the total
+  `isKeylessAccountId` predicate, mirroring the Rust `encode_*_account` /
+  `is_keyless_account`.
+- Parameter-range violations throw `RangeError` consistently; the `ss58Format` validator
+  previously threw a plain `Error`.
 - Ships a single CommonJS build with type declarations; works from both `require` and
   ESM `import`. Runtime dependencies: `@noble/hashes`, `@scure/base`.

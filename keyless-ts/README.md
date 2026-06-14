@@ -38,7 +38,9 @@ const {
   decodeAddress,
   decodeAccountId,
   encodeAddress,
+  encodeAppAgentAccountId,
   isKeylessAddress,
+  isKeylessAccountId,
 } = require("@trevofinance/trevokeyless");
 ```
 
@@ -121,6 +123,20 @@ const address = encodeAddress(
 console.log(address); // ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp
 ```
 
+Encode identifiers straight to a raw account id (the account-id counterparts of the
+`encode*Address` functions return the raw `0x` + 64 hex interchange form directly,
+without going through an SS58 address)
+
+```javascript
+const accountId = encodeAppAgentAccountId(123);
+console.log(accountId); // 0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2
+
+// isKeylessAccountId classifies a raw account id (isKeylessAddress takes an SS58
+// address); it is total over well-formed account ids.
+console.log(isKeylessAccountId(accountId)); // true
+console.log(isKeylessAccountId(`0x${"11".repeat(32)}`)); // false
+```
+
 Check whether an address is keyless
 
 ```javascript
@@ -145,7 +161,8 @@ form and renders the SS58 address for the given format. The `address` field of t
 returned `BlockchainAccountInfo` holds the SS58 address for `decodeAddress` and is
 `null` for `decodeAccountId` (raw account bytes carry no address; render one with
 `encodeAddress`); `accountId` is normalized `0x` + lowercase hex. `address` is the
-input spelling verbatim: for the one accepted non-canonical spelling (the
+input spelling verbatim — returned exactly as you passed it, canonical or not, never
+re-encoded or normalized: for the one accepted non-canonical spelling (the
 two-byte-prefix encoding of formats below 64, see below) it differs from the canonical
 address of the same account — key caches and lookups on `accountId`, and render the
 canonical address with `encodeAddress`.

@@ -114,6 +114,22 @@ address = trevokeyless.encode_address("0x7b00000001293833058fc7db52fc03f6ce344bc
 assert address == "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp"
 ```
 
+### Encode identifiers straight to a raw account id
+
+``` python3
+import trevokeyless
+
+# The account-id counterparts of the encode_* functions return the raw 0x + 64 hex
+# interchange form directly, without going through an SS58 address.
+account_id = trevokeyless.encode_app_agent_account_id(123)
+assert account_id == "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2"
+
+# is_keyless_account_id classifies a raw account id (is_keyless_address takes an SS58
+# address); it is total over well-formed account ids.
+assert trevokeyless.is_keyless_account_id(account_id)
+assert not trevokeyless.is_keyless_account_id("0x" + "11" * 32)
+```
+
 ### Check whether an address is keyless
 
 ``` python3
@@ -141,7 +157,8 @@ account id form and renders the SS58 address for the given format. The `address`
 of the returned `BlockchainAccountInfo` holds the SS58 address for `decode_address`
 and is `None` for `decode_account_id` (raw account bytes carry no address; render one
 with `encode_address`); `account_id` is normalized `0x` + lowercase hex. `address` is
-the input spelling verbatim: for the one accepted non-canonical spelling (the
+the input spelling verbatim — returned exactly as you passed it, canonical or not, never
+re-encoded or normalized: for the one accepted non-canonical spelling (the
 two-byte-prefix encoding of formats below 64, see below) it differs from the canonical
 address of the same account — key caches and lookups on `account_id`, and render the
 canonical address with `encode_address`.
