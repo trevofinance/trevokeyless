@@ -39,6 +39,8 @@ const {
   decodeAccountId,
   encodeAddress,
   encodeAppAgentAccountId,
+  encodeTransactionalAccountId,
+  encodeNamedAccountId,
   isKeylessAddress,
   isKeylessAccountId,
 } = require("@trevofinance/trevokeyless");
@@ -130,6 +132,10 @@ without going through an SS58 address)
 ```javascript
 const accountId = encodeAppAgentAccountId(123);
 console.log(accountId); // 0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2
+
+// The transactional and named identifiers have the same counterpart.
+console.log(encodeTransactionalAccountId(123, 7)); // 0x7b00000002070000002e8d5c5d2e5deb6e449c8ee5b098bb459957db4b467634
+console.log(encodeNamedAccountId(123, "hot-wallet")); // 0x7b00000003686f742d77616c6c65746f13294d746d30576c61b409e943f757a4
 
 // isKeylessAccountId classifies a raw account id (isKeylessAddress takes an SS58
 // address); it is total over well-formed account ids.

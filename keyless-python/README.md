@@ -124,6 +124,16 @@ import trevokeyless
 account_id = trevokeyless.encode_app_agent_account_id(123)
 assert account_id == "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2"
 
+# The transactional and named identifiers have the same counterpart.
+assert (
+    trevokeyless.encode_transactional_account_id(123, 7)
+    == "0x7b00000002070000002e8d5c5d2e5deb6e449c8ee5b098bb459957db4b467634"
+)
+assert (
+    trevokeyless.encode_named_account_id(123, "hot-wallet")
+    == "0x7b00000003686f742d77616c6c65746f13294d746d30576c61b409e943f757a4"
+)
+
 # is_keyless_account_id classifies a raw account id (is_keyless_address takes an SS58
 # address); it is total over well-formed account ids.
 assert trevokeyless.is_keyless_account_id(account_id)
