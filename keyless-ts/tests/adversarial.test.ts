@@ -364,6 +364,13 @@ describe("Malformed SS58 input", () => {
     );
   });
 
+  it("pins the SS58_MAX_ADDRESS_LENGTH bound to 50", () => {
+    // The oversized-input tests use SS58_MAX_ADDRESS_LENGTH as the boundary; pin its
+    // exported value so it cannot silently drift from the Rust constant (50), which
+    // would make those tests exercise a different boundary than the reference decoder.
+    expect(SS58_MAX_ADDRESS_LENGTH).toBe(50);
+  });
+
   it("rejects oversized input before base58 decoding", () => {
     const oversized = "1".repeat(SS58_MAX_ADDRESS_LENGTH + 1);
     expect(() => decodeAddress(oversized, ss58Format)).toThrow(

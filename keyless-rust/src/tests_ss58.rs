@@ -144,6 +144,15 @@ mod tests {
     }
 
     #[test]
+    fn test_max_address_length_bound_is_50() {
+        // The reference value of the bound, exported as-is by the Python and TypeScript
+        // implementations (whose suites pin their own copy against this same literal).
+        // Keeping the three in lockstep guarantees the oversized-input rejection tests
+        // exercise the same boundary in every language.
+        assert_eq!(SS58_MAX_ADDRESS_LENGTH, 50);
+    }
+
+    #[test]
     fn test_decode_rejects_oversized_strings_before_base58_decoding() {
         // Strings longer than SS58_MAX_ADDRESS_LENGTH cannot be valid addresses and are
         // rejected up front, keeping the base58 decoding cost bounded on untrusted input.

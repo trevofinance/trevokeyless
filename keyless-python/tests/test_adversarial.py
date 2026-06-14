@@ -257,6 +257,12 @@ class TestMalformedSs58(unittest.TestCase):
             ss58_decode("$" * (trevokeyless.SS58_MAX_ADDRESS_LENGTH + 1))
         self.assertEqual(codec_ctx.exception.kind, "InvalidLength")
 
+    def test_max_address_length_bound_is_50(self: "TestMalformedSs58") -> None:
+        # The oversized-input tests use SS58_MAX_ADDRESS_LENGTH as the boundary; pin its
+        # exported value so it cannot silently drift from the Rust constant (50), which
+        # would make those tests exercise a different boundary than the reference decoder.
+        self.assertEqual(trevokeyless.SS58_MAX_ADDRESS_LENGTH, 50)
+
     def test_length_bound_is_utf8_bytes(self: "TestMalformedSs58") -> None:
         # The 50-character bound is defined in UTF-8 bytes, like the Rust reference
         # decoder: input can stay within 50 code points (or 50 UTF-16 units) and still
