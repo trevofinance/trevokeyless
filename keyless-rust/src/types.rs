@@ -321,7 +321,7 @@ impl core::fmt::Display for AccountNameError {
 /// Classification of a blockchain account, as determined by
 /// [`decode_account_info`](crate::decode_account_info).
 ///
-/// This is the Rust counterpart of the `AddressType` enum of the Python and TypeScript
+/// This is the Rust counterpart of the `AccountType` enum of the Python and TypeScript
 /// trevokeyless libraries; the variant order (Regular = 0, AppAgent = 1, Transactional = 2,
 /// Named = 3) matches their numeric values, so the keyless variants coincide with the type
 /// discriminant stored at byte `[4]` of a keyless account.
@@ -903,7 +903,7 @@ mod tests_scale_codec {
         ] {
             let encoded = account_type.encode();
             // The SCALE variant index matches the numeric values of the Python/TypeScript
-            // `AddressType` enums (and, for keyless variants, the byte [4] discriminant).
+            // `AccountType` enums (and, for keyless variants, the byte [4] discriminant).
             assert_eq!(encoded, [expected_index]);
             let decoded = AccountType::decode(&mut &encoded[..]).unwrap();
             assert_eq!(decoded, account_type);
