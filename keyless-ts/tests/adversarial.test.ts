@@ -188,6 +188,19 @@ describe("ss58Format validation", () => {
     );
   });
 
+  it("throws a RangeError for out-of-range formats (numeric-range consistency)", () => {
+    // Numeric-range violations use RangeError across the whole API: u32 ids already
+    // did, and the ss58Format parameter now does too (it threw a plain Error before the
+    // 1.0 release), so a single `catch (e) { if (e instanceof RangeError) ... }` covers
+    // every parameter-range misuse.
+    const address = encodeAppAgentAddress(123, ss58Format);
+    expect(() => decodeAddress(address, 16384)).toThrow(RangeError);
+    expect(() => encodeAppAgentAddress(123, 16384)).toThrow(RangeError);
+    expect(() => encodeAddress(u8aToHex(appAgent123), 16384)).toThrow(
+      RangeError,
+    );
+  });
+
   it("rejects raw hex input in decodeAddress", () => {
     // SS58 addresses and raw account ids are separate input classes: a raw account id
     // carries no SS58 format, so accepting it here would silently bypass the
@@ -659,6 +672,26 @@ describe("AccountTypeMismatchError", () => {
     // The message is identical across the Python and TypeScript implementations.
     expect(mismatch.message).toEqual(
       "Provided address is not an AppAgent address but is a Named address",
+    );
+  });
+
+  it("uses the article 'an' when the found type is AppAgent", () => {
+    // The article must agree with both type names, not only the expected one.
+    const appAgentAddress = encodeAppAgentAddress(1, ss58Format);
+
+    let thrown: unknown;
+    try {
+      decodeTransactionalAddress(appAgentAddress, ss58Format);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AccountTypeMismatchError);
+    const mismatch = thrown as AccountTypeMismatchError;
+    expect(mismatch.expected).toEqual(AccountType.Transactional);
+    expect(mismatch.found).toEqual(AccountType.AppAgent);
+    expect(mismatch.message).toEqual(
+      "Provided address is not a Transactional address but is an AppAgent address",
     );
   });
 });

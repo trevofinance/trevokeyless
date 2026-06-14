@@ -170,8 +170,8 @@ Two error classes carry structured details:
 The `ss58Format` argument of every function must be an integer in `[0, 16383]` and not
 a reserved format (46, 47); in particular `-1` is rejected rather than treated as an
 "accept any format" sentinel. Parameter-range violations — an out-of-range or
-non-integer `ss58Format`, an id outside the u32 range — throw a plain `Error` or
-`RangeError`, not an `Ss58Error`: the `Ss58Error` class is reserved for the validation
+non-integer `ss58Format`, an id outside the u32 range — throw a `RangeError`,
+not an `Ss58Error`: the `Ss58Error` class is reserved for the validation
 of address strings (a _reserved_ format reaches the SS58 layer and throws `Ss58Error`
 with kind `"InvalidFormat"` at encode time), so a handler that catches only `Ss58Error`
 does not see parameter misuse.

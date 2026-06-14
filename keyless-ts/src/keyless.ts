@@ -56,6 +56,11 @@ const ACCOUNT_TYPE_NAMES: Record<AccountType, keyof typeof AccountType> = {
   [AccountType.Named]: "Named",
 };
 
+/** The indefinite article for an account type name ("an" before AppAgent). */
+function accountTypeArticle(type: AccountType): string {
+  return type === AccountType.AppAgent ? "an" : "a";
+}
+
 /**
  * Thrown by the typed decode functions when the address is of a different type.
  *
@@ -69,9 +74,8 @@ class AccountTypeMismatchError extends Error {
   readonly found: AccountType;
 
   constructor(expected: AccountType, found: AccountType) {
-    const article = expected === AccountType.AppAgent ? "an" : "a";
     super(
-      `Provided address is not ${article} ${ACCOUNT_TYPE_NAMES[expected]} address but is a ${ACCOUNT_TYPE_NAMES[found]} address`,
+      `Provided address is not ${accountTypeArticle(expected)} ${ACCOUNT_TYPE_NAMES[expected]} address but is ${accountTypeArticle(found)} ${ACCOUNT_TYPE_NAMES[found]} address`,
     );
     this.name = "AccountTypeMismatchError";
     this.expected = expected;
@@ -168,7 +172,7 @@ function validateSs58Format(ss58Format: number): void {
     ss58Format < 0 ||
     ss58Format > SS58_FORMAT_MAX
   ) {
-    throw new Error(
+    throw new RangeError(
       `ss58Format must be an integer in [0, ${SS58_FORMAT_MAX}], got ${describeRejectedValue(ss58Format)}`,
     );
   }

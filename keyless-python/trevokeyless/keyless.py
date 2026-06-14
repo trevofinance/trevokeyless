@@ -60,6 +60,11 @@ class AccountType(Enum):
     Named = 3
 
 
+def _account_type_article(account_type: AccountType) -> str:
+    """The indefinite article for an account type name ("an" before AppAgent)."""
+    return "an" if account_type is AccountType.AppAgent else "a"
+
+
 class AccountTypeMismatchError(ValueError):
     """Raised by the typed decode_* functions when the address is of a different type.
 
@@ -76,8 +81,10 @@ class AccountTypeMismatchError(ValueError):
     def __init__(self, expected: AccountType, found: AccountType) -> None:
         self.expected = expected
         self.found = found
-        article = "an" if expected is AccountType.AppAgent else "a"
-        super().__init__(f"Provided address is not {article} {expected.name} address but is a {found.name} address")
+        super().__init__(
+            f"Provided address is not {_account_type_article(expected)} {expected.name} "
+            f"address but is {_account_type_article(found)} {found.name} address"
+        )
 
 
 class Ss58FormatMismatchError(Ss58Error):
@@ -521,8 +528,12 @@ def _decode_ss58_account_id_bytes(blockchain_address: BlockchainAddress, ss58_fo
             than expected).
         ValueError: If ss58_format is outside [0, 16383].
     """
-    _require_str(blockchain_address, "blockchain_address")
+    # Validate the ss58_format parameter before the address, matching the Rust
+    # from_ss58check_expecting (which checks the expected format up front) and the
+    # TypeScript decodeSs58AccountId: when both the address and the format are invalid,
+    # every implementation reports the format error.
     _validate_ss58_format(ss58_format)
+    _require_str(blockchain_address, "blockchain_address")
 
     if blockchain_address.startswith("0x"):
         # Raw account ids are deliberately not accepted here: they carry no SS58 format

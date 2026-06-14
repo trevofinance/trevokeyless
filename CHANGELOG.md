@@ -19,8 +19,9 @@ and integrity, **not** authentication — see the
   two-byte-prefix encoding of formats below 64 (the Trevo format 5335 is unaffected).
 - Unified classification vocabulary across languages: `AccountType` and the four
   variants `Regular | AppAgent | Transactional | Named`.
-- The typed mismatch error message is `"Provided address is not a/an X address but is a
-  Y address"` (Python and TypeScript).
+- The typed mismatch error message is `"Provided address is not <a/an> X address but is
+  <a/an> Y address"` (Python and TypeScript), where the indefinite article agrees with
+  each type name ("an" before AppAgent).
 
 ### Rust (`trevokeyless`)
 First release under the name `trevokeyless` (previously `trevo-keyless`).

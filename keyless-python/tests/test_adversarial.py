@@ -123,6 +123,22 @@ class TestEncodeIdValidation(unittest.TestCase):
             trevokeyless.encode_named_address(-1, "bad@name!!", SS58_FORMAT)
 
 
+class TestDecodeValidationOrder(unittest.TestCase):
+    """The decode entry points validate the ss58_format parameter before the address."""
+
+    def test_format_is_validated_before_address_type(self: "TestDecodeValidationOrder") -> None:
+        # When both the address (wrong type) and the ss58_format (out of range) are
+        # invalid, the format error wins - matching the Rust from_ss58check_expecting and
+        # the TypeScript decodeSs58AccountId, which both check the format first.
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+            trevokeyless.decode_address(123, 99999)
+
+    def test_format_is_validated_before_raw_hex_rejection(self: "TestDecodeValidationOrder") -> None:
+        # A raw 0x account id with an out-of-range format reports the format error first.
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+            trevokeyless.decode_address("0x" + "00" * 32, 99999)
+
+
 class TestAccountIdLength(unittest.TestCase):
     """Account ids must be exactly 32 bytes; the Rust AccountId32 makes this structural."""
 
@@ -732,6 +748,19 @@ class TestAccountTypeMismatchError(unittest.TestCase):
         self.assertEqual(
             str(ctx.exception),
             "Provided address is not an AppAgent address but is a Named address",
+        )
+
+    def test_article_agrees_with_found_type(self: "TestAccountTypeMismatchError") -> None:
+        # The article must agree with both type names, not only the expected one:
+        # when the found type is AppAgent, the found side must read "an AppAgent".
+        app_agent_address = trevokeyless.encode_app_agent_address(1, SS58_FORMAT)
+        with self.assertRaises(AccountTypeMismatchError) as ctx:
+            trevokeyless.decode_transactional_address(app_agent_address, SS58_FORMAT)
+        self.assertIs(ctx.exception.expected, AccountType.Transactional)
+        self.assertIs(ctx.exception.found, AccountType.AppAgent)
+        self.assertEqual(
+            str(ctx.exception),
+            "Provided address is not a Transactional address but is an AppAgent address",
         )
 
 
