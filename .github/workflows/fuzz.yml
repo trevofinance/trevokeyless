@@ -34,5 +34,9 @@ jobs:
         uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
         with:
           tool: cargo-fuzz
+      # cargo-fuzz defaults --target to the triple it was itself built for; the
+      # install-action ships a musl-static binary, so without an explicit --target it
+      # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
+      # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
       - name: Fuzz ${{ matrix.target }}
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=300
+        run: cargo +nightly fuzz run ${{ matrix.target }} --target x86_64-unknown-linux-gnu -- -max_total_time=300
