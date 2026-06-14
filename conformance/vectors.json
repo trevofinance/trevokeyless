@@ -767,5 +767,16 @@
 {"input":"0x7B00000001293833058FC7DB52FC03F6CE344BCA98BD7825FF747743F1FF63E2","reason":"uppercase-digit spelling of the same account id"},
 {"input":"0xdeadbeef","reason":"0x-prefixed short hex"},
 {"input":"0x","reason":"bare 0x prefix"}
+],
+"type_mismatch": [
+{"hex":"36184a6b01c9be8db21fcd221fbcf5f8329963fb110aadd24e625f9bafb84e79","ss58":"ttnNyj1TiDqjQe97Yi99UC4sKrsQ82Pp8K1iespnd1NDUvtWo","decode_as":"Transactional","found":"AppAgent"},
+{"hex":"36184a6b01c9be8db21fcd221fbcf5f8329963fb110aadd24e625f9bafb84e79","ss58":"ttnNyj1TiDqjQe97Yi99UC4sKrsQ82Pp8K1iespnd1NDUvtWo","decode_as":"Named","found":"AppAgent"},
+{"hex":"e91daf46022c24b5ececc11d401a1eac284e5e48d158461c96900df3c657a1d7","ss58":"ttrRhu5odJAEgKQdj6iRYVVyQL4ig6Q1nPso1hob1vS9wFM2e","decode_as":"AppAgent","found":"Transactional"},
+{"hex":"e91daf46022c24b5ececc11d401a1eac284e5e48d158461c96900df3c657a1d7","ss58":"ttrRhu5odJAEgKQdj6iRYVVyQL4ig6Q1nPso1hob1vS9wFM2e","decode_as":"Named","found":"Transactional"},
+{"hex":"0cc6a67c0361343946735658746e56441bdf702cc601c815033752c9656979a6","ss58":"ttmSoWWRmZ6LDUXtMvsnFswAMLUx5Cj9MiYAgneTjygVhfQG1","decode_as":"AppAgent","found":"Named"},
+{"hex":"0cc6a67c0361343946735658746e56441bdf702cc601c815033752c9656979a6","ss58":"ttmSoWWRmZ6LDUXtMvsnFswAMLUx5Cj9MiYAgneTjygVhfQG1","decode_as":"Transactional","found":"Named"},
+{"hex":"1111111111111111111111111111111111111111111111111111111111111111","ss58":"ttmYRonFkrSeEpsY4sRL3zdBY5XxLTWDc5AbTPbyrvcNo6HU3","decode_as":"AppAgent","found":"Regular"},
+{"hex":"1111111111111111111111111111111111111111111111111111111111111111","ss58":"ttmYRonFkrSeEpsY4sRL3zdBY5XxLTWDc5AbTPbyrvcNo6HU3","decode_as":"Transactional","found":"Regular"},
+{"hex":"1111111111111111111111111111111111111111111111111111111111111111","ss58":"ttmYRonFkrSeEpsY4sRL3zdBY5XxLTWDc5AbTPbyrvcNo6HU3","decode_as":"Named","found":"Regular"}
 ]
 }

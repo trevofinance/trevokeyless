@@ -125,6 +125,18 @@ fn ss58_error_kind(error: &Ss58Error) -> &'static str {
     }
 }
 
+/// The `KeylessDecodeError` from decoding `account` with the typed decoder for
+/// `decode_as` (which must not be the account's own type, so a mismatch is guaranteed).
+fn typed_decode_error(account: &AccountId32, decode_as: AccountType) -> KeylessDecodeError {
+    let error = match decode_as {
+        AccountType::AppAgent => decode_app_agent_account(account).err(),
+        AccountType::Transactional => decode_transactional_account(account).err(),
+        AccountType::Named => decode_named_account(account).err(),
+        AccountType::Regular => unreachable!("there is no Regular decoder"),
+    };
+    error.expect("a typed decoder on a different type must error")
+}
+
 /// The expected classification of `account` as a JSON object, with the same field values
 /// the Python and TypeScript info objects expose.
 fn classification_json(account: &AccountId32) -> String {
@@ -809,6 +821,59 @@ fn main() {
         })
         .collect();
 
+    // 12. Typed-decoder mismatch vectors: decoding an account with the wrong typed
+    // decoder yields KeylessDecodeError::WrongAccountType { expected, found }. The
+    // (expected, found) pair is the cross-language contract (the rendered *message* is
+    // per-language); pin it for every (decoder, actual-type) mismatch, including the
+    // Regular fall-through.
+    let mut rng = Rng(0xC0DE_000A);
+    let mismatch_accounts = [
+        (
+            encode_app_agent_account(rng.next_u32()),
+            AccountType::AppAgent,
+        ),
+        (
+            encode_transactional_account(rng.next_u32(), rng.next_u32()),
+            AccountType::Transactional,
+        ),
+        (
+            encode_named_account(rng.next_u32(), random_name(&mut rng)),
+            AccountType::Named,
+        ),
+        (AccountId32::from([0x11u8; 32]), AccountType::Regular),
+    ];
+    let mut type_mismatch: Vec<String> = Vec::new();
+    for (account, actual_type) in mismatch_accounts {
+        assert_eq!(
+            decode_account_info(&account).account_type(),
+            actual_type,
+            "self check: account must classify as its declared type"
+        );
+        for decode_as in [
+            AccountType::AppAgent,
+            AccountType::Transactional,
+            AccountType::Named,
+        ] {
+            if decode_as == actual_type {
+                continue;
+            }
+            let KeylessDecodeError::WrongAccountType { expected, found } =
+                typed_decode_error(&account, decode_as);
+            assert_eq!(
+                expected, decode_as,
+                "self check: expected matches the decoder"
+            );
+            assert_eq!(found, actual_type, "self check: found matches the account");
+            type_mismatch.push(format!(
+                r#"{{"hex":{},"ss58":{},"decode_as":{},"found":{}}}"#,
+                js(&hex(&account)),
+                js(&account.to_ss58check()),
+                js(&format!("{decode_as}")),
+                js(&format!("{actual_type}"))
+            ));
+        }
+    }
+
     println!("{{");
     print_group("app_agent", &app_agent, false);
     print_group("transactional", &transactional, false);
@@ -820,6 +885,7 @@ fn main() {
     print_group("named_invalid_encode", &named_invalid_encode, false);
     print_group("hex_invalid", &hex_invalid, false);
     print_group("hex_valid", &hex_valid, false);
-    print_group("hex_not_an_address", &hex_not_an_address, true);
+    print_group("hex_not_an_address", &hex_not_an_address, false);
+    print_group("type_mismatch", &type_mismatch, true);
     println!("}}");
 }

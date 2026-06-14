@@ -247,5 +247,32 @@ mod tests {
                 "{input:?} must not decode as an SS58 address: {reason}"
             );
         }
+
+        // The typed decoders carry a `(expected, found)` pair when the account is of a
+        // different type. The pair is the cross-language contract (the rendered message
+        // is per-language); this pins it for every (decoder, actual-type) mismatch.
+        for v in vectors["type_mismatch"].as_array().unwrap() {
+            let account = account_from_hex(v["hex"].as_str().unwrap());
+            let decode_as = v["decode_as"].as_str().unwrap();
+            let expected_found = v["found"].as_str().unwrap();
+            let error = match decode_as {
+                "AppAgent" => decode_app_agent_account(&account).err(),
+                "Transactional" => decode_transactional_account(&account).err(),
+                "Named" => decode_named_account(&account).err(),
+                other => panic!("unexpected decode_as {other:?}"),
+            }
+            .expect("a typed decoder on a different type must error");
+            let KeylessDecodeError::WrongAccountType { expected, found } = error;
+            assert_eq!(
+                format!("{expected}"),
+                decode_as,
+                "expected of {decode_as} mismatch must match the fixture"
+            );
+            assert_eq!(
+                format!("{found}"),
+                expected_found,
+                "found of {decode_as} mismatch must match the fixture"
+            );
+        }
     }
 }

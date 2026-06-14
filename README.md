@@ -96,6 +96,12 @@ The decoded info objects are *per-language* shapes: the Rust serde representatio
 with the flat Python/TypeScript `BlockchainAccountInfo` objects. Do not serialize one
 language's info object and parse it in another; exchange addresses or account ids.
 
+Error *messages* are likewise per-language. The only structured error contract shared
+across languages is the typed-decoder mismatch pair: the requested type (`expected`) and
+the account's actual classification (`found`), pinned by the `type_mismatch` group of the
+conformance fixture and carried by the Rust `KeylessDecodeError::WrongAccountType`, the
+Python `AccountTypeMismatchError`, and the TypeScript `AccountTypeMismatchError`.
+
 ## Versioning and compatibility
 
 - **The byte encoding is frozen.** The layout described above and the SS58 format 5335

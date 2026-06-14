@@ -102,3 +102,13 @@ lowercase-hex form, and `expected` is the classification (same shape as `classif
 SS58 *address* entry points (`decode_address` / `is_keyless_address`), which must reject
 them (raw account ids carry no SS58 format; use `decode_account_id`). Rejection is pinned;
 the error classification is per-language.
+
+### `type_mismatch`
+`{ "hex": hex64, "ss58": ss58, "decode_as": Type, "found": Type }` — decoding the account
+with the typed decoder for `decode_as` (always a keyless type different from `found`) must
+fail carrying the pair `(expected = decode_as, found)`: Rust
+`KeylessDecodeError::WrongAccountType`, Python `AccountTypeMismatchError`, TypeScript
+`AccountTypeMismatchError` (Python/TS take the `ss58` address; Rust takes the `hex` bytes).
+The structured `(expected, found)` pair is the cross-language contract; the rendered error
+*message* is per-language. Covers every ordered pair of keyless types plus each decoder on
+a `Regular` account.

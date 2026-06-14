@@ -167,6 +167,23 @@ class TestConformanceVectors(unittest.TestCase):
                     trevokeyless.encode_address(v["account_id"]),
                 )
 
+    def test_type_mismatch_vectors(self: "TestConformanceVectors") -> None:
+        # The typed decoders raise AccountTypeMismatchError carrying a (expected, found)
+        # pair when the address is of a different type. The pair is the cross-language
+        # contract (the rendered message is per-language); this pins it for every
+        # (decoder, actual-type) mismatch.
+        decoders = {
+            "AppAgent": trevokeyless.decode_app_agent_address,
+            "Transactional": trevokeyless.decode_transactional_address,
+            "Named": trevokeyless.decode_named_address,
+        }
+        for v in _VECTORS["type_mismatch"]:
+            with self.subTest(decode_as=v["decode_as"], found=v["found"]):
+                with self.assertRaises(trevokeyless.AccountTypeMismatchError) as ctx:
+                    decoders[v["decode_as"]](v["ss58"])
+                self.assertIs(ctx.exception.expected, trevokeyless.AccountType[v["decode_as"]])
+                self.assertIs(ctx.exception.found, trevokeyless.AccountType[v["found"]])
+
 
 if __name__ == "__main__":
     unittest.main()
