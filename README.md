@@ -93,7 +93,7 @@ Each library converts between the two in both directions: Rust with
 
 The decoded info objects are *per-language* shapes: the Rust serde representation of
 `BlockchainAccountInfo` is an externally tagged enum and is **not** interchangeable
-with the flat Python/TypeScript `BlockchainAddressInfo` objects. Do not serialize one
+with the flat Python/TypeScript `BlockchainAccountInfo` objects. Do not serialize one
 language's info object and parse it in another; exchange addresses or account ids.
 
 ## Versioning and compatibility

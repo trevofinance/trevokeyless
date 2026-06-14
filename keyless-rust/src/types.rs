@@ -359,7 +359,7 @@ impl core::fmt::Display for AccountType {
 /// Carries both the keyless type the called decoder is for (`expected`) and the account's
 /// actual classification (`found`), as determined by
 /// [`decode_account_info`](crate::decode_account_info) — the same `(expected, found)` pair
-/// the Python/TypeScript `AddressTypeMismatchError` exposes.
+/// the Python/TypeScript `AccountTypeMismatchError` exposes.
 ///
 /// Deliberately exhaustive (no `#[non_exhaustive]`): the single variant is closed over the
 /// account-type taxonomy, so it does not grow if the frozen encoding gains a type.
