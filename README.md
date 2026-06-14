@@ -129,8 +129,8 @@ Python `AccountTypeMismatchError`, and the TypeScript `AccountTypeMismatchError`
 - **Account**: the 32-byte account identifier behind an address — an opaque public key
   or hash for regular accounts, deterministically derived bytes (no key exists) for
   keyless accounts;
-- **Address type**: the classification of an address — Regular, AppAgent,
+- **Account type** (`AccountType`): the classification of an account — Regular, AppAgent,
   Transactional, or Named;
 - **AppAgent ID**: an identifier of an AppAgent `uint32`;
 - **TA ID**: an identifier of a Transactional address, `uint32`;
-- **Address name**: a name of a Named address, 10 ASCII characters from the list `0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#`;
+- **Account name** (`AccountName`): the name embedded in a Named account, 10 ASCII characters from the list `0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#`;
