@@ -6,8 +6,8 @@
  * The crafted inputs are built with the reference construction rules so that each test
  * documents exactly what is being fed to the decoder.
  */
-import { blake2b } from "@noble/hashes/blake2b";
-import { bytesToHex, concatBytes } from "@noble/hashes/utils";
+import { blake2b } from "@noble/hashes/blake2.js";
+import { bytesToHex, concatBytes } from "@noble/hashes/utils.js";
 import { base58 } from "@scure/base";
 import { ss58Encode } from "../src/ss58";
 import {

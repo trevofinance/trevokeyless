@@ -12,8 +12,8 @@
  * checksum, with a non-reserved format. The module is internal to the package; only the
  * keyless entry points are part of the public API.
  */
-import { blake2b } from "@noble/hashes/blake2b";
-import { concatBytes, utf8ToBytes } from "@noble/hashes/utils";
+import { blake2b } from "@noble/hashes/blake2.js";
+import { concatBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { base58 } from "@scure/base";
 
 // Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX

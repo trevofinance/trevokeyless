@@ -8,9 +8,7 @@ const ALICE_TREVO: &str = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
 const ALICE_SUBSTRATE_GENERIC: &str = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY";
 
 fn alice() -> AccountId32 {
-    let bytes: [u8; 32] = array_bytes::hex2bytes(ALICE_HEX).unwrap()[..]
-        .try_into()
-        .unwrap();
+    let bytes: [u8; 32] = array_bytes::Dehexify::dehexify(ALICE_HEX).unwrap();
     AccountId32::from(bytes)
 }
 

@@ -10,7 +10,7 @@
  * would otherwise dominate the suite runtime; since the PRNG streams are identical, the
  * reduced runs cover a prefix of the Rust runs.
  */
-import { bytesToHex } from "@noble/hashes/utils";
+import { bytesToHex } from "@noble/hashes/utils.js";
 import {
   AccountType,
   AccountTypeMismatchError,

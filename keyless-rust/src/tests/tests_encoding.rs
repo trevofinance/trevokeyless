@@ -2,8 +2,7 @@ use crate::keyless::*;
 use crate::types::*;
 
 fn account_id_from_str(account_id_str: &str) -> AccountId32 {
-    let account_id_vec = array_bytes::hex2bytes(account_id_str).unwrap();
-    let account_id_array: [u8; 32] = account_id_vec[..].try_into().unwrap();
+    let account_id_array: [u8; 32] = array_bytes::Dehexify::dehexify(account_id_str).unwrap();
 
     AccountId32::from(account_id_array)
 }
