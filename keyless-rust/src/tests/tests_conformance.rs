@@ -19,7 +19,7 @@ fn fixture() -> Option<serde_json::Value> {
 }
 
 fn account_from_hex(hex: &str) -> AccountId32 {
-    let bytes: [u8; 32] = array_bytes::hex2bytes(hex).unwrap()[..].try_into().unwrap();
+    let bytes: [u8; 32] = array_bytes::Dehexify::dehexify(hex).unwrap();
     AccountId32::from(bytes)
 }
 

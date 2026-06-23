@@ -1,4 +1,4 @@
-import { blake2b } from "@noble/hashes/blake2b";
+import { blake2b } from "@noble/hashes/blake2.js";
 import { ss58Encode } from "../src/ss58";
 import {
   encodeAppAgentAddress,

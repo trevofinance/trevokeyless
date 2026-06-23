@@ -1,5 +1,5 @@
-import { blake2b } from "@noble/hashes/blake2b";
-import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils";
+import { blake2b } from "@noble/hashes/blake2.js";
+import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils.js";
 import {
   SS58_MAX_ADDRESS_LENGTH,
   Ss58Error,

@@ -11,15 +11,17 @@ use crate::types::*;
 fn test_blake2_256_known_answers() {
     assert_eq!(
         blake2_256(b""),
-        array_bytes::hex2array_unchecked(
+        <[u8; 32] as array_bytes::Dehexify>::dehexify(
             "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"
         )
+        .unwrap()
     );
     assert_eq!(
         blake2_256(b"abc"),
-        array_bytes::hex2array_unchecked(
+        <[u8; 32] as array_bytes::Dehexify>::dehexify(
             "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319"
         )
+        .unwrap()
     );
 }
 
