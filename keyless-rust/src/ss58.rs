@@ -7,6 +7,9 @@
 //!
 //! The Trevo chain uses the SS58 format [`SS58_FORMAT_TREVO_ASSET_HUB`] (5335).
 
+// The prefix and checksum scheme follows the SS58 codec of Substrate's sp-core (Apache-2.0):
+// https://github.com/paritytech/polkadot-sdk/blob/polkadot-stable2407-2/substrate/primitives/core/src/crypto.rs
+
 use crate::types::AccountId32;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -20,12 +23,35 @@ const SS58_FORMAT_MAX: u16 = 0b0011_1111_1111_1111;
 /// Checksum length for 32-byte account ids.
 const SS58_CHECKSUM_LENGTH: usize = 2;
 
+/// Maximum length in characters of a valid SS58 address for a 32-byte account id: the
+/// payload is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits,
+/// and each base58 character carries log2(58) ≈ 5.858 bits, so a valid address has at most
+/// ceil(288 / 5.858) = 50 characters. [`AccountId32::from_ss58check_with_version`] rejects
+/// longer input before base58 decoding, whose cost grows quadratically with the input
+/// length; callers handling untrusted address strings can apply the same bound up front.
+///
+/// The bound is applied to the **UTF-8 byte length** of the input (`str::len`), which is
+/// identical to the character count for the all-ASCII base58 alphabet; the Python and
+/// TypeScript trevokeyless libraries export the same constant and apply the same
+/// byte-length rule, so the rejection kind of non-ASCII garbage cannot drift.
+///
+/// The bound is a safe over-approximation: the first payload byte of a valid address is
+/// at most `0x7F`, so the payload value stays below 2²⁸⁷ and the longest achievable
+/// address is 49 characters (pinned by the all-`0xFF`/format-16383 conformance vector).
+pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
+
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
+///
+/// Deliberately exhaustive (no `#[non_exhaustive]`): the five variants are the contractual
+/// error taxonomy shared with the Python and TypeScript implementations (`Ss58Error.kind`
+/// in both) and pinned by the conformance fixture. Adding a variant
+/// is a breaking change of that cross-language contract, not a routine extension.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Ss58Error {
     /// The string is not valid base58.
     InvalidBase58,
-    /// The decoded payload does not have the length of an SS58-encoded 32-byte account id.
+    /// The address string is longer than any valid SS58-encoded 32-byte account id, or the
+    /// decoded payload does not have the expected length.
     InvalidLength,
     /// The checksum does not match the payload.
     InvalidChecksum,
@@ -117,7 +143,14 @@ impl AccountId32 {
 
     /// Decodes an SS58 address of any (non-reserved) format, returning the account id and
     /// the format found in the address.
+    ///
+    /// Input longer than the maximum length of a valid address (50 UTF-8 bytes, see
+    /// [`SS58_MAX_ADDRESS_LENGTH`]) is rejected with [`Ss58Error::InvalidLength`] before
+    /// base58 decoding, so the cost of decoding untrusted input stays bounded.
     pub fn from_ss58check_with_version(address: &str) -> Result<(Self, u16), Ss58Error> {
+        if address.len() > SS58_MAX_ADDRESS_LENGTH {
+            return Err(Ss58Error::InvalidLength);
+        }
         let data = bs58::decode(address)
             .into_vec()
             .map_err(|_| Ss58Error::InvalidBase58)?;
@@ -157,25 +190,53 @@ impl AccountId32 {
         Ok((Self::new(account_bytes), format))
     }
 
-    /// Decodes an SS58 address with the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
+    /// Decodes an SS58 address, requiring the given expected format.
     ///
-    /// Returns [`Ss58Error::UnexpectedFormat`] if the address is valid but carries a
-    /// different format.
-    pub fn from_ss58check(address: &str) -> Result<Self, Ss58Error> {
-        let (account, format) = Self::from_ss58check_with_version(address)?;
-        if format != SS58_FORMAT_TREVO_ASSET_HUB {
+    /// The address is fully validated first — structure, length, checksum — exactly like
+    /// [`from_ss58check_with_version`](Self::from_ss58check_with_version); only then is
+    /// the embedded format compared, so an invalid address reports its validation error,
+    /// never a misleading [`Ss58Error::UnexpectedFormat`] (the format carried by an
+    /// address that fails validation is not trustworthy information). This is the
+    /// construction behind the `ss58_format` parameter of the Python and TypeScript
+    /// decode entry points and behind the conformance fixture's rejection vectors.
+    ///
+    /// An `expected_format` outside the 14-bit range returns
+    /// [`Ss58Error::InvalidFormat`] up front (the Python and TypeScript implementations
+    /// reject such parameters with their parameter-validation errors). The reserved
+    /// formats 46 and 47 are accepted as a parameter — no valid address can carry them,
+    /// so the result is the address's own validation error or an `UnexpectedFormat`,
+    /// matching the other implementations.
+    pub fn from_ss58check_expecting(
+        address: &str,
+        expected_format: u16,
+    ) -> Result<Self, Ss58Error> {
+        if expected_format > SS58_FORMAT_MAX {
+            return Err(Ss58Error::InvalidFormat);
+        }
+        let (account, found) = Self::from_ss58check_with_version(address)?;
+        if found != expected_format {
             return Err(Ss58Error::UnexpectedFormat {
-                expected: SS58_FORMAT_TREVO_ASSET_HUB,
-                found: format,
+                expected: expected_format,
+                found,
             });
         }
         Ok(account)
+    }
+
+    /// Decodes an SS58 address with the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
+    ///
+    /// Returns [`Ss58Error::UnexpectedFormat`] if the address is valid but carries a
+    /// different format. Equivalent to
+    /// [`from_ss58check_expecting`](Self::from_ss58check_expecting) with
+    /// [`SS58_FORMAT_TREVO_ASSET_HUB`].
+    pub fn from_ss58check(address: &str) -> Result<Self, Ss58Error> {
+        Self::from_ss58check_expecting(address, SS58_FORMAT_TREVO_ASSET_HUB)
     }
 }
 
 /// `AccountId32` serializes as its SS58 address string in the Trevo format
 /// ([`SS58_FORMAT_TREVO_ASSET_HUB`]), matching the address representation used by the
-/// Python and TypeScript trevo-keyless libraries.
+/// Python and TypeScript trevokeyless libraries.
 #[cfg(feature = "serde")]
 impl serde::Serialize for AccountId32 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

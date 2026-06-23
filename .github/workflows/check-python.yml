@@ -5,27 +5,42 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  
+
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   python-checks:
     concurrency:
-      group: python-checks-${{ github.ref }}
+      group: python-checks-${{ github.ref }}-${{ matrix.python-version }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Oldest supported version (requires-python >= 3.10) through current stable.
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
-          python-version: 3.12.3
+          python-version: ${{ matrix.python-version }}
 
       - name: Install deps
         run: |
             cd keyless-python
-            pip install .[test]
+            pip install .[dev]
+
+      - name: Audit dependencies
+        run: |
+            cd keyless-python
+            pip install pip-audit
+            pip-audit
 
       - name: Check code formatting with ruff
         run: |
@@ -43,6 +58,35 @@ jobs:
             mypy trevokeyless
 
       - name: Run tests
+        # Discovery picks up every tests/test_*.py module; the previous explicit module
+        # list silently skipped test_adversarial.py.
         run: |
             cd keyless-python
-            python3 -m unittest tests.test_encoding tests.test_ss58 tests.test_names
+            python3 -m unittest discover --verbose
+
+      - name: Build and validate distribution artifacts
+        run: |
+            cd keyless-python
+            pip install --upgrade build twine packaging
+            python3 -m build
+            twine check --strict dist/*
+
+      - name: Check artifact contents
+        # The MANIFEST.in pruning and the package-data globs are release-critical;
+        # verify the built artifacts instead of trusting the configuration.
+        run: |
+            cd keyless-python
+            python3 - <<'EOF'
+            import glob, tarfile, zipfile
+
+            [whl] = glob.glob("dist/*.whl")
+            names = zipfile.ZipFile(whl).namelist()
+            assert any(n.endswith("trevokeyless/py.typed") for n in names), names
+            assert not any("tests/" in n for n in names), names
+            assert not any(n.endswith(".pyi") for n in names), names
+
+            [sdist] = glob.glob("dist/*.tar.gz")
+            tnames = tarfile.open(sdist).getnames()
+            assert not any("/tests/" in n for n in tnames), tnames
+            print("wheel:", len(names), "entries; sdist:", len(tnames), "entries - OK")
+            EOF

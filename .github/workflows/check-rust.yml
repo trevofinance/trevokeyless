@@ -1,14 +1,17 @@
 name: check-rust
 
+# No paths-ignore for README.md: the crate README is compiled as a doctest
+# (lib.rs ReadmeDoctests), so a README-only change can break `cargo test`.
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - 'README.md'
 
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   rust-checks:
@@ -20,10 +23,14 @@ jobs:
       run:
         working-directory: ./keyless-rust
     steps:
-      - uses: actions/checkout@v7
-      - name: Install latest stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          persist-credentials: false
+      - name: Install latest stable
+        # Pinned by commit; the toolchain comes from the input, not the ref name.
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: stable
           components: rustfmt, clippy
           targets: wasm32v1-none
 
@@ -39,13 +46,51 @@ jobs:
       - name: Run test suite (no default features)
         run: cargo test --no-default-features
 
-      - name: Build no_std (wasm32v1-none, ss58 + serde)
-        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde
+      - name: Conformance fixture is up to date
+        run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
+
+      - name: Build no_std (wasm32v1-none, ss58 + serde + scale)
+        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde,scale
 
       - name: Docs (all features)
         run: cargo doc --all-features --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+      - name: Publish dry run
+        run: cargo publish --dry-run
+
+  rust-features:
+    concurrency:
+      group: rust-features-${{ github.ref }}-${{ strategy.job-index }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    strategy:
+      matrix:
+        # The feature lattice between the main job's no-default and all-features runs:
+        # each optional feature alone, with and without std, plus the full no_std
+        # combination. With std the unit suite runs; without std only the doctests
+        # compile and run, which still proves every cfg combination builds.
+        features:
+          - "--no-default-features --features ss58"
+          - "--no-default-features --features serde"
+          - "--no-default-features --features scale"
+          - "--no-default-features --features ss58,serde,scale"
+          - "--features ss58"
+          - "--features serde"
+          - "--features scale"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: stable
+      - name: Test feature combination
+        run: cargo test ${{ matrix.features }}
 
   rust-msrv:
     concurrency:
@@ -56,10 +101,63 @@ jobs:
       run:
         working-directory: ./keyless-rust
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
         with:
           toolchain: 1.79.0
       - name: Check (all features) on MSRV
         run: cargo check --all-features
+
+  rust-fuzz:
+    concurrency:
+      group: rust-fuzz-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: nightly
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
+        with:
+          tool: cargo-fuzz
+      # cargo-fuzz defaults --target to the triple it was itself built for; the
+      # install-action ships a musl-static binary, so without an explicit --target it
+      # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
+      # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
+      - name: Fuzz the SS58 decoder (smoke run)
+        run: cargo +nightly fuzz run ss58_decode --target x86_64-unknown-linux-gnu -- -max_total_time=30
+      - name: Fuzz the AccountId32 hex parser (smoke run)
+        run: cargo +nightly fuzz run accountid_from_str --target x86_64-unknown-linux-gnu -- -max_total_time=30
+
+  rust-audit:
+    concurrency:
+      group: rust-audit-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
+        with:
+          tool: cargo-audit
+      - name: Audit dependencies against the RustSec database
+        run: cargo audit

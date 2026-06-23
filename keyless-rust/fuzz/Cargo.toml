@@ -1,0 +1,30 @@
+[package]
+name = "trevokeyless-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+trevokeyless = { path = "..", features = ["ss58"] }
+
+[[bin]]
+name = "ss58_decode"
+path = "fuzz_targets/ss58_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "accountid_from_str"
+path = "fuzz_targets/accountid_from_str.rs"
+test = false
+doc = false
+bench = false
+
+# Standalone workspace: the fuzz crate is not part of the published package.
+[workspace]
+members = ["."]

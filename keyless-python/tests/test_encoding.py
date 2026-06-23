@@ -2,7 +2,7 @@ import unittest
 from hashlib import blake2b
 
 import trevokeyless
-from trevokeyless.ss58 import ss58_encode
+from trevokeyless._ss58 import ss58_encode
 
 
 class TestKeylessAddresses(unittest.TestCase):
@@ -30,13 +30,13 @@ class TestKeylessAddresses(unittest.TestCase):
         )
 
         decoded_address_info = trevokeyless.decode_address(blockchain_address, ss58_format)
-        expected_address_info = trevokeyless.BlockchainAddressInfo(
+        expected_address_info = trevokeyless.BlockchainAccountInfo(
             address=blockchain_address,
             account_id=account_id,
-            address_type=trevokeyless.AddressType.AppAgent,
+            account_type=trevokeyless.AccountType.AppAgent,
             app_agent_id=app_agent_id,
             ta_id=None,
-            address_name=None,
+            account_name=None,
         )
         self.assertEqual(
             decoded_address_info,
@@ -71,15 +71,18 @@ class TestKeylessAddresses(unittest.TestCase):
             (app_agent_id, transactional_address_id),
             "Couldn't decode Transactional address to AppAgent ID & Transactional address ID.",
         )
+        # Named-field access (the result is a NamedTuple, still tuple-compatible above).
+        self.assertEqual(transactional_address_data.app_agent_id, app_agent_id)
+        self.assertEqual(transactional_address_data.ta_id, transactional_address_id)
 
         decoded_address_info = trevokeyless.decode_address(encoded_address, ss58_format)
-        expected_address_info = trevokeyless.BlockchainAddressInfo(
+        expected_address_info = trevokeyless.BlockchainAccountInfo(
             address=blockchain_address,
             account_id=account_id,
-            address_type=trevokeyless.AddressType.Transactional,
+            account_type=trevokeyless.AccountType.Transactional,
             app_agent_id=app_agent_id,
             ta_id=transactional_address_id,
-            address_name=None,
+            account_name=None,
         )
         self.assertEqual(
             decoded_address_info,
@@ -91,13 +94,13 @@ class TestKeylessAddresses(unittest.TestCase):
         ss58_format = 5335
 
         app_agent_id = 123
-        address_name = "example123"
+        account_name = "example123"
         account_id = "0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409"
         blockchain_address = "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k"
 
         ###
 
-        encoded_address = trevokeyless.encode_named_address(app_agent_id, address_name, ss58_format)
+        encoded_address = trevokeyless.encode_named_address(app_agent_id, account_name, ss58_format)
         self.assertEqual(
             encoded_address,
             blockchain_address,
@@ -107,18 +110,21 @@ class TestKeylessAddresses(unittest.TestCase):
         named_address_data = trevokeyless.decode_named_address(encoded_address, ss58_format)
         self.assertEqual(
             named_address_data,
-            (app_agent_id, address_name),
+            (app_agent_id, account_name),
             "Couldn't decode Named address to AppAgent ID & address name.",
         )
+        # Named-field access (the result is a NamedTuple, still tuple-compatible above).
+        self.assertEqual(named_address_data.app_agent_id, app_agent_id)
+        self.assertEqual(named_address_data.account_name, account_name)
 
         decoded_address_info = trevokeyless.decode_address(encoded_address, ss58_format)
-        expected_address_info = trevokeyless.BlockchainAddressInfo(
+        expected_address_info = trevokeyless.BlockchainAccountInfo(
             address=blockchain_address,
             account_id=account_id,
-            address_type=trevokeyless.AddressType.Named,
+            account_type=trevokeyless.AccountType.Named,
             app_agent_id=app_agent_id,
             ta_id=None,
-            address_name=address_name,
+            account_name=account_name,
         )
         self.assertEqual(
             decoded_address_info,
@@ -139,7 +145,7 @@ class TestKeylessAddresses(unittest.TestCase):
         ]
         for invalid_name_bytes in invalid_names:
             open_part = (
-                (1).to_bytes(4, byteorder="little") + bytes([trevokeyless.AddressType.Named.value]) + invalid_name_bytes
+                (1).to_bytes(4, byteorder="little") + bytes([trevokeyless.AccountType.Named.value]) + invalid_name_bytes
             )
             checksum = blake2b(open_part, digest_size=32).digest()
             account_id_bytes = open_part + checksum[len(open_part) :]
@@ -147,21 +153,21 @@ class TestKeylessAddresses(unittest.TestCase):
 
             decoded_address_info = trevokeyless.decode_address(address, ss58_format)
             self.assertEqual(
-                decoded_address_info.address_type,
-                trevokeyless.AddressType.Regular,
+                decoded_address_info.account_type,
+                trevokeyless.AccountType.Regular,
                 f"Named address with invalid name bytes {invalid_name_bytes!r} must decode as Regular.",
             )
             self.assertIsNone(decoded_address_info.app_agent_id)
-            self.assertIsNone(decoded_address_info.address_name)
+            self.assertIsNone(decoded_address_info.account_name)
 
             with self.assertRaisesRegex(
                 ValueError,
-                "^Provided address is not a Named address but is instance of AddressType.Regular.$",
+                "^Provided address is not a Named address but is a Regular address$",
                 msg="Named address with invalid name bytes must not decode as a Named address.",
             ):
                 trevokeyless.decode_named_address(address, ss58_format)
 
-    def test_mismatch_of_address_type(self: "TestKeylessAddresses") -> None:
+    def test_mismatch_of_account_type(self: "TestKeylessAddresses") -> None:
         ss58_format = 5335
 
         # Alice
@@ -172,21 +178,21 @@ class TestKeylessAddresses(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not an AppAgent address but is instance of AddressType.Regular.$",
+            "^Provided address is not an AppAgent address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_app_agent_address(regular_address, ss58_format)
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not a Transactional address but is instance of AddressType.Regular.$",
+            "^Provided address is not a Transactional address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_transactional_address(regular_address, ss58_format)
 
         with self.assertRaisesRegex(
             ValueError,
-            "^Provided address is not a Named address but is instance of AddressType.Regular.$",
+            "^Provided address is not a Named address but is a Regular address$",
             msg="Decoding of regular address as an AppAgent address failed.",
         ):
             trevokeyless.decode_named_address(regular_address, ss58_format)
@@ -194,13 +200,13 @@ class TestKeylessAddresses(unittest.TestCase):
         address_data = trevokeyless.decode_address(regular_address, ss58_format)
         self.assertEqual(
             address_data,
-            trevokeyless.BlockchainAddressInfo(
+            trevokeyless.BlockchainAccountInfo(
                 address=regular_address,
                 account_id=account_id,
-                address_type=trevokeyless.AddressType.Regular,
+                account_type=trevokeyless.AccountType.Regular,
                 app_agent_id=None,
                 ta_id=None,
-                address_name=None,
+                account_name=None,
             ),
             "Decoding of regular address to address info failed.",
         )

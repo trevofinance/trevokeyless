@@ -1,51 +1,61 @@
 {
-  "name": "@trevofinance/trevo-keyless",
-  "version": "0.1.5",
+  "name": "@trevofinance/trevokeyless",
+  "version": "1.0.0",
   "license": "Apache-2.0",
-  "description": "This library provides functions for encoding and decoding keyless addresses, used by the Trevo blockchain: application agent addresses, transactional addresses, and named addresses.",
+  "description": "Encoding, decoding, and classification of Trevo keyless addresses: application agent, transactional, and named.",
   "homepage": "https://trevo.finance",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/trevo-finance/trevo-keyless.git"
   },
-  "main": "bundle/index.js",
-  "types": "bundle/index.d.ts",
-  "files": [
-    "bundle/index.js",
-    "bundle/index.d.ts"
+  "bugs": {
+    "url": "https://github.com/trevo-finance/trevo-keyless/issues"
+  },
+  "keywords": [
+    "trevo",
+    "blockchain",
+    "substrate",
+    "ss58",
+    "keyless",
+    "address"
   ],
+  "main": "dist/keyless.js",
+  "types": "dist/keyless.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/keyless.d.ts",
+      "default": "./dist/keyless.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "npx jest",
     "format-check": "npx prettier . --check",
     "format-fix": "npx prettier . --write",
-    "lint-check": "eslint './src/**/*.{ts,tsx}'",
-    "lint-fix": "eslint --fix './src/**/*.{ts,tsx}'",
+    "lint-check": "eslint src",
+    "lint-fix": "eslint --fix src",
     "build": "tsc",
-    "prepublishOnly": "tsc && rollup -c"
-  },
-  "dependencies": {
-    "@polkadot/keyring": "^12.6.2",
-    "@polkadot/types": "^10.12.6",
-    "@polkadot/util": "^12.6.2",
-    "@polkadot/util-crypto": "^12.6.2",
-    "assert": "^2.1.0",
-    "blake2b": "^2.1.4",
-    "blakejs": "^1.2.1"
+    "prepublishOnly": "rm -rf dist && tsc"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/jest": "^29.5.12",
-    "@types/mocha": "^10.0.7",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "eslint": "^8.57.0",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-import": "^2.29.1",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
     "jest": "^29.7.0",
     "prettier": "3.3.3",
-    "rollup": "^4.27.3",
-    "rollup-plugin-dts": "^6.1.1",
     "ts-jest": "^29.2.5",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.61.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "@scure/base": "^1.2.6"
   }
 }

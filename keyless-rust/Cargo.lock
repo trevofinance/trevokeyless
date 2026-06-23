@@ -362,8 +362,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "trevo-keyless"
-version = "0.8.0"
+name = "trevokeyless"
+version = "1.0.0"
 dependencies = [
  "array-bytes",
  "blake2b_simd",

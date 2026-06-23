@@ -5,10 +5,20 @@
 //! A **keyless account** is a 32-byte on-chain account identifier whose private key is
 //! deliberately unknown. Its bytes are deterministically derived from a set of logical
 //! identifiers (see byte layout below), so anyone can compute the address from the identifiers
-//! and verify that an address belongs to a specific App Agent simply by reading its bytes.
+//! and read back, by inspecting the bytes alone, which App Agent controls the account under
+//! the Trevo chain's rules.
 //!
-//! Because no private key exists, keyless accounts cannot sign transactions. Instead, an App
+//! Because no private key is known, keyless accounts cannot sign transactions. Instead, an App
 //! Agent submits **App Transactions** to act on behalf of its keyless accounts.
+//!
+//! **Classification is not authorization.** The keyless checksum involves no key material and
+//! no secret of any kind: *anyone* can construct a valid keyless account embedding *any*
+//! AppAgentId, for free. A successful decode therefore proves only that the bytes follow the
+//! keyless layout — never that the embedded App Agent created, requested, or authorized the
+//! account. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an
+//! account merely because it decodes to a particular AppAgentId. See the
+//! [security model](https://github.com/trevo-finance/trevo-keyless#security-model) for the
+//! full contract.
 //!
 //! There are three keyless account types:
 //!
@@ -54,10 +64,14 @@
 //! - [`decode_account_info`] — classify any account and extract its embedded identifiers.
 //! - [`decode_app_agent_account`] — decode and return only the `AppAgentId` (errors if not an
 //!   App Agent account).
-//! - [`decode_transactional_account`] — decode and return `(AppAgentId, TransactionalId)`.
-//! - [`decode_named_account`] — decode and return `(AppAgentId, AccountName)`.
+//! - [`decode_transactional_account`] — decode and return a [`DecodedTransactionalAccount`].
+//! - [`decode_named_account`] — decode and return a [`DecodedNamedAccount`].
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
-//!   (performs a full Blake2b-256 hash internally).
+//!   (performs up to one Blake2b-256 hash internally).
+//! - [`AccountId32`] renders as, and parses from, the raw interchange form `0x` + 64 hex
+//!   characters (`Display` / `FromStr`, the latter returning [`ParseAccountIdError`] on
+//!   any deviation) — the same strings the Python `decode_account_id` and TypeScript
+//!   `decodeAccountId` entry points accept.
 //!
 //! ## Cargo features
 //!
@@ -66,6 +80,10 @@
 //! - `ss58` — SS58 address encoding/decoding for [`AccountId32`]
 //!   (`to_ss58check*` / `from_ss58check*`, [`SS58_FORMAT_TREVO_ASSET_HUB`]). Works in
 //!   `no_std` environments but requires an allocator.
+//! - `scale` — SCALE codec and metadata support: `Encode`/`Decode`/`DecodeWithMemTracking`/
+//!   `TypeInfo`/`MaxEncodedLen` implementations for every public type, for direct use inside
+//!   a Substrate runtime. SCALE `Decode` of [`BlockchainAccountInfo`] performs no
+//!   consistency validation (see the type documentation).
 //! - `serde` — serde support (implies `ss58`): [`AccountId32`] (de)serializes as an SS58
 //!   address string in the Trevo format, [`AccountName`] as a string, and the remaining
 //!   public types via derived implementations. Deserializing [`BlockchainAccountInfo`]
@@ -76,7 +94,7 @@
 //! # Examples
 //!
 //! ```rust
-//! use trevo_keyless::*;
+//! use trevokeyless::*;
 //!
 //! // Encode an AppAgent root account
 //! let app_agent_id: AppAgentId = 123;
@@ -95,6 +113,7 @@
 //! # }
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]
+#![forbid(unsafe_code)]
 
 #[cfg(feature = "ss58")]
 extern crate alloc;
@@ -109,6 +128,8 @@ mod types;
 #[cfg(all(test, feature = "std"))]
 mod tests_binary;
 #[cfg(all(test, feature = "std"))]
+mod tests_conformance;
+#[cfg(all(test, feature = "std"))]
 mod tests_encoding;
 #[cfg(all(test, feature = "std"))]
 mod tests_properties;
@@ -121,3 +142,10 @@ pub use keyless::*;
 #[cfg(feature = "ss58")]
 pub use ss58::*;
 pub use types::*;
+
+// Compiles and runs the README example as a doctest, so the README cannot drift from the
+// API. The example exercises `to_ss58check`, so it is only collected when the `ss58`
+// feature is enabled (`cargo test --no-default-features` must keep passing).
+#[cfg(all(doctest, feature = "ss58"))]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;

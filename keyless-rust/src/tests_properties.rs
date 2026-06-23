@@ -2,6 +2,12 @@
 //! of arbitrary byte patterns. A deterministic PRNG (fixed seeds, xorshift64*) is used instead
 //! of a property-testing dependency, so failures are exactly reproducible and the crate keeps
 //! its minimal dependency footprint.
+//!
+//! The PRNG construction and seeds are shared verbatim with the Python and TypeScript suites,
+//! so the three exercise the *same* generated cases and together act as a cross-language
+//! differential fuzzer (a reference-sequence test below pins the stream). Keep the construction
+//! byte-for-byte identical across the three languages when refactoring — otherwise they
+//! silently stop testing the same inputs.
 
 #[cfg(test)]
 mod tests {
@@ -44,6 +50,24 @@ mod tests {
         AccountName::new(&bytes).expect("generated from the allowed charset")
     }
 
+    /// Pins the first outputs of seed 0x5EED_0001 — the cross-language reference sequence
+    /// the Python (`test_prng_matches_the_reference_sequence`) and TypeScript (`PRNG
+    /// reference sequence`) suites assert against. A porting mistake in the PRNG, or a
+    /// change to the construction, would silently shift every stream below; this pins the
+    /// stream in the reference implementation itself so it fails loudly instead.
+    #[test]
+    fn prng_matches_the_reference_sequence() {
+        let mut rng = Rng(0x5EED_0001);
+        assert_eq!(
+            [rng.next_u64(), rng.next_u64(), rng.next_u64()],
+            [
+                0xA2E8_EC67_270A_2376,
+                0x44BE_5980_BAE0_D9B9,
+                0x3107_6561_BB9C_C917
+            ]
+        );
+    }
+
     #[test]
     fn prop_app_agent_roundtrip() {
         let mut rng = Rng(0x5EED_0001);
@@ -60,13 +84,15 @@ mod tests {
             assert_eq!(decode_app_agent_account(&account), Ok(app_agent_id));
             assert_eq!(
                 decode_transactional_account(&account),
-                Err(KeylessDecodeError::NotATransactionalAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Transactional,
                     found: AccountType::AppAgent
                 })
             );
             assert_eq!(
                 decode_named_account(&account),
-                Err(KeylessDecodeError::NotANamedAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::Named,
                     found: AccountType::AppAgent
                 })
             );
@@ -95,11 +121,15 @@ mod tests {
             );
             assert_eq!(
                 decode_transactional_account(&account),
-                Ok((app_agent_id, ta_id))
+                Ok(DecodedTransactionalAccount {
+                    app_agent_id,
+                    ta_id
+                })
             );
             assert_eq!(
                 decode_app_agent_account(&account),
-                Err(KeylessDecodeError::NotAnAppAgentAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::AppAgent,
                     found: AccountType::Transactional
                 })
             );
@@ -122,10 +152,17 @@ mod tests {
                     account_name: name
                 }
             );
-            assert_eq!(decode_named_account(&account), Ok((app_agent_id, name)));
+            assert_eq!(
+                decode_named_account(&account),
+                Ok(DecodedNamedAccount {
+                    app_agent_id,
+                    account_name: name
+                })
+            );
             assert_eq!(
                 decode_app_agent_account(&account),
-                Err(KeylessDecodeError::NotAnAppAgentAccount {
+                Err(KeylessDecodeError::WrongAccountType {
+                    expected: AccountType::AppAgent,
                     found: AccountType::Named
                 })
             );

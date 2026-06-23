@@ -1,0 +1,42 @@
+# Longer scheduled fuzzing of the two untrusted-input parsers. The per-PR check-rust
+# workflow runs the same targets as a 30-second smoke test; this runs them for several
+# minutes each on a weekly cadence (and on demand) to catch regressions the smoke run
+# would miss.
+name: fuzz
+
+on:
+  schedule:
+    # Mondays 04:17 UTC (off the top of the hour to avoid scheduler congestion).
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    strategy:
+      matrix:
+        target: [ss58_decode, accountid_from_str]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # master
+        with:
+          toolchain: nightly
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@7a79fe8c3a13344501c80d99cae481c1c9085912 # v2
+        with:
+          tool: cargo-fuzz
+      # cargo-fuzz defaults --target to the triple it was itself built for; the
+      # install-action ships a musl-static binary, so without an explicit --target it
+      # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
+      # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
+      - name: Fuzz ${{ matrix.target }}
+        run: cargo +nightly fuzz run ${{ matrix.target }} --target x86_64-unknown-linux-gnu -- -max_total_time=300

@@ -100,6 +100,9 @@ pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> Acco
 /// `N` bytes, i.e. the trailing `32 - N` bytes equal the trailing bytes of `blake2_256` over
 /// the leading `N` bytes.
 fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
+    const {
+        assert!(N <= 32, "open part cannot exceed the 32-byte AccountId32");
+    }
     blake2_256(&account_bytes[..N])[N..] == account_bytes[N..]
 }
 
@@ -179,12 +182,13 @@ pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
 /// # Returns
 ///
 /// Returns `Ok(AppAgentId)` if the account passes the App Agent checksum verification, or
-/// `Err(KeylessDecodeError::NotAnAppAgentAccount { found })` carrying the account's actual
-/// classification otherwise.
+/// `Err(KeylessDecodeError::WrongAccountType { expected: AppAgent, found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::AppAgent { app_agent_id, .. } => Ok(app_agent_id),
-        other => Err(KeylessDecodeError::NotAnAppAgentAccount {
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::AppAgent,
             found: other.account_type(),
         }),
     }
@@ -198,19 +202,24 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 ///
 /// # Returns
 ///
-/// Returns `Ok((AppAgentId, TransactionalId))` if the account passes the Transactional checksum
-/// verification, or `Err(KeylessDecodeError::NotATransactionalAccount { found })` carrying the
+/// Returns `Ok(DecodedTransactionalAccount { app_agent_id, ta_id })` if the account passes the
+/// Transactional checksum verification, or
+/// `Err(KeylessDecodeError::WrongAccountType { expected: Transactional, found })` carrying the
 /// account's actual classification otherwise.
 pub fn decode_transactional_account(
     account: &AccountId32,
-) -> Result<(AppAgentId, TransactionalId), KeylessDecodeError> {
+) -> Result<DecodedTransactionalAccount, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
             app_agent_id,
             ta_id,
             ..
-        } => Ok((app_agent_id, ta_id)),
-        other => Err(KeylessDecodeError::NotATransactionalAccount {
+        } => Ok(DecodedTransactionalAccount {
+            app_agent_id,
+            ta_id,
+        }),
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::Transactional,
             found: other.account_type(),
         }),
     }
@@ -224,27 +233,34 @@ pub fn decode_transactional_account(
 ///
 /// # Returns
 ///
-/// Returns `Ok((AppAgentId, AccountName))` if the account passes the Named checksum verification,
-/// or `Err(KeylessDecodeError::NotANamedAccount { found })` carrying the account's actual
-/// classification otherwise.
+/// Returns `Ok(DecodedNamedAccount { app_agent_id, account_name })` if the account passes the
+/// Named checksum verification, or
+/// `Err(KeylessDecodeError::WrongAccountType { expected: Named, found })` carrying the
+/// account's actual classification otherwise.
 pub fn decode_named_account(
     account: &AccountId32,
-) -> Result<(AppAgentId, AccountName), KeylessDecodeError> {
+) -> Result<DecodedNamedAccount, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Named {
             app_agent_id,
             account_name,
             ..
-        } => Ok((app_agent_id, account_name)),
-        other => Err(KeylessDecodeError::NotANamedAccount {
+        } => Ok(DecodedNamedAccount {
+            app_agent_id,
+            account_name,
+        }),
+        other => Err(KeylessDecodeError::WrongAccountType {
+            expected: AccountType::Named,
             found: other.account_type(),
         }),
     }
 }
 
 /// Returns `true` if the account passes the keyless checksum verification (App Agent,
-/// Transactional, or Named). Returns `false` for accounts whose checksum does not match or whose
-/// type discriminant is unknown. Internally performs a full Blake2b-256 hash computation.
+/// Transactional, or Named). Returns `false` for accounts whose checksum does not match, whose
+/// type discriminant is unknown, or whose Named name bytes fail charset validation despite a
+/// valid checksum. Internally performs up to one full Blake2b-256 hash computation (none when
+/// byte `[4]` is not a known type discriminant).
 #[must_use]
 pub fn is_keyless_account(account: &AccountId32) -> bool {
     decode_account_info(account).is_keyless_account()
