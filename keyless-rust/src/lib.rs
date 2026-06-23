@@ -124,19 +124,10 @@ mod ss58;
 mod types;
 
 // The test suite requires `std` (`format!`, `Vec`, dev-dependencies); without it only the
-// doc tests run.
+// doc tests run. The individual test modules live in `src/tests/`; the additional
+// per-feature gates (`serde`, `ss58`, `scale`) are applied there.
 #[cfg(all(test, feature = "std"))]
-mod tests_binary;
-#[cfg(all(test, feature = "std"))]
-mod tests_conformance;
-#[cfg(all(test, feature = "std"))]
-mod tests_encoding;
-#[cfg(all(test, feature = "std"))]
-mod tests_properties;
-#[cfg(all(test, feature = "std", feature = "serde"))]
-mod tests_serde;
-#[cfg(all(test, feature = "std", feature = "ss58"))]
-mod tests_ss58;
+mod tests;
 
 pub use keyless::*;
 #[cfg(feature = "ss58")]

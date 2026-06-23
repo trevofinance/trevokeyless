@@ -50,12 +50,17 @@ src/
                      error types
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
-  tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
-  tests_conformance.rs — verifies the committed cross-language fixture (see below)
-  tests_encoding.rs — encode→decode round-trip tests
-  tests_properties.rs — randomized property tests (deterministic inline PRNG, no extra deps)
-  tests_ss58.rs    — SS58 codec tests (feature `ss58`)
-  tests_serde.rs   — serde tests (feature `serde`)
+  tests/           — test suite (compiled only under `cfg(all(test, feature = "std"))`)
+    mod.rs         — submodule declarations; the shared test+std gate lives on the
+                     `mod tests;` line in lib.rs, so only the extra per-feature gates repeat here
+    tests_binary.rs  — byte-level structure tests (hardcoded expected byte values)
+    tests_conformance.rs — verifies the committed cross-language fixture (see below)
+    tests_encoding.rs — encode→decode round-trip tests
+    tests_properties.rs — randomized property tests (deterministic inline PRNG, no extra deps)
+    tests_ss58.rs    — SS58 codec tests (feature `ss58`)
+    tests_serde.rs   — serde tests (feature `serde`)
+    types.rs         — tests for the `types` module: AccountName, AccountId32 display/parsing,
+                       SCALE codec (feature `scale`)
 examples/
   gen_conformance.rs — generates ../../conformance/vectors.json (requires feature `ss58`)
 fuzz/
