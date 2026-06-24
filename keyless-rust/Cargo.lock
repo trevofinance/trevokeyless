@@ -393,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "trevokeyless"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "array-bytes",
  "blake2b_simd",
