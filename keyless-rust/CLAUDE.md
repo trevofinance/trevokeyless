@@ -19,6 +19,13 @@ see Cargo features below).
   Deserializing `BlockchainAccountInfo` re-validates that the embedded identifiers match
   `account_id` (SCALE `Decode` performs no such validation). Its serde shape is the externally
   tagged Rust enum — not interchangeable with the Python/TS info objects.
+- `test-accounts` — `AccountId64` / `AccountId128`: fixed-width opaque account ids for
+  Substrate runtime tests that instantiate `frame_system::Config::AccountId` at widths other
+  than 32 bytes (general, non-keyless substrate tests). Each carries a 32-byte keyless account
+  in its leading bytes, right-padded with zeros, and reuses the 32-byte codec via pad/unpad
+  conversions to `AccountId32` (`From<AccountId32>` / `to_account_id32() -> Option<AccountId32>`,
+  the latter `None` unless the padding is canonical zeros). Full `Config::AccountId` trait
+  surface under `scale`/`serde`; no SS58; no Python/TS counterpart. Off by default.
 
 ## Encoding semantics
 
@@ -50,6 +57,8 @@ src/
                      error types
   keyless.rs       — encode_account, encode_*, decode_*, is_keyless_account
   ss58.rs          — SS58 codec for AccountId32 + serde impls (features `ss58` / `serde`)
+  test_accounts.rs — AccountId64/AccountId128 padded wrappers + AccountId32 pad/unpad
+                     conversions (feature `test-accounts`)
   tests/           — test suite (compiled only under `cfg(all(test, feature = "std"))`)
     mod.rs         — submodule declarations; the shared test+std gate lives on the
                      `mod tests;` line in lib.rs, so only the extra per-feature gates repeat here
@@ -59,6 +68,7 @@ src/
     tests_properties.rs — randomized property tests (deterministic inline PRNG, no extra deps)
     tests_ss58.rs    — SS58 codec tests (feature `ss58`)
     tests_serde.rs   — serde tests (feature `serde`)
+    test_accounts.rs — AccountId64/AccountId128 pad/unpad + codec tests (feature `test-accounts`)
     types.rs         — tests for the `types` module: AccountName, AccountId32 display/parsing,
                        SCALE codec (feature `scale`)
 examples/
@@ -145,4 +155,15 @@ AccountId32::from_ss58check_expecting(address: &str, expected_format: u16) -> Re
 AccountId32::from_ss58check_with_version(address: &str) -> Result<(AccountId32, u16), Ss58Error>
 SS58_FORMAT_TREVO_ASSET_HUB: u16 = 5335
 SS58_MAX_ADDRESS_LENGTH: usize = 50  // decode rejects longer input before base58
+
+// Padded test account ids (feature `test-accounts`) — AccountId64, AccountId128
+// A 32-byte keyless account in the leading bytes, right-zero-padded to the full width. The
+// runtime's wrapper layer reuses the 32-byte encode_*/decode_account_info through these:
+AccountIdN::new([u8; N]) -> Self
+AccountIdN: From<AccountId32>            // encode: zero-pad the canonical 32-byte account
+AccountIdN::to_account_id32(&self) -> Option<AccountId32>  // decode: unpad iff trailing zeros
+AccountIdN: From<[u8; N]> + Into<[u8; N]> + AsRef<[u8; N]> + AsRef<[u8]> + Default
+AccountIdN: Display + FromStr ("0x" + 2N hex; Err = ParseAccountIdError)
+// Under `scale`: Encode/Decode/DecodeWithMemTracking/TypeInfo/MaxEncodedLen (distinct metadata
+// identities per width). Under `serde`: (de)serialize as the "0x"-prefixed hex string.
 ```

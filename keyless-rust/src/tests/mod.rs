@@ -11,6 +11,8 @@ mod tests_encoding;
 mod tests_properties;
 mod types;
 
+#[cfg(feature = "test-accounts")]
+mod test_accounts;
 #[cfg(feature = "serde")]
 mod tests_serde;
 #[cfg(feature = "ss58")]

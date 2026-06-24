@@ -90,6 +90,11 @@
 //!   validates that the embedded identifiers match `account_id`; its serialized shape is the
 //!   Rust enum representation, which differs from the info objects of the Python and
 //!   TypeScript libraries (see the type documentation).
+//! - `test-accounts` — fixed-width `AccountId64` / `AccountId128` byte containers for
+//!   Substrate runtime tests that instantiate `frame_system::Config::AccountId` at widths
+//!   other than 32 bytes. A keyless account is carried in the leading 32 bytes, right-padded
+//!   with zeros; combine with `scale` (and `serde`) for the codec/metadata trait impls such a
+//!   runtime requires. No SS58, no cross-language counterpart. Off by default.
 //!
 //! # Examples
 //!
@@ -121,6 +126,8 @@ extern crate alloc;
 mod keyless;
 #[cfg(feature = "ss58")]
 mod ss58;
+#[cfg(feature = "test-accounts")]
+mod test_accounts;
 mod types;
 
 // The test suite requires `std` (`format!`, `Vec`, dev-dependencies); without it only the
@@ -132,6 +139,8 @@ mod tests;
 pub use keyless::*;
 #[cfg(feature = "ss58")]
 pub use ss58::*;
+#[cfg(feature = "test-accounts")]
+pub use test_accounts::*;
 pub use types::*;
 
 // Compiles and runs the README example as a doctest, so the README cannot drift from the
