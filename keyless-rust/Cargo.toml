@@ -2,7 +2,7 @@
 name = "trevokeyless"
 version = "1.0.1"
 edition = "2021"
-rust-version = "1.79.0"
+rust-version = "1.85.0"
 license = "Apache-2.0"
 description = "Encoding, decoding, and classification of Trevo keyless accounts: application agent, transactional, and named."
 homepage = "https://trevo.finance"

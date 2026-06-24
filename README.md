@@ -16,7 +16,7 @@ For more detailed docs, visit the README of the specific library:
 - Python (requires Python 3.10+)
   - Sources: [GitHub](./keyless-python/)
   - Package: [PyPI](https://pypi.org/project/trevokeyless/)
-- Rust (MSRV 1.79)
+- Rust (MSRV 1.85)
   - Sources: [GitHub](./keyless-rust/)
   - Package: [Crates.io](https://crates.io/crates/trevokeyless)
 
