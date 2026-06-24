@@ -33,6 +33,12 @@ ss58 = ["dep:bs58"]
 scale = ["dep:parity-scale-codec", "dep:scale-info"]
 # Serde support: `AccountId32` (de)serializes as an SS58 string, `AccountName` as a string.
 serde = ["dep:serde", "ss58"]
+# Opaque fixed-width account ids (`AccountId64`, `AccountId128`) for Substrate runtime tests
+# that instantiate `frame_system::Config::AccountId` at widths other than 32 bytes. A keyless
+# account is carried in the leading 32 bytes (right-zero-padded); the wide types reuse the
+# 32-byte codec via pad/unpad conversions. No SS58, no cross-language counterpart. Off by
+# default; combine with `scale` (and `serde`) for the trait impls such a runtime requires.
+test-accounts = []
 
 [dependencies]
 blake2b_simd = { version = "1.0.2", default-features = false }

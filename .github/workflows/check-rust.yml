@@ -49,8 +49,8 @@ jobs:
       - name: Conformance fixture is up to date
         run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
 
-      - name: Build no_std (wasm32v1-none, ss58 + serde + scale)
-        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde,scale
+      - name: Build no_std (wasm32v1-none, ss58 + serde + scale + test-accounts)
+        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde,scale,test-accounts
 
       - name: Docs (all features)
         run: cargo doc --all-features --no-deps
@@ -78,10 +78,12 @@ jobs:
           - "--no-default-features --features ss58"
           - "--no-default-features --features serde"
           - "--no-default-features --features scale"
+          - "--no-default-features --features test-accounts"
           - "--no-default-features --features ss58,serde,scale"
           - "--features ss58"
           - "--features serde"
           - "--features scale"
+          - "--features test-accounts"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
