@@ -1,21 +1,30 @@
 [package]
 name = "trevokeyless"
-version = "1.1.0"
+version = "2.0.0"
 edition = "2021"
 rust-version = "1.85.0"
 license = "Apache-2.0"
 description = "Encoding, decoding, and classification of Trevo keyless accounts: application agent, transactional, and named."
 homepage = "https://trevo.finance"
-repository = "https://github.com/trevo-finance/trevo-keyless/"
+repository = "https://github.com/trevo-finance/trevokeyless/"
 readme = "README.md"
 keywords = ["trevo", "blockchain", "substrate", "no-std", "scale"]
 categories = ["encoding", "wasm"]
-# Repository-internal documentation and the fuzzing harness; keep both out of the
-# published crate.
-exclude = ["CLAUDE.md", "fuzz"]
+# Repository-internal documentation, the fuzzing harness, and the differential-check driver
+# (the Rust side of .github/scripts/check_cross_language.py, which has no meaning outside this
+# repository); keep them out of the published crate.
+exclude = ["CLAUDE.md", "fuzz", "examples/differential.rs"]
+
+[lints.rust]
+missing_docs = "deny"
 
 [package.metadata.docs.rs]
 all-features = true
+# Enables the `doc_cfg` annotations in the source, so docs.rs labels each feature-gated item
+# with the feature that provides it. Without this, roughly half the public surface (the whole
+# SS58 codec, AccountId64/AccountId128, the SCALE and serde impls) renders as if it were
+# always available, and users hit "no method named `to_ss58check`" after adding the crate.
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["std"]
@@ -32,6 +41,14 @@ ss58 = ["dep:bs58"]
 # MaxEncodedLen for every public type), for direct use inside a Substrate runtime.
 scale = ["dep:parity-scale-codec", "dep:scale-info"]
 # Serde support: `AccountId32` (de)serializes as an SS58 string, `AccountName` as a string.
+#
+# The `ss58` implication is PERMANENT, not a convenience to unbundle later: the
+# human-readable representation is *defined* as the SS58 address, so a `serde` without
+# `ss58` could only fall back to some other text form (hex, say) — and because Cargo
+# unifies features across the dependency graph, enabling `ss58` anywhere would then
+# silently flip every other consumer's JSON wire format from hex to SS58. A binary-only
+# serde consumer (bincode/postcard) pays the bs58 compile time for that stability;
+# that trade-off is deliberate and signed off.
 serde = ["dep:serde", "ss58"]
 # Opaque fixed-width account ids (`AccountId64`, `AccountId128`) for Substrate runtime tests
 # that instantiate `frame_system::Config::AccountId` at widths other than 32 bytes. A keyless
@@ -43,16 +60,25 @@ test-accounts = []
 [dependencies]
 blake2b_simd = { version = "1.0.2", default-features = false }
 bs58 = { version = "0.5.1", default-features = false, features = ["alloc"], optional = true }
-parity-scale-codec = { version = "3.7.5", default-features = false, features = ["max-encoded-len"], optional = true }
+# `derive` is requested explicitly: `max-encoded-len` activates the derive crate only
+# weakly (`parity-scale-codec-derive?/max-encoded-len`), so without this the Encode/Decode/
+# MaxEncodedLen derive macros reach us only via scale-info's own `derive` feature — an
+# accident that any upstream change would turn into a build failure.
+parity-scale-codec = { version = "3.7.5", default-features = false, features = ["derive", "max-encoded-len"], optional = true }
 scale-info = { version = "2.11.6", default-features = false, features = ["derive"], optional = true }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"], optional = true }
 
 [dev-dependencies]
 array-bytes = { version = "9.3.0", default-features = true }
 serde_json = { version = "1.0", default-features = true }
+serde_test = "1.0.177"
 
 # Generates the cross-language conformance fixture `conformance/vectors.json` consumed by
 # the Rust, Python, and TypeScript test suites.
 [[example]]
 name = "gen_conformance"
+required-features = ["ss58"]
+
+[[example]]
+name = "differential"
 required-features = ["ss58"]

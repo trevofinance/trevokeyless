@@ -31,7 +31,10 @@ pub(crate) fn blake2_256(data: &[u8]) -> [u8; 32] {
 /// `N <= 32` is enforced at compile time.
 fn encode_account<const N: usize>(open_part: &[u8; N]) -> AccountId32 {
     const {
-        assert!(N <= 32, "open part cannot exceed the 32-byte AccountId32");
+        assert!(
+            N <= ACCOUNT_ID_LENGTH,
+            "open part cannot exceed the 32-byte AccountId32"
+        );
     }
     let mut account_bytes = blake2_256(open_part);
     account_bytes[0..N].copy_from_slice(open_part);
@@ -65,14 +68,11 @@ pub fn encode_app_agent_account(app_agent_id: AppAgentId) -> AccountId32 {
 /// [9..=31] blake2_256(open_part)[9..=31]  — checksum
 /// ```
 #[must_use]
-pub fn encode_transactional_account(
-    app_agent_id: AppAgentId,
-    ta_id: TransactionalId,
-) -> AccountId32 {
+pub fn encode_transactional_account(identifiers: TransactionalAccountIdentifiers) -> AccountId32 {
     let mut open_part: [u8; 9] = [0u8; 9];
-    open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
+    open_part[0..4].copy_from_slice(&identifiers.app_agent_id.to_le_bytes());
     open_part[4] = TRANSACTIONAL_ACCOUNT_IDENTIFIER;
-    open_part[5..9].copy_from_slice(&ta_id.to_le_bytes());
+    open_part[5..9].copy_from_slice(&identifiers.ta_id.to_le_bytes());
 
     encode_account(&open_part)
 }
@@ -87,11 +87,11 @@ pub fn encode_transactional_account(
 /// [15..=31] blake2_256(open_part)[15..=31]  — checksum
 /// ```
 #[must_use]
-pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> AccountId32 {
+pub fn encode_named_account(identifiers: NamedAccountIdentifiers) -> AccountId32 {
     let mut open_part: [u8; 15] = [0u8; 15];
-    open_part[0..4].copy_from_slice(&app_agent_id.to_le_bytes());
+    open_part[0..4].copy_from_slice(&identifiers.app_agent_id.to_le_bytes());
     open_part[4] = NAMED_ACCOUNT_IDENTIFIER;
-    open_part[5..15].copy_from_slice(name.as_bytes());
+    open_part[5..15].copy_from_slice(identifiers.account_name.as_bytes());
 
     encode_account(&open_part)
 }
@@ -101,7 +101,10 @@ pub fn encode_named_account(app_agent_id: AppAgentId, name: AccountName) -> Acco
 /// the leading `N` bytes.
 fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
     const {
-        assert!(N <= 32, "open part cannot exceed the 32-byte AccountId32");
+        assert!(
+            N <= ACCOUNT_ID_LENGTH,
+            "open part cannot exceed the 32-byte AccountId32"
+        );
     }
     blake2_256(&account_bytes[..N])[N..] == account_bytes[N..]
 }
@@ -112,7 +115,7 @@ fn open_part_valid<const N: usize>(account_bytes: &[u8; 32]) -> bool {
 fn le_u32_at<const OFFSET: usize>(bytes: &[u8; 32]) -> u32 {
     const {
         assert!(
-            OFFSET + 4 <= 32,
+            OFFSET + 4 <= ACCOUNT_ID_LENGTH,
             "u32 read must lie within the account bytes"
         );
     }
@@ -135,21 +138,21 @@ fn le_u32_at<const OFFSET: usize>(bytes: &[u8; 32]) -> u32 {
 /// [`BlockchainAccountInfo::Regular`].
 #[must_use]
 pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
-    let account_bytes: &[u8; 32] = account.as_ref();
+    let account_bytes = account.as_bytes();
 
-    let type_identifier: AccountIdentifierType = account_bytes[4];
+    let type_identifier: u8 = account_bytes[4];
     match type_identifier {
         APP_AGENT_ACCOUNT_IDENTIFIER if open_part_valid::<5>(account_bytes) => {
             BlockchainAccountInfo::AppAgent {
                 account_id: *account,
-                app_agent_id: le_u32_at::<0>(account_bytes),
+                app_agent_id: AppAgentId::new(le_u32_at::<0>(account_bytes)),
             }
         }
         TRANSACTIONAL_ACCOUNT_IDENTIFIER if open_part_valid::<9>(account_bytes) => {
             BlockchainAccountInfo::Transactional {
                 account_id: *account,
-                app_agent_id: le_u32_at::<0>(account_bytes),
-                ta_id: le_u32_at::<5>(account_bytes),
+                app_agent_id: AppAgentId::new(le_u32_at::<0>(account_bytes)),
+                ta_id: TransactionalId::new(le_u32_at::<5>(account_bytes)),
             }
         }
         NAMED_ACCOUNT_IDENTIFIER if open_part_valid::<15>(account_bytes) => {
@@ -159,7 +162,7 @@ pub fn decode_account_info(account: &AccountId32) -> BlockchainAccountInfo {
             match AccountName::try_from(&account_bytes[5..15]) {
                 Ok(account_name) => BlockchainAccountInfo::Named {
                     account_id: *account,
-                    app_agent_id: le_u32_at::<0>(account_bytes),
+                    app_agent_id: AppAgentId::new(le_u32_at::<0>(account_bytes)),
                     account_name,
                 },
                 Err(_) => BlockchainAccountInfo::Regular {
@@ -202,19 +205,19 @@ pub fn decode_app_agent_account(account: &AccountId32) -> Result<AppAgentId, Key
 ///
 /// # Returns
 ///
-/// Returns `Ok(DecodedTransactionalAccount { app_agent_id, ta_id })` if the account passes the
+/// Returns `Ok(TransactionalAccountIdentifiers { app_agent_id, ta_id })` if the account passes the
 /// Transactional checksum verification, or
 /// `Err(KeylessDecodeError::WrongAccountType { expected: Transactional, found })` carrying the
 /// account's actual classification otherwise.
 pub fn decode_transactional_account(
     account: &AccountId32,
-) -> Result<DecodedTransactionalAccount, KeylessDecodeError> {
+) -> Result<TransactionalAccountIdentifiers, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Transactional {
             app_agent_id,
             ta_id,
             ..
-        } => Ok(DecodedTransactionalAccount {
+        } => Ok(TransactionalAccountIdentifiers {
             app_agent_id,
             ta_id,
         }),
@@ -233,19 +236,19 @@ pub fn decode_transactional_account(
 ///
 /// # Returns
 ///
-/// Returns `Ok(DecodedNamedAccount { app_agent_id, account_name })` if the account passes the
+/// Returns `Ok(NamedAccountIdentifiers { app_agent_id, account_name })` if the account passes the
 /// Named checksum verification, or
 /// `Err(KeylessDecodeError::WrongAccountType { expected: Named, found })` carrying the
 /// account's actual classification otherwise.
 pub fn decode_named_account(
     account: &AccountId32,
-) -> Result<DecodedNamedAccount, KeylessDecodeError> {
+) -> Result<NamedAccountIdentifiers, KeylessDecodeError> {
     match decode_account_info(account) {
         BlockchainAccountInfo::Named {
             app_agent_id,
             account_name,
             ..
-        } => Ok(DecodedNamedAccount {
+        } => Ok(NamedAccountIdentifiers {
             app_agent_id,
             account_name,
         }),

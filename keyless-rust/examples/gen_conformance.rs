@@ -16,6 +16,24 @@
 
 use trevokeyless::*;
 
+fn app_agent_account(app_agent_id: u32) -> AccountId32 {
+    encode_app_agent_account(AppAgentId::new(app_agent_id))
+}
+
+fn transactional_account(app_agent_id: u32, ta_id: u32) -> AccountId32 {
+    encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(app_agent_id),
+        TransactionalId::new(ta_id),
+    ))
+}
+
+fn named_account(app_agent_id: u32, account_name: AccountName) -> AccountId32 {
+    encode_named_account(NamedAccountIdentifiers::new(
+        AppAgentId::new(app_agent_id),
+        account_name,
+    ))
+}
+
 /// Deterministic xorshift64* PRNG (same construction as `tests_properties.rs`).
 struct Rng(u64);
 
@@ -85,6 +103,9 @@ fn raw_ss58(payload: &[u8], checksum_len: usize) -> String {
 fn random_name(rng: &mut Rng) -> AccountName {
     let mut bytes = [0u8; 10];
     for byte in &mut bytes {
+        // `% 64` takes xorshift64*'s statistically weakest low bits — deliberately
+        // kept: the same expression runs in the Python and TypeScript property suites,
+        // and changing it here would regenerate the committed fixture vectors.
         *byte = CHARSET[(rng.next_u64() % 64) as usize];
     }
     AccountName::new(&bytes).expect("generated from the allowed charset")
@@ -94,7 +115,7 @@ fn random_name(rng: &mut Rng) -> AccountName {
 /// explicitly rather than via `Display`, so the committed fixture is independent of the
 /// crate's rendering choices.
 fn hex(account: &AccountId32) -> String {
-    let bytes: &[u8; 32] = account.as_ref();
+    let bytes = account.as_bytes();
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -115,6 +136,30 @@ fn is_valid_hex_account_id(s: &str) -> bool {
 
 /// The fixture name of an `Ss58Error`: the Rust variant name, matched by the
 /// `Ss58Error.kind` of the TypeScript and Python implementations.
+/// The rendered message of the Python and TypeScript `AccountTypeMismatchError` — which each
+/// document themselves as sharing it with the other.
+///
+/// This crate's `KeylessDecodeError` renders a different string on purpose (Rust says
+/// *account*, the two address-level libraries say *address*; see the root CLAUDE.md), so the
+/// wording is generated here from the same `(expected, found)` pair that produces the vector,
+/// rather than read back from a `Display` impl. It is the one field of the fixture that is not
+/// this crate's own output — pinning it is what stops the Python and TypeScript wordings from
+/// drifting apart while each claims to match the other.
+fn address_mismatch_message(expected: AccountType, found: AccountType) -> String {
+    fn article(account_type: AccountType) -> &'static str {
+        if account_type == AccountType::AppAgent {
+            "an"
+        } else {
+            "a"
+        }
+    }
+    format!(
+        "Provided address is not {} {expected} address but is {} {found} address",
+        article(expected),
+        article(found)
+    )
+}
+
 fn ss58_error_kind(error: &Ss58Error) -> &'static str {
     match error {
         Ss58Error::InvalidBase58 => "InvalidBase58",
@@ -122,6 +167,16 @@ fn ss58_error_kind(error: &Ss58Error) -> &'static str {
         Ss58Error::InvalidChecksum => "InvalidChecksum",
         Ss58Error::InvalidFormat => "InvalidFormat",
         Ss58Error::UnexpectedFormat { .. } => "UnexpectedFormat",
+    }
+}
+
+/// The fixture name of an `AccountNameError`: the Rust variant name, which every
+/// implementation's account-name validation must reproduce (the length is the UTF-8 byte
+/// length, checked before the charset).
+fn account_name_error_kind(error: &AccountNameError) -> &'static str {
+    match error {
+        AccountNameError::InvalidLength => "InvalidLength",
+        AccountNameError::InvalidCharacter => "InvalidCharacter",
     }
 }
 
@@ -175,7 +230,7 @@ fn main() {
     let mut rng = Rng(0xC0DE_0001);
     let mut app_agent: Vec<String> = Vec::new();
     for id in (0..60).map(|_| rng.next_u32()).chain([0, 1, u32::MAX]) {
-        let account = encode_app_agent_account(id);
+        let account = app_agent_account(id);
         app_agent.push(format!(
             r#"{{"id":{id},"hex":{},"ss58":{}}}"#,
             js(&hex(&account)),
@@ -192,7 +247,7 @@ fn main() {
         (u32::MAX, 0),
         (u32::MAX, u32::MAX),
     ]) {
-        let account = encode_transactional_account(aa, ta);
+        let account = transactional_account(aa, ta);
         transactional.push(format!(
             r#"{{"aa":{aa},"ta":{ta},"hex":{},"ss58":{}}}"#,
             js(&hex(&account)),
@@ -218,9 +273,15 @@ fn main() {
                 .iter()
                 .map(|name| (u32::MAX, AccountName::try_from(*name).unwrap())),
         )
+        // The AppAgent-id boundary on the Named layout: the boundary names above are all
+        // paired with u32::MAX, and 60 random draws essentially never produce 0.
+        .chain(std::iter::once((
+            0,
+            AccountName::try_from("aa-zero#00").unwrap(),
+        )))
         .collect();
     for (aa, name) in named_cases {
-        let account = encode_named_account(aa, name);
+        let account = named_account(aa, name);
         named.push(format!(
             r#"{{"aa":{aa},"name":{},"hex":{},"ss58":{}}}"#,
             js(name.as_str()),
@@ -251,9 +312,9 @@ fn main() {
     // to Regular: either the open part or the stored checksum no longer matches).
     let mut rng = Rng(0xC0DE_0005);
     let accounts = [
-        encode_app_agent_account(rng.next_u32()),
-        encode_transactional_account(rng.next_u32(), rng.next_u32()),
-        encode_named_account(rng.next_u32(), random_name(&mut rng)),
+        app_agent_account(rng.next_u32()),
+        transactional_account(rng.next_u32(), rng.next_u32()),
+        named_account(rng.next_u32(), random_name(&mut rng)),
     ];
     for account in accounts {
         let original: [u8; 32] = account.into();
@@ -262,8 +323,8 @@ fn main() {
             corrupted[position] ^= xor;
             let corrupted = AccountId32::from(corrupted);
             classify.push(format!(
-                r#"{{"hex":"{}","expected":{}}}"#,
-                hex(&corrupted),
+                r#"{{"hex":{},"expected":{}}}"#,
+                js(&hex(&corrupted)),
                 classification_json(&corrupted)
             ));
         }
@@ -292,8 +353,8 @@ fn main() {
             account_bytes[15..32].copy_from_slice(&hash.as_bytes()[15..32]);
             let account = AccountId32::from(account_bytes);
             classify.push(format!(
-                r#"{{"hex":"{}","expected":{}}}"#,
-                hex(&account),
+                r#"{{"hex":{},"expected":{}}}"#,
+                js(&hex(&account)),
                 classification_json(&account)
             ));
         }
@@ -307,9 +368,9 @@ fn main() {
     // different *valid* discriminant.)
     let mut rng = Rng(0xC0DE_0008);
     let accounts = [
-        encode_app_agent_account(rng.next_u32()),
-        encode_transactional_account(rng.next_u32(), rng.next_u32()),
-        encode_named_account(rng.next_u32(), random_name(&mut rng)),
+        app_agent_account(rng.next_u32()),
+        transactional_account(rng.next_u32(), rng.next_u32()),
+        named_account(rng.next_u32(), random_name(&mut rng)),
     ];
     for account in accounts {
         let original: [u8; 32] = account.into();
@@ -326,9 +387,29 @@ fn main() {
             rewritten[4] = discriminant;
             let rewritten = AccountId32::from(rewritten);
             classify.push(format!(
-                r#"{{"hex":"{}","expected":{}}}"#,
-                hex(&rewritten),
+                r#"{{"hex":{},"expected":{}}}"#,
+                js(&hex(&rewritten)),
                 classification_json(&rewritten)
+            ));
+        }
+    }
+
+    // 4e. Valid accounts of each keyless type straight into the classify group, so the
+    // classification path is pinned on positives independently of the encoding groups
+    // (a port whose raw-account-id classify path diverged from its address-decode path
+    // would otherwise see AppAgent/Transactional positives only via `hex_valid`).
+    let mut rng = Rng(0xC0DE_000B);
+    for _ in 0..5 {
+        let accounts = [
+            app_agent_account(rng.next_u32()),
+            transactional_account(rng.next_u32(), rng.next_u32()),
+            named_account(rng.next_u32(), random_name(&mut rng)),
+        ];
+        for account in accounts {
+            classify.push(format!(
+                r#"{{"hex":{},"expected":{}}}"#,
+                js(&hex(&account)),
+                classification_json(&account)
             ));
         }
     }
@@ -393,17 +474,21 @@ fn main() {
             (account, format),
             "self check: the non-canonical spelling must decode to the same account and format"
         );
+        let canonical = account
+            .to_ss58check_with_version(format)
+            .expect("valid format");
         assert_ne!(
-            account
-                .to_ss58check_with_version(format)
-                .expect("valid format"),
-            noncanonical,
+            canonical, noncanonical,
             "self check: encoding must stay canonical (one-byte prefix)"
         );
+        // `canonical_ss58` pins the canonical spelling itself, so an encoder that
+        // produced a third spelling (neither the canonical nor the decode-only one)
+        // could not pass with the mere "re-encode differs from the input" check.
         ss58_decode_only.push(format!(
-            r#"{{"ss58":{},"hex":{},"format":{format},"reason":{}}}"#,
+            r#"{{"ss58":{},"hex":{},"format":{format},"canonical_ss58":{},"reason":{}}}"#,
             js(&noncanonical),
             js(&hex(&account)),
+            js(&canonical),
             js(&format!(
                 "non-canonical two-byte-prefix spelling of format {format}"
             ))
@@ -417,7 +502,7 @@ fn main() {
     // crate. `error_kind` pins the failure classification: the Rust `Ss58Error` variant
     // name, mirrored by the `Ss58Error.kind` of the TypeScript and Python
     // implementations — so the error taxonomy cannot drift apart unnoticed either.
-    let account_id = encode_app_agent_account(123);
+    let account_id = app_agent_account(123);
     let canonical_address = account_id.to_ss58check();
     let account: [u8; 32] = account_id.into();
     let trevo_prefix = format_prefix(SS58_FORMAT_TREVO_ASSET_HUB);
@@ -542,6 +627,23 @@ fn main() {
             "valid format-42 address, decoded expecting the Trevo format",
         ),
         (
+            // A *reserved* format is still a well-formed thing to expect: no address can
+            // carry it, so the answer is simply that this address does not match. This is
+            // the decode-side counterpart of `format_invalid_encode`, where the same value
+            // is a rejected argument — a decoder must not borrow that rejection and report
+            // an invalid-format error about a perfectly valid address.
+            account_id.to_ss58check(),
+            46,
+            "UnexpectedFormat",
+            "valid Trevo address, decoded expecting the reserved format 46",
+        ),
+        (
+            account_id.to_ss58check(),
+            47,
+            "UnexpectedFormat",
+            "valid Trevo address, decoded expecting the reserved format 47",
+        ),
+        (
             // A corrupt address of a non-expected format: the checksum failure must win
             // over the format mismatch. The format carried by an address that fails
             // validation is not trustworthy information, so reporting UnexpectedFormat
@@ -565,6 +667,16 @@ fn main() {
             "InvalidLength",
             "longer than any valid address of a 32-byte account id",
         ),
+        (
+            // Exactly at the 50-character pre-decode bound: the input passes the bound
+            // (no valid address is this long, but the bound is a deliberate
+            // over-approximation) and must then fail the structural length check — it
+            // decodes to 50 zero bytes.
+            "1".repeat(50),
+            trevo,
+            "InvalidLength",
+            "exactly at the 50-character pre-decode bound; structurally invalid (decodes to 50 zero bytes)",
+        ),
         (String::new(), trevo, "InvalidLength", "empty string"),
         (
             "0OIl".to_string(),
@@ -586,6 +698,25 @@ fn main() {
             trevo,
             "InvalidBase58",
             "canonical address with a leading space",
+        ),
+        (
+            // Control characters: the space vectors above pin ordinary whitespace, but a
+            // trimming decoder may treat tabs differently, and NUL is where C-string APIs
+            // truncate. Both must classify exactly like any other out-of-alphabet byte.
+            format!("{canonical_address}\t"),
+            trevo,
+            "InvalidBase58",
+            "canonical address with a trailing tab",
+        ),
+        (
+            format!(
+                "{}\0{}",
+                &canonical_address[..20],
+                &canonical_address[21..]
+            ),
+            trevo,
+            "InvalidBase58",
+            "canonical address with one character replaced by NUL",
         ),
         (
             // ASCII case swap of every letter. Base58 is case-sensitive, and the swap
@@ -643,15 +774,54 @@ fn main() {
             "InvalidBase58",
             "single non-ASCII character, within the length bound",
         ),
+        // Doubly-invalid payloads: a reserved or unparsable prefix *and* a wrong payload
+        // length. Every reserved/invalid-prefix vector above carries a full-length
+        // payload, so nothing else pins which error kind wins when both conditions hold.
+        // The contract is the decoder's check order: prefix and format validity are
+        // established before the exact-length check (a length class only means anything
+        // for a parsed prefix), so the format failure wins — except for a payload too
+        // short to finish parsing its two-byte prefix, which has no format to judge yet
+        // and stays a length failure.
+        (
+            raw_ss58(&payload(&[46u8], &account[..8]), 2),
+            46,
+            "InvalidFormat",
+            "reserved format 46 over an 8-byte truncated account: the format failure wins over the length",
+        ),
+        (
+            raw_ss58(&payload(&two_byte_prefix(47), &account[..8]), 2),
+            47,
+            "InvalidFormat",
+            "reserved format 47 (two-byte prefix) over an 8-byte truncated account: the format failure wins",
+        ),
+        (
+            raw_ss58(&payload(&[0x80u8], &account[..8]), 2),
+            trevo,
+            "InvalidFormat",
+            "first byte 0x80 over an 8-byte truncated account: the unparsable prefix wins over the length",
+        ),
+        (
+            raw_ss58(&[0b0100_0000u8], 0),
+            trevo,
+            "InvalidLength",
+            "lone two-byte-prefix first byte (decoded length 1): too short to parse a format at all",
+        ),
     ];
     let ss58_invalid: Vec<String> = ss58_invalid
         .into_iter()
         .map(|(address, format, error_kind, reason)| {
             // The generator must never emit a vector whose declared kind differs from
             // the actual classification of this crate (decoding with the expected
-            // format, exactly like the consuming suites).
-            let error = AccountId32::from_ss58check_expecting(&address, format)
-                .expect_err(&format!("self check: {reason:?} must not decode"));
+            // format, exactly like the consuming suites). Every vector's format is a
+            // valid parameter, so the rejection always blames the address.
+            let error = match AccountId32::from_ss58check_expecting(&address, format)
+                .expect_err(&format!("self check: {reason:?} must not decode"))
+            {
+                Ss58ExpectingError::Address(error) => error,
+                Ss58ExpectingError::InvalidExpectedFormat(error) => {
+                    panic!("self check: {reason:?} must carry a valid expected format ({error})")
+                }
+            };
             assert_eq!(
                 ss58_error_kind(&error),
                 error_kind,
@@ -667,20 +837,29 @@ fn main() {
                 _ => String::new(),
             };
             format!(
-                r#"{{"ss58":{},"format":{format},"error_kind":{}{details},"reason":{}}}"#,
+                r#"{{"ss58":{},"format":{format},"error_kind":{},"message":{}{details},"reason":{}}}"#,
                 js(&address),
                 js(error_kind),
+                // The message is read back from this crate's Display, never hand-written:
+                // it is shared verbatim with the Python and TypeScript implementations
+                // (CONTRIBUTING), and nothing enforced that before this field existed.
+                js(&error.to_string()),
                 js(reason)
             )
         })
         .collect();
 
-    // 8. Names every implementation must reject at *encode* time (wrong length or
-    // characters outside the charset). The tab, NUL, and non-ASCII entries deliberately
-    // exercise the JSON escaping of the generator and the parsers of the consuming
-    // suites. Note "héllo12345": 10 code points but 11 UTF-8 bytes — the byte-level
-    // Rust validation reports a length error while Python/TypeScript report a charset
-    // error; all three must reject it.
+    // 8. Names every implementation must reject at *encode* time, with the failure
+    // classification pinned by `error_kind` (the Rust `AccountNameError` variant name).
+    // The validation rule is: the UTF-8 *byte* length must be exactly 10
+    // (`InvalidLength`), and only then are the bytes checked against the charset
+    // (`InvalidCharacter`) — so a non-ASCII name is judged by its byte length, never by
+    // its code-point or UTF-16 length. The non-ASCII vectors below separate those three
+    // counts pairwise, so an implementation that measures the wrong unit is caught by the
+    // kind even though every vector is rejected either way. The tab, NUL, and non-ASCII
+    // entries also exercise the JSON escaping of the generator and the parsers of the
+    // consuming suites. `error_kind` is not hand-written: it is read back from this
+    // crate's own validation below.
     let named_invalid_encode: Vec<(&str, &str)> = vec![
         ("", "empty string"),
         ("short", "5 characters"),
@@ -694,18 +873,45 @@ fn main() {
         ("nul\0byte12", "10 characters, NUL outside the charset"),
         (
             "héllo12345",
-            "10 code points, 'é' outside the charset (11 UTF-8 bytes)",
+            "11 UTF-8 bytes (10 code points, 10 UTF-16 units): a length failure, not a charset one",
+        ),
+        (
+            "café12345",
+            "10 UTF-8 bytes but 9 code points: the length is right, 'é' is out of charset",
+        ),
+        (
+            "cafe\u{0301}12345",
+            "NFD spelling of \"café12345\": 11 UTF-8 bytes (10 code points) — a length failure",
+        ),
+        (
+            "🙂aaaaaaaa",
+            "12 UTF-8 bytes (9 code points, 10 UTF-16 units): a length failure",
+        ),
+        (
+            "🙂aaaaaa",
+            "10 UTF-8 bytes (7 code points, 8 UTF-16 units): the length is right, the emoji is out of charset",
+        ),
+        (
+            "ααααα",
+            "10 UTF-8 bytes (5 code points): the length is right, 'α' is out of charset",
         ),
     ];
     let named_invalid_encode: Vec<String> = named_invalid_encode
         .into_iter()
         .map(|(name, reason)| {
-            // The generator must never emit a name this crate itself accepts.
-            assert!(
-                AccountName::try_from(name).is_err(),
+            // The generator must never emit a name this crate itself accepts, and the
+            // pinned kind is read straight back from the real validation, so the fixture
+            // cannot drift from the implementation.
+            let error = AccountName::try_from(name).expect_err(&format!(
                 "self check: {reason:?} must not construct an AccountName"
-            );
-            format!(r#"{{"name":{},"reason":{}}}"#, js(name), js(reason))
+            ));
+            format!(
+                r#"{{"name":{},"error_kind":{},"message":{},"reason":{}}}"#,
+                js(name),
+                js(account_name_error_kind(&error)),
+                js(&error.to_string()),
+                js(reason)
+            )
         })
         .collect();
 
@@ -742,20 +948,41 @@ fn main() {
                 !is_valid_hex_account_id(&input),
                 "self check: {reason:?} must not be a valid hex account id"
             );
-            format!(r#"{{"input":{},"reason":{}}}"#, js(&input), js(reason))
+            // The ParseAccountIdError message is shared verbatim with the Python and
+            // TypeScript implementations; read it back from the real parse failure.
+            let error = input
+                .parse::<AccountId32>()
+                .expect_err("self check: the input must not parse");
+            format!(
+                r#"{{"input":{},"message":{},"reason":{}}}"#,
+                js(&input),
+                js(&error.to_string()),
+                js(reason)
+            )
         })
         .collect();
 
     // 10. Raw account id strings that must be *accepted*: the "0x" + 64 hex contract
     // allows both hex digit cases ([0-9a-fA-F]), and the normalized `account_id` of the
     // result is always "0x" + lowercase hex (this crate's `Display`). Pinning the
-    // acceptance keeps a future "strictness fix" in one implementation from silently
-    // diverging.
+    // acceptance — including the plain-lowercase spelling, which doubles as the
+    // identity case — keeps a future "strictness fix" in one implementation from
+    // silently diverging.
     let mut hex_valid: Vec<String> = Vec::new();
+    let regular_account = AccountId32::from([0x11u8; 32]);
+    assert_eq!(
+        decode_account_info(&regular_account).account_type(),
+        AccountType::Regular,
+        "self check: the hex_valid Regular vector must classify as Regular"
+    );
     for account in [
-        encode_app_agent_account(123),
-        encode_transactional_account(123, 456),
-        encode_named_account(123, AccountName::try_from("example123").unwrap()),
+        app_agent_account(123),
+        transactional_account(123, 456),
+        named_account(123, AccountName::try_from("example123").unwrap()),
+        // A Regular account too: mixed-case acceptance is a property of the hex
+        // contract, not of the keyless classification, so it must hold for accounts
+        // that classify as nothing.
+        regular_account,
     ] {
         let lower = hex(&account);
         let upper = lower.to_uppercase();
@@ -771,7 +998,7 @@ fn main() {
                 }
             })
             .collect();
-        for spelling in [upper, alternating] {
+        for spelling in [lower.clone(), upper, alternating] {
             let input = format!("0x{spelling}");
             // The generator must never emit a string outside the contract.
             assert!(
@@ -821,23 +1048,249 @@ fn main() {
         })
         .collect();
 
-    // 12. Typed-decoder mismatch vectors: decoding an account with the wrong typed
+    // 12. SS58 addresses fed to the *raw-account-id* entry points: the mirror image of
+    // `hex_not_an_address`. An address is never "0x" + 64 hex characters, so
+    // decode_account_id / decodeAccountId (and this crate's `FromStr`) must reject it
+    // under the hex contract rather than silently base58-decoding it. Rejection only;
+    // each implementation reports its own ParseAccountIdError.
+    let address_not_an_account_id: Vec<(String, &str)> = vec![
+        (
+            account_id.to_ss58check(),
+            "the canonical Trevo address of AppAgent(123)",
+        ),
+        (
+            account_id.to_ss58check_with_version(42).unwrap(),
+            "a valid format-42 address of the same account",
+        ),
+        (
+            boundary_address.clone(),
+            "the longest achievable valid address (49 characters)",
+        ),
+        (
+            raw_ss58(&[two_byte_prefix(0), account.to_vec()].concat(), 2),
+            "the non-canonical two-byte-prefix spelling of a format-0 address",
+        ),
+    ];
+    let address_not_an_account_id: Vec<String> = address_not_an_account_id
+        .into_iter()
+        .map(|(input, reason)| {
+            // The generator must never emit a string the raw-account-id contract accepts.
+            assert!(
+                !is_valid_hex_account_id(&input),
+                "self check: {reason:?} must not satisfy the hex contract"
+            );
+            input
+                .parse::<AccountId32>()
+                .expect_err(&format!("self check: {reason:?} must not parse"));
+            format!(r#"{{"input":{},"reason":{}}}"#, js(&input), js(reason))
+        })
+        .collect();
+
+    // 13. SS58 formats every implementation must reject at *encode* time — the reserved
+    // formats 46/47 (no address may carry them) and the formats outside the 14-bit range.
+    // The rejection is the contract; the classification is deliberately *not* pinned,
+    // because an unusable format is a rejected *argument*, and each language reports a bad
+    // argument in its own way: `InvalidSs58Format` in this crate, a `ValueError` in Python,
+    // a `RangeError` in TypeScript. (Reserved formats used to reach the SS58 layer in
+    // Python and TypeScript and surface as an `Ss58Error` — the error type that reports on
+    // an *address* — so the same mistake raised two different types depending on how the
+    // format was unusable. All three now reject both kinds the same way.)
+    //
+    // The `hex` field gives consumers a valid account id for their raw-account-id encoders;
+    // the keyless encode entry points must reject the same formats.
+    let format_invalid_encode: Vec<(u16, &str)> = vec![
+        (46, "reserved format 46"),
+        (47, "reserved format 47"),
+        (16384, "one above the 14-bit format range"),
+        (
+            u16::MAX,
+            "largest u16 value, outside the 14-bit format range",
+        ),
+    ];
+    let format_invalid_encode: Vec<String> = format_invalid_encode
+        .into_iter()
+        .map(|(format, reason)| {
+            // The generator must never emit a format this crate's encoder accepts.
+            account_id
+                .to_ss58check_with_version(format)
+                .expect_err(&format!("self check: format {format} must not encode"));
+            format!(
+                r#"{{"hex":{},"format":{format},"reason":{}}}"#,
+                js(&h),
+                js(reason)
+            )
+        })
+        .collect();
+
+    // 14. SS58 formats that every implementation must reject as the *expected* format of a
+    // decode call, against an otherwise valid address. `format_invalid_encode` above pins the
+    // encode side only; nothing pinned the decode side, so the three could silently diverge on
+    // whether 16384 is rejected at all (this crate returns `Ss58Error::InvalidFormat`, Python
+    // raises `ValueError`, TypeScript raises `RangeError` — the rejection is the contract, the
+    // classification is per-language, so no `error_kind`).
+    //
+    // The reserved formats 46 and 47 are deliberately absent: they are *valid* parameters. No
+    // address can carry them, so all three report the address's own mismatch instead, which the
+    // `ss58_invalid` group already covers.
+    let valid_address = account_id.to_ss58check();
+    let format_invalid_decode: Vec<(u16, &str)> = vec![
+        (16384, "one above the 14-bit format range"),
+        (
+            u16::MAX,
+            "largest u16 value, outside the 14-bit format range",
+        ),
+    ];
+    let format_invalid_decode: Vec<String> = format_invalid_decode
+        .into_iter()
+        .map(|(format, reason)| {
+            // The generator must never emit an expected format this crate's decoder accepts —
+            // and the rejection must blame the parameter, never the (valid) address.
+            match AccountId32::from_ss58check_expecting(&valid_address, format) {
+                Err(Ss58ExpectingError::InvalidExpectedFormat(error)) => {
+                    assert_eq!(error.format(), format, "self check: rejected argument")
+                }
+                other => panic!(
+                    "self check: expected format {format} must be rejected as a parameter, \
+                     got {other:?}"
+                ),
+            }
+            // The address itself is valid, so the rejection can only come from the parameter.
+            assert!(
+                AccountId32::from_ss58check(&valid_address).is_ok(),
+                "self check: the address must otherwise decode"
+            );
+            format!(
+                r#"{{"ss58":{},"format":{format},"reason":{}}}"#,
+                js(&valid_address),
+                js(reason)
+            )
+        })
+        .collect();
+
+    // 15. Format values that exist only at the host-language boundary: JSON-representable
+    // values that are not u16-typed (boolean, negative, fractional, beyond u16), fed both to
+    // the encode entry points (as `ss58_format`) and to the decode entry points (as the
+    // expected format). `format_invalid_encode`/`format_invalid_decode` above pin only u16
+    // values, which this crate's type system already excludes; this group exists for the
+    // Python and TypeScript implementations, whose runtime format validation must reject
+    // these before any payload work — exactly as `u32_invalid_encode` below does for the
+    // identifiers. Rejection is the contract; the classification is per-language (Python
+    // TypeError/ValueError, TypeScript RangeError), so no `error_kind`.
+    //
+    // One host-value class is deliberately absent: negative zero. JSON `-0` parses to an
+    // accepted int 0 in Python but to a rejected -0 double in JavaScript, so no shared
+    // vector can pin it; the per-language adversarial suites cover it (see
+    // conformance/README.md).
+    let format_invalid_host: Vec<(&str, &str)> = vec![
+        ("-1", "negative"),
+        ("1.5", "not an integer"),
+        (
+            "true",
+            "boolean true: not an integer format, even where bool subclasses int",
+        ),
+        (
+            "4294967296",
+            "2^32: far above the 14-bit format range yet exactly representable in IEEE-754",
+        ),
+        ("-4294967296", "-2^32: a large negative"),
+    ];
+    let format_invalid_host: Vec<String> = format_invalid_host
+        .into_iter()
+        .map(|(value, reason)| {
+            // Self check: none of these is u16-representable — which is exactly why the
+            // group exists for the host languages and there is nothing to call here.
+            assert!(
+                value.parse::<u16>().is_err(),
+                "self check: {value} must not be a valid u16"
+            );
+            format!(
+                r#"{{"hex":{},"ss58":{},"value":{value},"reason":{}}}"#,
+                js(&h),
+                js(&valid_address),
+                js(reason)
+            )
+        })
+        .collect();
+
+    // 16. Identifier values every implementation must reject at *encode* time. This crate
+    // enforces the u32 range through the type system, so these are unrepresentable here and the
+    // group exists for the Python and TypeScript implementations, whose runtime `AppAgentId` /
+    // `TransactionalId` constructors must reject them. Rejection is the contract; the
+    // classification is per-language (Python splits TypeError/ValueError along the wrong-type
+    // vs wrong-value line, TypeScript raises RangeError for both), so no `error_kind`.
+    let u32_invalid_encode: Vec<(&str, &str)> = vec![
+        ("-1", "negative"),
+        ("4294967296", "one above u32::MAX"),
+        ("1.5", "not an integer"),
+        ("9007199254740993", "beyond IEEE-754 exact integer range"),
+        (
+            "true",
+            "boolean true: not an integer identifier, even where bool subclasses int",
+        ),
+        (
+            "1099511627776",
+            "2^40: far above u32::MAX yet exactly representable in IEEE-754",
+        ),
+        ("-4294967296", "-2^32: a large negative"),
+    ];
+    let u32_invalid_encode: Vec<String> = u32_invalid_encode
+        .into_iter()
+        .map(|(value, reason)| {
+            // Self check: none of these is a u32. Parsing as u32 must fail for every one.
+            assert!(
+                value.parse::<u32>().is_err(),
+                "self check: {value} must not be a valid u32"
+            );
+            format!(r#"{{"value":{value},"reason":{}}}"#, js(reason))
+        })
+        .collect();
+
+    // 17. The exported constant *values*, read from this crate's own constants. The
+    // behavior at the bounds is pinned by other groups (the exact-50-byte address, the
+    // 2^32-1/2^32 identifiers, format 16383); this pins the constants themselves, which
+    // the READMEs tell users to rely on and which every implementation exports under the
+    // same name — except `U32_MAX`, which Python and TypeScript export while Rust callers
+    // use the native `u32::MAX`.
+    let constants: Vec<String> = [
+        ("ACCOUNT_ID_LENGTH", ACCOUNT_ID_LENGTH as u64),
+        ("ACCOUNT_NAME_LENGTH", ACCOUNT_NAME_LENGTH as u64),
+        (
+            "APP_AGENT_ACCOUNT_IDENTIFIER",
+            u64::from(APP_AGENT_ACCOUNT_IDENTIFIER),
+        ),
+        (
+            "TRANSACTIONAL_ACCOUNT_IDENTIFIER",
+            u64::from(TRANSACTIONAL_ACCOUNT_IDENTIFIER),
+        ),
+        (
+            "NAMED_ACCOUNT_IDENTIFIER",
+            u64::from(NAMED_ACCOUNT_IDENTIFIER),
+        ),
+        (
+            "SS58_FORMAT_TREVO_ASSET_HUB",
+            u64::from(SS58_FORMAT_TREVO_ASSET_HUB),
+        ),
+        ("SS58_MAX_ADDRESS_LENGTH", SS58_MAX_ADDRESS_LENGTH as u64),
+        ("U32_MAX", u64::from(u32::MAX)),
+    ]
+    .into_iter()
+    .map(|(name, value)| format!(r#"{{"name":{},"value":{value}}}"#, js(name)))
+    .collect();
+
+    // 18. Typed-decoder mismatch vectors: decoding an account with the wrong typed
     // decoder yields KeylessDecodeError::WrongAccountType { expected, found }. The
     // (expected, found) pair is the cross-language contract (the rendered *message* is
     // per-language); pin it for every (decoder, actual-type) mismatch, including the
     // Regular fall-through.
     let mut rng = Rng(0xC0DE_000A);
     let mismatch_accounts = [
+        (app_agent_account(rng.next_u32()), AccountType::AppAgent),
         (
-            encode_app_agent_account(rng.next_u32()),
-            AccountType::AppAgent,
-        ),
-        (
-            encode_transactional_account(rng.next_u32(), rng.next_u32()),
+            transactional_account(rng.next_u32(), rng.next_u32()),
             AccountType::Transactional,
         ),
         (
-            encode_named_account(rng.next_u32(), random_name(&mut rng)),
+            named_account(rng.next_u32(), random_name(&mut rng)),
             AccountType::Named,
         ),
         (AccountId32::from([0x11u8; 32]), AccountType::Regular),
@@ -865,11 +1318,12 @@ fn main() {
             );
             assert_eq!(found, actual_type, "self check: found matches the account");
             type_mismatch.push(format!(
-                r#"{{"hex":{},"ss58":{},"decode_as":{},"found":{}}}"#,
+                r#"{{"hex":{},"ss58":{},"decode_as":{},"found":{},"address_message":{}}}"#,
                 js(&hex(&account)),
                 js(&account.to_ss58check()),
                 js(&format!("{decode_as}")),
-                js(&format!("{actual_type}"))
+                js(&format!("{actual_type}")),
+                js(&address_mismatch_message(decode_as, actual_type))
             ));
         }
     }
@@ -886,6 +1340,16 @@ fn main() {
     print_group("hex_invalid", &hex_invalid, false);
     print_group("hex_valid", &hex_valid, false);
     print_group("hex_not_an_address", &hex_not_an_address, false);
+    print_group(
+        "address_not_an_account_id",
+        &address_not_an_account_id,
+        false,
+    );
+    print_group("format_invalid_encode", &format_invalid_encode, false);
+    print_group("format_invalid_decode", &format_invalid_decode, false);
+    print_group("format_invalid_host", &format_invalid_host, false);
+    print_group("u32_invalid_encode", &u32_invalid_encode, false);
+    print_group("constants", &constants, false);
     print_group("type_mismatch", &type_mismatch, true);
     println!("}}");
 }

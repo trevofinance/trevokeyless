@@ -23,21 +23,20 @@ const SS58_FORMAT_MAX: u16 = 0b0011_1111_1111_1111;
 /// Checksum length for 32-byte account ids.
 const SS58_CHECKSUM_LENGTH: usize = 2;
 
-/// Maximum length in characters of a valid SS58 address for a 32-byte account id: the
-/// payload is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits,
-/// and each base58 character carries log2(58) ≈ 5.858 bits, so a valid address has at most
-/// ceil(288 / 5.858) = 50 characters. [`AccountId32::from_ss58check_with_version`] rejects
-/// longer input before base58 decoding, whose cost grows quadratically with the input
-/// length; callers handling untrusted address strings can apply the same bound up front.
+/// Conservative pre-decode length bound for an SS58 address of a 32-byte account id.
+/// The generic 36-byte payload-size calculation gives 50 base58 characters;
+/// [`AccountId32::from_ss58check_with_version`] rejects longer input before base58
+/// decoding, whose cost grows quadratically with the input length. Callers handling
+/// untrusted address strings can apply the same bound up front.
 ///
 /// The bound is applied to the **UTF-8 byte length** of the input (`str::len`), which is
 /// identical to the character count for the all-ASCII base58 alphabet; the Python and
 /// TypeScript trevokeyless libraries export the same constant and apply the same
 /// byte-length rule, so the rejection kind of non-ASCII garbage cannot drift.
 ///
-/// The bound is a safe over-approximation: the first payload byte of a valid address is
-/// at most `0x7F`, so the payload value stays below 2²⁸⁷ and the longest achievable
-/// address is 49 characters (pinned by the all-`0xFF`/format-16383 conformance vector).
+/// This is deliberately a safe over-approximation, not the maximum achievable valid
+/// spelling: the prefix limits the payload below 2²⁸⁷, making the true maximum 49
+/// characters (pinned by the all-`0xFF`/format-16383 conformance vector).
 pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 
 /// Error returned by the SS58 decoding (and encoding, for invalid formats) functions.
@@ -46,6 +45,12 @@ pub const SS58_MAX_ADDRESS_LENGTH: usize = 50;
 /// error taxonomy shared with the Python and TypeScript implementations (`Ss58Error.kind`
 /// in both) and pinned by the conformance fixture. Adding a variant
 /// is a breaking change of that cross-language contract, not a routine extension.
+//
+// Intentionally derives neither the SCALE (`Encode`/`Decode`/…) nor the serde traits that
+// `AccountNameError` and `KeylessDecodeError` carry: an `Ss58Error` describes a *decode-time*
+// failure of an address *string*, not a value that is ever stored or transmitted on the
+// SCALE/serde wire. The other two errors can surface as pallet errors and so must round-trip;
+// SS58 decoding happens off-chain, so this one has no wire form to define.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Ss58Error {
     /// The string is not valid base58.
@@ -67,8 +72,7 @@ pub enum Ss58Error {
     },
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Ss58Error {}
+impl core::error::Error for Ss58Error {}
 
 impl core::fmt::Display for Ss58Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -80,6 +84,132 @@ impl core::fmt::Display for Ss58Error {
             Self::UnexpectedFormat { expected, found } => {
                 write!(f, "Expected SS58 format {expected} but found {found}")
             }
+        }
+    }
+}
+
+/// Error returned by [`AccountId32::to_ss58check_with_version`] — the requested SS58 format is
+/// reserved (46, 47) or outside the 14-bit range — and carried by
+/// [`Ss58ExpectingError::InvalidExpectedFormat`] when the *decoder's* `expected_format`
+/// argument is out of range.
+///
+/// This is the *only* way SS58 encoding can fail. It is deliberately not an [`Ss58Error`]:
+/// a rejected format is a rejected *argument*, not a statement about an address. Encoding has
+/// no base58 to parse, no checksum to verify and no expected format to compare
+/// against, so three of that enum's five variants are unreachable for an encoder and callers
+/// should not have to match on them. The Python
+/// and TypeScript implementations classify it the same way: a `ValueError` and a `RangeError`
+/// respectively, never their `Ss58Error`, which reports on an *address*. That holds for
+/// **both** ways a format can be unusable at encode time — reserved (46, 47) and outside the
+/// 14-bit range — so a caller catching the argument-error type catches every rejected format.
+/// Pinned by the `format_invalid_encode` and `format_invalid_decode` conformance groups, which
+/// for that reason pin the rejection but not the classification.
+///
+/// Note the encoder and the decoder reject different sets. A reserved format can never be
+/// encoded, but it is still a well-formed *expected* format for a decoder — the answer is
+/// simply that no address matches, i.e. [`Ss58Error::UnexpectedFormat`]; only an
+/// `expected_format` outside the 14-bit range is a rejected decoder argument. See
+/// [`AccountId32::from_ss58check_expecting`].
+///
+/// Converts into [`Ss58Error::InvalidFormat`] via [`From`] for callers that want a single error
+/// type across encoding and decoding, and renders the same message.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct InvalidSs58Format {
+    format: u16,
+}
+
+impl InvalidSs58Format {
+    pub(crate) const fn new(format: u16) -> Self {
+        Self { format }
+    }
+
+    /// Returns the rejected format.
+    pub const fn format(self) -> u16 {
+        self.format
+    }
+}
+
+impl core::error::Error for InvalidSs58Format {}
+
+/// The message is shared verbatim with [`Ss58Error::InvalidFormat`] and with the Python and
+/// TypeScript implementations.
+impl core::fmt::Display for InvalidSs58Format {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("SS58 format is invalid or reserved")
+    }
+}
+
+impl From<InvalidSs58Format> for Ss58Error {
+    fn from(_: InvalidSs58Format) -> Self {
+        Ss58Error::InvalidFormat
+    }
+}
+
+/// Error returned by [`AccountId32::from_ss58check_expecting`]: either the `expected_format`
+/// argument was itself rejected, or the address failed.
+///
+/// The split keeps the decoder's taxonomy aligned with the encoder's ([`InvalidSs58Format`])
+/// and with the Python and TypeScript implementations, whose decode entry points raise their
+/// parameter-validation errors — a `ValueError` and a `RangeError` — for a bad `ss58_format`
+/// argument, never their `Ss58Error`, which reports on an *address*. An `expected_format`
+/// outside the 14-bit range is the caller's own bug and is reported as
+/// [`InvalidExpectedFormat`](Self::InvalidExpectedFormat) before the address is even looked
+/// at; everything the *address* can be blamed for — including a valid address of a different
+/// format — arrives as [`Address`](Self::Address).
+///
+/// The reserved formats 46 and 47 are accepted as a parameter: they are well-formed things to
+/// *expect*. No valid address can carry them, so the result is the address's own validation
+/// error or an [`Ss58Error::UnexpectedFormat`], matching the other implementations.
+///
+/// Converts into [`Ss58Error`] via [`From`] for callers that want the single address-level
+/// taxonomy: the parameter branch folds into [`Ss58Error::InvalidFormat`], exactly like
+/// [`InvalidSs58Format`]'s own conversion.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Ss58ExpectingError {
+    /// The `expected_format` argument is outside the 14-bit range: a rejected *argument*,
+    /// not a statement about the address (which was not examined).
+    InvalidExpectedFormat(InvalidSs58Format),
+    /// The address failed validation (structure, length, checksum), or is valid but carries
+    /// a format other than the expected one.
+    Address(Ss58Error),
+}
+
+impl core::error::Error for Ss58ExpectingError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::InvalidExpectedFormat(error) => Some(error),
+            Self::Address(error) => Some(error),
+        }
+    }
+}
+
+/// Renders the inner error's message, so every wording stays the shared cross-language one.
+impl core::fmt::Display for Ss58ExpectingError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::InvalidExpectedFormat(error) => error.fmt(f),
+            Self::Address(error) => error.fmt(f),
+        }
+    }
+}
+
+impl From<InvalidSs58Format> for Ss58ExpectingError {
+    fn from(error: InvalidSs58Format) -> Self {
+        Self::InvalidExpectedFormat(error)
+    }
+}
+
+impl From<Ss58Error> for Ss58ExpectingError {
+    fn from(error: Ss58Error) -> Self {
+        Self::Address(error)
+    }
+}
+
+impl From<Ss58ExpectingError> for Ss58Error {
+    fn from(error: Ss58ExpectingError) -> Self {
+        match error {
+            Ss58ExpectingError::InvalidExpectedFormat(error) => error.into(),
+            Ss58ExpectingError::Address(error) => error,
         }
     }
 }
@@ -104,14 +234,16 @@ fn ss58hash(data: &[u8]) -> [u8; 64] {
         .expect("slice is always the necessary length")
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "ss58")))]
 impl AccountId32 {
     /// Encodes the account id as an SS58 address with the given format.
     ///
-    /// Returns [`Ss58Error::InvalidFormat`] if `format` is reserved (46, 47) or
-    /// greater than 16383.
-    pub fn to_ss58check_with_version(&self, format: u16) -> Result<String, Ss58Error> {
+    /// Returns [`InvalidSs58Format`] if `format` is reserved (46, 47) or greater than 16383 —
+    /// the only way encoding can fail. It converts into [`Ss58Error::InvalidFormat`] with `?`
+    /// or `.into()` if the caller works in terms of [`Ss58Error`].
+    pub fn to_ss58check_with_version(&self, format: u16) -> Result<String, InvalidSs58Format> {
         if format_invalid(format) {
-            return Err(Ss58Error::InvalidFormat);
+            return Err(InvalidSs58Format::new(format));
         }
 
         let mut payload: Vec<u8> = Vec::with_capacity(2 + 32 + SS58_CHECKSUM_LENGTH);
@@ -124,7 +256,7 @@ impl AccountId32 {
             payload.push((((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000) as u8);
             payload.push(((format >> 8) | ((format & 0b0000_0000_0000_0011) << 6)) as u8);
         }
-        let account_bytes: &[u8; 32] = self.as_ref();
+        let account_bytes = self.as_bytes();
         payload.extend_from_slice(account_bytes);
 
         let checksum = ss58hash(&payload);
@@ -192,27 +324,37 @@ impl AccountId32 {
 
     /// Decodes an SS58 address, requiring the given expected format.
     ///
-    /// The address is fully validated first — structure, length, checksum — exactly like
+    /// The `expected_format` argument is validated first: a value outside the 14-bit range
+    /// returns [`Ss58ExpectingError::InvalidExpectedFormat`] before the address is examined
+    /// (a caller parameter is a programmer error; the address is data, often untrusted —
+    /// the caller's own bug is reported first, exactly like the Python and TypeScript
+    /// parameter-validation errors). The reserved formats 46 and 47 are accepted as a
+    /// parameter — no valid address can carry them, so the result is the address's own
+    /// validation error or an `UnexpectedFormat`, matching the other implementations.
+    ///
+    /// The address is then fully validated — structure, length, checksum — exactly like
     /// [`from_ss58check_with_version`](Self::from_ss58check_with_version); only then is
     /// the embedded format compared, so an invalid address reports its validation error,
     /// never a misleading [`Ss58Error::UnexpectedFormat`] (the format carried by an
     /// address that fails validation is not trustworthy information). This is the
     /// construction behind the `ss58_format` parameter of the Python and TypeScript
     /// decode entry points and behind the conformance fixture's rejection vectors.
-    ///
-    /// An `expected_format` outside the 14-bit range returns
-    /// [`Ss58Error::InvalidFormat`] up front (the Python and TypeScript implementations
-    /// reject such parameters with their parameter-validation errors). The reserved
-    /// formats 46 and 47 are accepted as a parameter — no valid address can carry them,
-    /// so the result is the address's own validation error or an `UnexpectedFormat`,
-    /// matching the other implementations.
     pub fn from_ss58check_expecting(
         address: &str,
         expected_format: u16,
-    ) -> Result<Self, Ss58Error> {
+    ) -> Result<Self, Ss58ExpectingError> {
         if expected_format > SS58_FORMAT_MAX {
-            return Err(Ss58Error::InvalidFormat);
+            return Err(Ss58ExpectingError::InvalidExpectedFormat(
+                InvalidSs58Format::new(expected_format),
+            ));
         }
+        Self::decode_expecting_valid(address, expected_format).map_err(Ss58ExpectingError::Address)
+    }
+
+    /// The shared decode-and-compare step behind [`from_ss58check_expecting`]
+    /// (which validates the format argument first) and [`from_ss58check`] (whose constant
+    /// format needs no validation, keeping its error the plain address-level [`Ss58Error`]).
+    fn decode_expecting_valid(address: &str, expected_format: u16) -> Result<Self, Ss58Error> {
         let (account, found) = Self::from_ss58check_with_version(address)?;
         if found != expected_format {
             return Err(Ss58Error::UnexpectedFormat {
@@ -226,30 +368,93 @@ impl AccountId32 {
     /// Decodes an SS58 address with the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
     ///
     /// Returns [`Ss58Error::UnexpectedFormat`] if the address is valid but carries a
-    /// different format. Equivalent to
+    /// different format. Behaves like
     /// [`from_ss58check_expecting`](Self::from_ss58check_expecting) with
-    /// [`SS58_FORMAT_TREVO_ASSET_HUB`].
+    /// [`SS58_FORMAT_TREVO_ASSET_HUB`], but keeps the plain [`Ss58Error`]: the format is a
+    /// known-valid constant, so the parameter-rejection branch cannot occur.
     pub fn from_ss58check(address: &str) -> Result<Self, Ss58Error> {
-        Self::from_ss58check_expecting(address, SS58_FORMAT_TREVO_ASSET_HUB)
+        Self::decode_expecting_valid(address, SS58_FORMAT_TREVO_ASSET_HUB)
     }
 }
 
-/// `AccountId32` serializes as its SS58 address string in the Trevo format
-/// ([`SS58_FORMAT_TREVO_ASSET_HUB`]), matching the address representation used by the
-/// Python and TypeScript trevokeyless libraries.
+/// Into a **human-readable** format (JSON, YAML, TOML…), `AccountId32` serializes as its
+/// SS58 address string in the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]) — the address
+/// representation used by the Python and TypeScript trevokeyless libraries, and the one a
+/// person reading the document expects.
+///
+/// Into a **binary** format (bincode, postcard, MessagePack…), it serializes as the raw 32
+/// account-id bytes. Those formats are for machines: the 49-character base58 text is four
+/// times the size, costs a base58 encode and a Blake2b checksum per value, and — for a
+/// format that never sees a human — encodes nothing the bytes do not. Some binary formats
+/// cannot even represent the string form usefully.
+///
+/// `is_human_readable()` is serde's standard hook for exactly this split. Getting it wrong
+/// is not merely wasteful: it silently locks every `AccountId32` field of every downstream
+/// struct into a text encoding on the wire, which is the sort of thing that is very hard to
+/// change later.
 #[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl serde::Serialize for AccountId32 {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_ss58check())
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&self.to_ss58check())
+        } else {
+            serializer.serialize_bytes(self.as_bytes())
+        }
     }
 }
 
-/// `AccountId32` deserializes from an SS58 address string, requiring the Trevo format
-/// ([`SS58_FORMAT_TREVO_ASSET_HUB`]).
+/// The mirror of [`Serialize`](serde::Serialize): from a human-readable format an SS58
+/// address string in the Trevo format ([`SS58_FORMAT_TREVO_ASSET_HUB`]); from a binary
+/// format the raw 32 account-id bytes.
 #[cfg(feature = "serde")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl<'de> serde::Deserialize<'de> for AccountId32 {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        AccountId32::from_ss58check(&s).map_err(serde::de::Error::custom)
+        if deserializer.is_human_readable() {
+            let s = String::deserialize(deserializer)?;
+            AccountId32::from_ss58check(&s).map_err(serde::de::Error::custom)
+        } else {
+            deserializer.deserialize_bytes(AccountIdBytesVisitor)
+        }
+    }
+}
+
+/// Accepts the raw account-id bytes from a binary format. `visit_seq` is needed as well as
+/// `visit_bytes`: several binary formats (bincode among them) hand a byte sequence to the
+/// visitor element by element rather than as one borrowed slice.
+#[cfg(feature = "serde")]
+struct AccountIdBytesVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> serde::de::Visitor<'de> for AccountIdBytesVisitor {
+    type Value = AccountId32;
+
+    fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "{} raw account id bytes",
+            crate::types::ACCOUNT_ID_LENGTH
+        )
+    }
+
+    fn visit_bytes<E: serde::de::Error>(self, value: &[u8]) -> Result<Self::Value, E> {
+        AccountId32::try_from(value).map_err(serde::de::Error::custom)
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+        let mut bytes = [0u8; crate::types::ACCOUNT_ID_LENGTH];
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = seq
+                .next_element()?
+                .ok_or_else(|| serde::de::Error::invalid_length(index, &self))?;
+        }
+        if seq.next_element::<u8>()?.is_some() {
+            return Err(serde::de::Error::invalid_length(
+                crate::types::ACCOUNT_ID_LENGTH + 1,
+                &self,
+            ));
+        }
+        Ok(AccountId32::new(bytes))
     }
 }

@@ -17,7 +17,7 @@
 //! keyless layout — never that the embedded App Agent created, requested, or authorized the
 //! account. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an
 //! account merely because it decodes to a particular AppAgentId. See the
-//! [security model](https://github.com/trevo-finance/trevo-keyless#security-model) for the
+//! [security model](https://github.com/trevo-finance/trevokeyless#security-model) for the
 //! full contract.
 //!
 //! There are three keyless account types:
@@ -64,32 +64,46 @@
 //! - [`decode_account_info`] — classify any account and extract its embedded identifiers.
 //! - [`decode_app_agent_account`] — decode and return only the `AppAgentId` (errors if not an
 //!   App Agent account).
-//! - [`decode_transactional_account`] — decode and return a [`DecodedTransactionalAccount`].
-//! - [`decode_named_account`] — decode and return a [`DecodedNamedAccount`].
+//! - [`decode_transactional_account`] — decode and return
+//!   [`TransactionalAccountIdentifiers`].
+//! - [`decode_named_account`] — decode and return [`NamedAccountIdentifiers`].
 //! - [`is_keyless_account`] — returns `true` if the account passes keyless checksum verification
-//!   (performs up to one Blake2b-256 hash internally).
+//!   *and*, for a Named account, its name bytes pass charset validation (performs up to one
+//!   Blake2b-256 hash internally).
 //! - [`AccountId32`] renders as, and parses from, the raw interchange form `0x` + 64 hex
 //!   characters (`Display` / `FromStr`, the latter returning [`ParseAccountIdError`] on
 //!   any deviation) — the same strings the Python `decode_account_id` and TypeScript
 //!   `decodeAccountId` entry points accept.
+//! - Layout constants, shared by name with the Python and TypeScript libraries:
+//!   [`ACCOUNT_ID_LENGTH`] (32), [`ACCOUNT_NAME_LENGTH`] (10), and the byte-`[4]`
+//!   discriminants [`APP_AGENT_ACCOUNT_IDENTIFIER`], [`TRANSACTIONAL_ACCOUNT_IDENTIFIER`],
+//!   [`NAMED_ACCOUNT_IDENTIFIER`].
 //!
 //! ## Cargo features
 //!
-//! - `std` (default) — implements `std::error::Error` for the error types and enables the
-//!   `std` features of the dependencies. Disable for `no_std` builds.
+//! - `std` (default) — enables the `std` features of the dependencies. Disable for
+//!   `no_std` builds. The error types implement [`core::error::Error`] unconditionally
+//!   (`std::error::Error` is the same trait), so error handling works identically with
+//!   and without this feature.
 //! - `ss58` — SS58 address encoding/decoding for [`AccountId32`]
 //!   (`to_ss58check*` / `from_ss58check*`, [`SS58_FORMAT_TREVO_ASSET_HUB`]). Works in
 //!   `no_std` environments but requires an allocator.
 //! - `scale` — SCALE codec and metadata support: `Encode`/`Decode`/`DecodeWithMemTracking`/
 //!   `TypeInfo`/`MaxEncodedLen` implementations for every public type, for direct use inside
-//!   a Substrate runtime. SCALE `Decode` of [`BlockchainAccountInfo`] performs no
-//!   consistency validation (see the type documentation).
-//! - `serde` — serde support (implies `ss58`): [`AccountId32`] (de)serializes as an SS58
-//!   address string in the Trevo format, [`AccountName`] as a string, and the remaining
-//!   public types via derived implementations. Deserializing [`BlockchainAccountInfo`]
-//!   validates that the embedded identifiers match `account_id`; its serialized shape is the
-//!   Rust enum representation, which differs from the info objects of the Python and
-//!   TypeScript libraries (see the type documentation).
+//!   a Substrate runtime. [`BlockchainAccountInfo`] SCALE-encodes only its `AccountId32` and
+//!   derives its classification and identifiers during decode, preserving its invariant.
+//! - `serde` — serde support (implies `ss58`): [`AccountId32`] follows the serializer's
+//!   `is_human_readable()` — an SS58 address string in the Trevo format into human-readable
+//!   formats (JSON, YAML, TOML, ...), the raw 32 account-id bytes into binary formats
+//!   (bincode, postcard, MessagePack, ...). [`AccountName`] (de)serializes as a string, and
+//!   the remaining public types via derived implementations. Deserializing
+//!   [`BlockchainAccountInfo`] validates that the embedded identifiers match `account_id`;
+//!   its serialized shape is the Rust enum representation, which differs from the info
+//!   objects of the Python and TypeScript libraries (see the type documentation).
+//!   The `ss58` implication is permanent: the human-readable representation is *defined*
+//!   as the SS58 address, and Cargo unifies features across a dependency graph — a
+//!   `serde` without `ss58` falling back to another text form would let one crate's
+//!   `ss58` choice silently change every other consumer's JSON wire format.
 //! - `test-accounts` — fixed-width `AccountId64` / `AccountId128` byte containers for
 //!   Substrate runtime tests that instantiate `frame_system::Config::AccountId` at widths
 //!   other than 32 bytes. A keyless account is carried in the leading 32 bytes, right-padded
@@ -102,7 +116,7 @@
 //! use trevokeyless::*;
 //!
 //! // Encode an AppAgent root account
-//! let app_agent_id: AppAgentId = 123;
+//! let app_agent_id = AppAgentId::new(123);
 //! let account = encode_app_agent_account(app_agent_id);
 //!
 //! // Decode it back
@@ -119,8 +133,16 @@
 //! ```
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
+// Enabled by the `--cfg docsrs` rustdoc arg that [package.metadata.docs.rs] passes, so the
+// feature-gated items below are labelled with the feature that provides them. Nightly-only,
+// and inert in ordinary builds.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
-#[cfg(feature = "ss58")]
+// `serde` is listed alongside `ss58` even though it implies it: the serde impls in `types.rs`
+// and `test_accounts.rs` use `alloc::string::String` directly, so gating `alloc` on `ss58`
+// alone made those modules compile only by way of that implication — one Cargo.toml edit away
+// from an obscure no_std build failure.
+#[cfg(any(feature = "ss58", feature = "serde"))]
 extern crate alloc;
 
 mod keyless;
@@ -138,8 +160,10 @@ mod tests;
 
 pub use keyless::*;
 #[cfg(feature = "ss58")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ss58")))]
 pub use ss58::*;
 #[cfg(feature = "test-accounts")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-accounts")))]
 pub use test_accounts::*;
 pub use types::*;
 

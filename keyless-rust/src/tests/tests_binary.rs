@@ -27,7 +27,7 @@ fn test_blake2_256_known_answers() {
 
 #[test]
 fn test_app_agent_structure() {
-    let account = encode_app_agent_account(123456789);
+    let account = encode_app_agent_account(AppAgentId::new(123456789));
     let account: [u8; 32] = account.into();
 
     // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -48,11 +48,6 @@ fn test_app_agent_structure() {
         .try_into()
         .unwrap();
     assert_eq!(
-        checksum_account.len(),
-        checksum_calculated.len(),
-        "Just a self check"
-    );
-    assert_eq!(
         checksum_account, checksum_calculated,
         "Bytes after open part must contain checksum"
     );
@@ -62,11 +57,6 @@ fn test_app_agent_structure() {
         159, 169, 105, 60, 177, 233, 238, 159,
     ];
     assert_eq!(
-        checksum_account.len(),
-        checksum_hardcoded.len(),
-        "Just a self check"
-    );
-    assert_eq!(
         checksum_account, checksum_hardcoded,
         "Bytes after open part must contain checksum"
     );
@@ -74,7 +64,10 @@ fn test_app_agent_structure() {
 
 #[test]
 fn test_transactional_structure() {
-    let account = encode_transactional_account(123456789, 987654321);
+    let account = encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(123456789),
+        TransactionalId::new(987654321),
+    ));
     let account: [u8; 32] = account.into();
 
     // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -110,11 +103,6 @@ fn test_transactional_structure() {
         .try_into()
         .unwrap();
     assert_eq!(
-        checksum_account.len(),
-        checksum_calculated.len(),
-        "Just a self check"
-    );
-    assert_eq!(
         checksum_account, checksum_calculated,
         "Bytes after open part must contain checksum"
     );
@@ -124,11 +112,6 @@ fn test_transactional_structure() {
         61, 115, 11,
     ];
     assert_eq!(
-        checksum_account.len(),
-        checksum_hardcoded.len(),
-        "Just a self check"
-    );
-    assert_eq!(
         checksum_account, checksum_hardcoded,
         "Bytes after open part must contain checksum"
     );
@@ -136,7 +119,10 @@ fn test_transactional_structure() {
 
 #[test]
 fn test_named_structure() {
-    let account = encode_named_account(123456789, AccountName::new(b"test123456").unwrap());
+    let account = encode_named_account(NamedAccountIdentifiers::new(
+        AppAgentId::new(123456789),
+        AccountName::new(b"test123456").unwrap(),
+    ));
     let account: [u8; 32] = account.into();
 
     // Decimal 123456789 == little-endian bytes int 21, 205, 91, 7 == little-endian bytes HEX 15 CD 5B 07
@@ -182,11 +168,6 @@ fn test_named_structure() {
         .try_into()
         .unwrap();
     assert_eq!(
-        checksum_account.len(),
-        checksum_calculated.len(),
-        "Just a self check"
-    );
-    assert_eq!(
         checksum_account, checksum_calculated,
         "Bytes after open part must contain checksum"
     );
@@ -194,11 +175,6 @@ fn test_named_structure() {
     let checksum_hardcoded: [u8; 17] = [
         196, 27, 218, 140, 168, 186, 21, 248, 133, 112, 151, 83, 20, 219, 42, 153, 62,
     ];
-    assert_eq!(
-        checksum_account.len(),
-        checksum_hardcoded.len(),
-        "Just a self check"
-    );
     assert_eq!(
         checksum_account, checksum_hardcoded,
         "Bytes after open part must contain checksum"

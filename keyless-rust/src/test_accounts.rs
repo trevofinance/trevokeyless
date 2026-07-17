@@ -34,12 +34,12 @@ use scale_info::TypeInfo;
 
 /// Decodes one hex nibble (both digit cases). Mirrors the private helper in `types.rs`,
 /// duplicated here so this test-only feature leaves the production module untouched.
-fn nibble(c: u8) -> Result<u8, ParseAccountIdError> {
+fn nibble(c: u8, error: ParseAccountIdError) -> Result<u8, ParseAccountIdError> {
     match c {
         b'0'..=b'9' => Ok(c - b'0'),
         b'a'..=b'f' => Ok(c - b'a' + 10),
         b'A'..=b'F' => Ok(c - b'A' + 10),
-        _ => Err(ParseAccountIdError),
+        _ => Err(error),
     }
 }
 
@@ -65,6 +65,13 @@ macro_rules! define_padded_account_id {
         impl $name {
             #[doc = concat!("Creates a `", stringify!($name), "` from its raw bytes.")]
             pub const fn new(inner: [u8; $bytes]) -> Self {
+                const {
+                    assert!(
+                        $bytes >= 32 && $hex_len == 2 * $bytes,
+                        "define_padded_account_id! requires $bytes >= 32 (for the 32-byte \
+                         leading account) and $hex_len == 2 * $bytes (for the hex parser)"
+                    );
+                }
                 Self(inner)
             }
 
@@ -139,40 +146,106 @@ macro_rules! define_padded_account_id {
         }
 
         /// Parses the `0x`-prefixed hex form produced by [`Display`](core::fmt::Display): `0x`
-        /// followed by exactly this type's width in hex characters (both digit cases). Reuses
-        /// [`ParseAccountIdError`](crate::ParseAccountIdError) (whose message names the 32-byte
-        /// length, but the parser enforces this type's own width).
+        /// followed by exactly this type's width in hex characters (both digit cases). The
+        /// [`ParseAccountIdError`](crate::ParseAccountIdError) reports this type's expected width.
         impl core::str::FromStr for $name {
             type Err = ParseAccountIdError;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
-                let hex = s.strip_prefix("0x").ok_or(ParseAccountIdError)?.as_bytes();
+                let error = ParseAccountIdError::new($hex_len);
+                let hex = s.strip_prefix("0x").ok_or(error)?.as_bytes();
                 if hex.len() != $hex_len {
-                    return Err(ParseAccountIdError);
+                    return Err(error);
                 }
                 let mut bytes = [0u8; $bytes];
                 for (i, byte) in bytes.iter_mut().enumerate() {
-                    *byte = (nibble(hex[2 * i])? << 4) | nibble(hex[2 * i + 1])?;
+                    *byte = (nibble(hex[2 * i], error)? << 4)
+                        | nibble(hex[2 * i + 1], error)?;
                 }
                 Ok(Self(bytes))
             }
         }
 
-        /// Serializes as the `0x`-prefixed hex string of [`Display`](core::fmt::Display).
-        #[cfg(feature = "serde")]
-        impl serde::Serialize for $name {
-            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serializer.collect_str(self)
+        /// The `TryFrom<&str>` counterpart of [`FromStr`](core::str::FromStr), so these types
+        /// carry the same pair of string conversions as [`AccountId32`].
+        impl TryFrom<&str> for $name {
+            type Error = ParseAccountIdError;
+
+            fn try_from(s: &str) -> Result<Self, Self::Error> {
+                s.parse()
             }
         }
 
-        /// Deserializes from the `0x`-prefixed hex string accepted by
-        /// [`FromStr`](core::str::FromStr).
+        /// Into a human-readable format, the `0x`-prefixed hex string of
+        /// [`Display`](core::fmt::Display); into a binary format, the raw bytes. The same
+        /// `is_human_readable()` split as [`AccountId32`], and for the same reason: the hex
+        /// text is twice the size and encodes nothing the bytes do not.
+        #[cfg(feature = "serde")]
+        impl serde::Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                if serializer.is_human_readable() {
+                    serializer.collect_str(self)
+                } else {
+                    serializer.serialize_bytes(&self.0)
+                }
+            }
+        }
+
+        /// The mirror of [`Serialize`](serde::Serialize): from a human-readable format the
+        /// `0x`-prefixed hex string accepted by [`FromStr`](core::str::FromStr); from a
+        /// binary format the raw bytes.
         #[cfg(feature = "serde")]
         impl<'de> serde::Deserialize<'de> for $name {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                let s = alloc::string::String::deserialize(deserializer)?;
-                s.parse().map_err(serde::de::Error::custom)
+                if deserializer.is_human_readable() {
+                    let s = alloc::string::String::deserialize(deserializer)?;
+                    return s.parse().map_err(serde::de::Error::custom);
+                }
+
+                // Local to this function so the macro can define one per width without the
+                // two expansions colliding on a module-level name. `visit_seq` is needed as
+                // well as `visit_bytes`: several binary formats (bincode among them) deliver
+                // a byte sequence element by element rather than as one borrowed slice.
+                struct BytesVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for BytesVisitor {
+                    type Value = $name;
+
+                    fn expecting(
+                        &self,
+                        formatter: &mut core::fmt::Formatter<'_>,
+                    ) -> core::fmt::Result {
+                        write!(formatter, "{} raw account id bytes", $bytes)
+                    }
+
+                    fn visit_bytes<E: serde::de::Error>(
+                        self,
+                        value: &[u8],
+                    ) -> Result<Self::Value, E> {
+                        let bytes: [u8; $bytes] = value
+                            .try_into()
+                            .map_err(|_| serde::de::Error::invalid_length(value.len(), &self))?;
+                        Ok($name::new(bytes))
+                    }
+
+                    fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                        self,
+                        mut seq: A,
+                    ) -> Result<Self::Value, A::Error> {
+                        let mut bytes = [0u8; $bytes];
+                        for (index, byte) in bytes.iter_mut().enumerate() {
+                            *byte = seq
+                                .next_element()?
+                                .ok_or_else(|| serde::de::Error::invalid_length(index, &self))?;
+                        }
+                        if seq.next_element::<u8>()?.is_some() {
+                            return Err(serde::de::Error::invalid_length($bytes + 1, &self));
+                        }
+                        Ok($name::new(bytes))
+                    }
+                }
+
+                deserializer.deserialize_bytes(BytesVisitor)
             }
         }
     };

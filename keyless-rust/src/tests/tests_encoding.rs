@@ -9,7 +9,7 @@ fn account_id_from_str(account_id_str: &str) -> AccountId32 {
 
 #[test]
 fn test_app_agent_account() {
-    let app_agent_id: AppAgentId = 123;
+    let app_agent_id = AppAgentId::new(123);
     let account_id =
         account_id_from_str("7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2");
 
@@ -56,14 +56,15 @@ fn test_app_agent_account() {
 
 #[test]
 fn test_transactional_account() {
-    let app_agent_id: AppAgentId = 123;
-    let transactional_account_id: TransactionalId = 456;
+    let app_agent_id = AppAgentId::new(123);
+    let transactional_account_id = TransactionalId::new(456);
     let account_id =
         account_id_from_str("7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0");
 
     // ******************************** //
 
-    let encoded_account_id = encode_transactional_account(app_agent_id, transactional_account_id);
+    let identifiers = TransactionalAccountIdentifiers::new(app_agent_id, transactional_account_id);
+    let encoded_account_id = encode_transactional_account(identifiers);
     assert_eq!(
         encoded_account_id, account_id,
         "Couldn't encode Transactional account ID to Transactional account."
@@ -72,7 +73,7 @@ fn test_transactional_account() {
     let decoded_ids = decode_transactional_account(&account_id);
     assert_eq!(
         decoded_ids.unwrap(),
-        DecodedTransactionalAccount {
+        TransactionalAccountIdentifiers {
             app_agent_id,
             ta_id: transactional_account_id
         },
@@ -108,14 +109,15 @@ fn test_transactional_account() {
 
 #[test]
 fn test_named_account() {
-    let app_agent_id: AppAgentId = 123;
+    let app_agent_id = AppAgentId::new(123);
     let account_name = AccountName::new(b"example123").unwrap();
     let account_id =
         account_id_from_str("7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409");
 
     // ******************************** //
 
-    let encoded_account_id = encode_named_account(app_agent_id, account_name);
+    let encoded_account_id =
+        encode_named_account(NamedAccountIdentifiers::new(app_agent_id, account_name));
     assert_eq!(
         encoded_account_id, account_id,
         "Couldn't encode Named account ID to Named account."
@@ -124,7 +126,7 @@ fn test_named_account() {
     let decoded_ids = decode_named_account(&account_id);
     assert_eq!(
         decoded_ids.unwrap(),
-        DecodedNamedAccount {
+        NamedAccountIdentifiers {
             app_agent_id,
             account_name
         },
@@ -161,30 +163,42 @@ fn test_named_account() {
 #[test]
 fn test_boundary_values() {
     // AppAgentId = 0
-    let account = encode_app_agent_account(0);
-    assert_eq!(decode_app_agent_account(&account).unwrap(), 0);
+    let account = encode_app_agent_account(AppAgentId::new(0));
+    assert_eq!(
+        decode_app_agent_account(&account).unwrap(),
+        AppAgentId::new(0)
+    );
 
     // AppAgentId = u32::MAX
-    let account = encode_app_agent_account(u32::MAX);
-    assert_eq!(decode_app_agent_account(&account).unwrap(), u32::MAX);
+    let account = encode_app_agent_account(AppAgentId::new(u32::MAX));
+    assert_eq!(
+        decode_app_agent_account(&account).unwrap(),
+        AppAgentId::new(u32::MAX)
+    );
 
     // TransactionalId = 0
-    let account = encode_transactional_account(0, 0);
+    let account = encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(0),
+        TransactionalId::new(0),
+    ));
     assert_eq!(
         decode_transactional_account(&account).unwrap(),
-        DecodedTransactionalAccount {
-            app_agent_id: 0,
-            ta_id: 0
+        TransactionalAccountIdentifiers {
+            app_agent_id: AppAgentId::new(0),
+            ta_id: TransactionalId::new(0)
         }
     );
 
     // TransactionalId = u32::MAX, AppAgentId = u32::MAX
-    let account = encode_transactional_account(u32::MAX, u32::MAX);
+    let account = encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(u32::MAX),
+        TransactionalId::new(u32::MAX),
+    ));
     assert_eq!(
         decode_transactional_account(&account).unwrap(),
-        DecodedTransactionalAccount {
-            app_agent_id: u32::MAX,
-            ta_id: u32::MAX
+        TransactionalAccountIdentifiers {
+            app_agent_id: AppAgentId::new(u32::MAX),
+            ta_id: TransactionalId::new(u32::MAX)
         }
     );
 }
@@ -194,21 +208,24 @@ fn test_boundary_values_named() {
     let name = AccountName::new(b"0000000000").unwrap();
 
     // AppAgentId = 0
-    let account = encode_named_account(0, name);
+    let account = encode_named_account(NamedAccountIdentifiers::new(AppAgentId::new(0), name));
     assert_eq!(
         decode_named_account(&account).unwrap(),
-        DecodedNamedAccount {
-            app_agent_id: 0,
+        NamedAccountIdentifiers {
+            app_agent_id: AppAgentId::new(0),
             account_name: name
         }
     );
 
     // AppAgentId = u32::MAX
-    let account = encode_named_account(u32::MAX, name);
+    let account = encode_named_account(NamedAccountIdentifiers::new(
+        AppAgentId::new(u32::MAX),
+        name,
+    ));
     assert_eq!(
         decode_named_account(&account).unwrap(),
-        DecodedNamedAccount {
-            app_agent_id: u32::MAX,
+        NamedAccountIdentifiers {
+            app_agent_id: AppAgentId::new(u32::MAX),
             account_name: name
         }
     );
@@ -216,7 +233,7 @@ fn test_boundary_values_named() {
 
 #[test]
 fn test_mismatch_of_account_type() {
-    let account_aa = encode_app_agent_account(1);
+    let account_aa = encode_app_agent_account(AppAgentId::new(1));
     assert_eq!(
         decode_transactional_account(&account_aa).unwrap_err(),
         KeylessDecodeError::WrongAccountType {
@@ -234,7 +251,10 @@ fn test_mismatch_of_account_type() {
         "AppAgent account can not be considered as a Named account"
     );
 
-    let account_ta = encode_transactional_account(1, 0);
+    let account_ta = encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(1),
+        TransactionalId::new(0),
+    ));
     assert_eq!(
         decode_app_agent_account(&account_ta).unwrap_err(),
         KeylessDecodeError::WrongAccountType {
@@ -252,7 +272,10 @@ fn test_mismatch_of_account_type() {
         "Transactional account can not be considered as a Named account"
     );
 
-    let account_named = encode_named_account(1, AccountName::new(b"test123456").unwrap());
+    let account_named = encode_named_account(NamedAccountIdentifiers::new(
+        AppAgentId::new(1),
+        AccountName::new(b"test123456").unwrap(),
+    ));
     assert_eq!(
         decode_app_agent_account(&account_named).unwrap_err(),
         KeylessDecodeError::WrongAccountType {
@@ -285,18 +308,20 @@ fn test_mismatch_of_account_type() {
 #[test]
 fn test_is_keyless_account() {
     assert!(
-        is_keyless_account(&encode_app_agent_account(1)),
+        is_keyless_account(&encode_app_agent_account(AppAgentId::new(1))),
         "AppAgent account must be keyless"
     );
     assert!(
-        is_keyless_account(&encode_transactional_account(1, 2)),
+        is_keyless_account(&encode_transactional_account(
+            TransactionalAccountIdentifiers::new(AppAgentId::new(1), TransactionalId::new(2))
+        )),
         "Transactional account must be keyless"
     );
     assert!(
-        is_keyless_account(&encode_named_account(
-            1,
+        is_keyless_account(&encode_named_account(NamedAccountIdentifiers::new(
+            AppAgentId::new(1),
             AccountName::new(b"test123456").unwrap()
-        )),
+        ))),
         "Named account must be keyless"
     );
 
@@ -308,7 +333,7 @@ fn test_is_keyless_account() {
 
     // Tampered checksum → Regular.
     // Byte 10 is in the checksum region of an AppAgent account (open part is [0..5]).
-    let mut bytes: [u8; 32] = encode_app_agent_account(1).into();
+    let mut bytes: [u8; 32] = encode_app_agent_account(AppAgentId::new(1)).into();
     bytes[10] ^= 0xFF;
     assert!(
         !is_keyless_account(&AccountId32::from(bytes)),
@@ -321,7 +346,7 @@ fn test_tampered_checksum_falls_back_to_regular() {
     // Flip one byte in the checksum region of each account type and verify that
     // decode_account_info returns Regular (i.e. the integrity check rejects the account).
 
-    let mut bytes: [u8; 32] = encode_app_agent_account(42).into();
+    let mut bytes: [u8; 32] = encode_app_agent_account(AppAgentId::new(42)).into();
     bytes[10] ^= 0xFF; // corrupt a checksum byte (open part is [0..5], checksum starts at [5])
     assert_eq!(
         decode_account_info(&AccountId32::from(bytes)),
@@ -331,7 +356,11 @@ fn test_tampered_checksum_falls_back_to_regular() {
         "Tampered AppAgent checksum must decode as Regular"
     );
 
-    let mut bytes: [u8; 32] = encode_transactional_account(42, 7).into();
+    let mut bytes: [u8; 32] = encode_transactional_account(TransactionalAccountIdentifiers::new(
+        AppAgentId::new(42),
+        TransactionalId::new(7),
+    ))
+    .into();
     bytes[15] ^= 0xFF; // corrupt a checksum byte (open part is [0..9], checksum starts at [9])
     assert_eq!(
         decode_account_info(&AccountId32::from(bytes)),
@@ -341,8 +370,11 @@ fn test_tampered_checksum_falls_back_to_regular() {
         "Tampered Transactional checksum must decode as Regular"
     );
 
-    let mut bytes: [u8; 32] =
-        encode_named_account(42, AccountName::new(b"test123456").unwrap()).into();
+    let mut bytes: [u8; 32] = encode_named_account(NamedAccountIdentifiers::new(
+        AppAgentId::new(42),
+        AccountName::new(b"test123456").unwrap(),
+    ))
+    .into();
     bytes[20] ^= 0xFF; // corrupt a checksum byte (open part is [0..15], checksum starts at [15])
     assert_eq!(
         decode_account_info(&AccountId32::from(bytes)),
@@ -382,13 +414,14 @@ fn test_named_decode_invalid_charset_falls_back_to_regular() {
 
 #[test]
 fn test_blockchain_account_info_methods() {
-    let app_agent_id: AppAgentId = 42;
-    let ta_id: TransactionalId = 7;
+    let app_agent_id = AppAgentId::new(42);
+    let ta_id = TransactionalId::new(7);
     let name = AccountName::new(b"hot-wallet").unwrap();
 
     let aa_account = encode_app_agent_account(app_agent_id);
-    let ta_account = encode_transactional_account(app_agent_id, ta_id);
-    let named_account = encode_named_account(app_agent_id, name);
+    let ta_account =
+        encode_transactional_account(TransactionalAccountIdentifiers::new(app_agent_id, ta_id));
+    let named_account = encode_named_account(NamedAccountIdentifiers::new(app_agent_id, name));
     let regular_account = AccountId32::from([0u8; 32]);
 
     // account_id()

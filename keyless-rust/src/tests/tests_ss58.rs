@@ -16,15 +16,23 @@ fn alice() -> AccountId32 {
 fn test_to_ss58check_trevo_format() {
     // Vectors shared with the Python and TypeScript test suites.
     assert_eq!(
-        encode_app_agent_account(123).to_ss58check(),
+        encode_app_agent_account(AppAgentId::new(123)).to_ss58check(),
         "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp"
     );
     assert_eq!(
-        encode_transactional_account(123, 456).to_ss58check(),
+        encode_transactional_account(TransactionalAccountIdentifiers::new(
+            AppAgentId::new(123),
+            TransactionalId::new(456),
+        ))
+        .to_ss58check(),
         "ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG"
     );
     assert_eq!(
-        encode_named_account(123, AccountName::new(b"example123").unwrap()).to_ss58check(),
+        encode_named_account(NamedAccountIdentifiers::new(
+            AppAgentId::new(123),
+            AccountName::new(b"example123").unwrap(),
+        ))
+        .to_ss58check(),
         "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k"
     );
     assert_eq!(alice().to_ss58check(), ALICE_TREVO);
@@ -43,7 +51,7 @@ fn test_to_ss58check_with_version_single_byte_prefix() {
 fn test_from_ss58check() {
     assert_eq!(AccountId32::from_ss58check(ALICE_TREVO).unwrap(), alice());
 
-    let account = encode_app_agent_account(123);
+    let account = encode_app_agent_account(AppAgentId::new(123));
     assert_eq!(
         AccountId32::from_ss58check(&account.to_ss58check()).unwrap(),
         account
@@ -66,7 +74,7 @@ fn test_from_ss58check_with_version() {
 fn test_round_trip_format_boundaries() {
     // Cover both prefix encodings: single-byte (0, 63) and two-byte (64, 16383).
     // Formats 46 and 47 are reserved and tested separately.
-    let account = encode_app_agent_account(u32::MAX);
+    let account = encode_app_agent_account(AppAgentId::new(u32::MAX));
     for format in [0u16, 1, 42, 63, 64, 5335, 16383] {
         let address = account.to_ss58check_with_version(format).unwrap();
         assert_eq!(
@@ -80,21 +88,28 @@ fn test_round_trip_format_boundaries() {
 #[test]
 fn test_encode_invalid_format() {
     let account = alice();
-    assert_eq!(
-        account.to_ss58check_with_version(46).unwrap_err(),
-        Ss58Error::InvalidFormat,
-        "format 46 is reserved"
-    );
-    assert_eq!(
-        account.to_ss58check_with_version(47).unwrap_err(),
-        Ss58Error::InvalidFormat,
-        "format 47 is reserved"
-    );
-    assert_eq!(
-        account.to_ss58check_with_version(16384).unwrap_err(),
-        Ss58Error::InvalidFormat,
-        "formats above 16383 do not fit the 14-bit prefix"
-    );
+    for (format, reason) in [
+        (46u16, "format 46 is reserved"),
+        (47, "format 47 is reserved"),
+        (16384, "formats above 16383 do not fit the 14-bit prefix"),
+    ] {
+        let error = account.to_ss58check_with_version(format).unwrap_err();
+        assert_eq!(error.format(), format, "{reason}");
+        // The dedicated encode error keeps the shared wording and converts into the
+        // decode taxonomy's InvalidFormat, so callers can still use one error type.
+        assert_eq!(error.to_string(), "SS58 format is invalid or reserved");
+        assert_eq!(Ss58Error::from(error), Ss58Error::InvalidFormat, "{reason}");
+    }
+}
+
+/// The encoder's error type carries no unreachable variants: encoding cannot fail on base58,
+/// checksum, length, or an unexpected format, so it is not an `Ss58Error`.
+#[test]
+fn test_encode_error_is_not_the_decode_taxonomy() {
+    let account = alice();
+    // Compiles only while the encoder returns InvalidSs58Format.
+    let error: InvalidSs58Format = account.to_ss58check_with_version(46).unwrap_err();
+    assert_eq!(error.format(), 46);
 }
 
 #[test]
@@ -178,7 +193,7 @@ fn test_decode_rejects_surrounding_whitespace() {
     // the account: any whitespace is outside the base58 alphabet and must be rejected.
     // (Pinned cross-language by the `ss58_invalid` conformance vectors; permissive
     // decoders such as python base58 historically right-stripped their input.)
-    let address = encode_app_agent_account(123).to_ss58check();
+    let address = encode_app_agent_account(AppAgentId::new(123)).to_ss58check();
     for spelling in [
         format!("{address} "),
         format!(" {address}"),
@@ -209,7 +224,7 @@ fn test_decode_invalid_checksum() {
 fn test_decode_invalid_prefix() {
     // Prefix bytes 128..=255 are not a valid SS58 prefix encoding.
     let mut payload = vec![0x80u8];
-    payload.extend_from_slice(alice().as_ref() as &[u8; 32]);
+    payload.extend_from_slice(alice().as_bytes());
     payload.extend_from_slice(&[0, 0]);
     let address = bs58::encode(payload).into_string();
     assert_eq!(
@@ -223,7 +238,7 @@ fn test_decode_reserved_format() {
     // Build an address with reserved format 46 and a valid checksum, bypassing the
     // encoder's validation.
     let mut payload = vec![46u8];
-    payload.extend_from_slice(alice().as_ref() as &[u8; 32]);
+    payload.extend_from_slice(alice().as_bytes());
     let checksum = blake2b_simd::Params::new()
         .hash_length(64)
         .to_state()
@@ -249,7 +264,7 @@ fn test_decode_two_byte_prefix_of_small_format() {
         (((format & 0b0000_0000_1111_1100) >> 2) | 0b0100_0000) as u8,
         ((format >> 8) | ((format & 0b0000_0000_0000_0011) << 6)) as u8,
     ];
-    payload.extend_from_slice(alice().as_ref() as &[u8; 32]);
+    payload.extend_from_slice(alice().as_bytes());
     let checksum = blake2b_simd::Params::new()
         .hash_length(64)
         .to_state()
@@ -295,17 +310,17 @@ fn test_from_ss58check_expecting() {
     assert_eq!(
         AccountId32::from_ss58check_expecting(ALICE_SUBSTRATE_GENERIC, SS58_FORMAT_TREVO_ASSET_HUB)
             .unwrap_err(),
-        Ss58Error::UnexpectedFormat {
+        Ss58ExpectingError::Address(Ss58Error::UnexpectedFormat {
             expected: SS58_FORMAT_TREVO_ASSET_HUB,
             found: 42
-        }
+        })
     );
     assert_eq!(
         AccountId32::from_ss58check_expecting(ALICE_TREVO, 42).unwrap_err(),
-        Ss58Error::UnexpectedFormat {
+        Ss58ExpectingError::Address(Ss58Error::UnexpectedFormat {
             expected: 42,
             found: SS58_FORMAT_TREVO_ASSET_HUB
-        }
+        })
     );
 }
 
@@ -321,25 +336,40 @@ fn test_from_ss58check_expecting_validation_wins_over_format_mismatch() {
     let tampered = bs58::encode(payload).into_string();
     assert_eq!(
         AccountId32::from_ss58check_expecting(&tampered, SS58_FORMAT_TREVO_ASSET_HUB).unwrap_err(),
-        Ss58Error::InvalidChecksum
+        Ss58ExpectingError::Address(Ss58Error::InvalidChecksum)
     );
 }
 
 #[test]
 fn test_from_ss58check_expecting_validates_the_expected_format_parameter() {
-    // An expected format outside the 14-bit range is rejected up front; the
-    // reserved formats 46/47 are accepted as a parameter (no valid address can
-    // carry them, so a valid address of another format reports the mismatch).
+    // An expected format outside the 14-bit range is a rejected *argument*, reported
+    // through the dedicated parameter variant before the address is examined — the
+    // decoder twin of the encoder's InvalidSs58Format, and of the Python/TypeScript
+    // parameter-validation errors. The reserved formats 46/47 are accepted as a
+    // parameter (no valid address can carry them, so a valid address of another
+    // format reports the mismatch).
+    let error = AccountId32::from_ss58check_expecting(ALICE_TREVO, 16384).unwrap_err();
     assert_eq!(
-        AccountId32::from_ss58check_expecting(ALICE_TREVO, 16384).unwrap_err(),
-        Ss58Error::InvalidFormat
+        error,
+        Ss58ExpectingError::InvalidExpectedFormat(InvalidSs58Format::new(16384))
     );
+    // The parameter branch folds into the address-level taxonomy for callers that
+    // want a single error type, exactly like InvalidSs58Format's own conversion.
+    assert_eq!(Ss58Error::from(error), Ss58Error::InvalidFormat);
+    // The wrapper renders the inner error's message, so the wording stays the shared
+    // cross-language one.
+    assert_eq!(error.to_string(), "SS58 format is invalid or reserved");
     assert_eq!(
         AccountId32::from_ss58check_expecting(ALICE_TREVO, 46).unwrap_err(),
-        Ss58Error::UnexpectedFormat {
+        Ss58ExpectingError::Address(Ss58Error::UnexpectedFormat {
             expected: 46,
             found: SS58_FORMAT_TREVO_ASSET_HUB
-        }
+        })
+    );
+    // The address branch folds to itself.
+    assert_eq!(
+        Ss58Error::from(Ss58ExpectingError::Address(Ss58Error::InvalidChecksum)),
+        Ss58Error::InvalidChecksum
     );
 }
 

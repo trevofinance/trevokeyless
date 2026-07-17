@@ -1,4 +1,10 @@
 [toolchain]
+# Local-development pin only. This file sits above keyless-rust/, so rustup applies it to
+# every cargo invocation in the workspace — including in CI, where it would otherwise
+# silently override the toolchain each job installs. CI therefore exports RUSTUP_TOOLCHAIN
+# (an environment variable takes precedence over a rust-toolchain.toml file) in every Rust
+# job, so the MSRV job really runs on 1.85.0 and the stable jobs really run on stable.
+# wasm32v1-none is the no_std target CI builds.
 channel = "1.93.0"
 components = ["rustfmt", "clippy", "rust-src"]
-targets = ["wasm32-unknown-unknown", "wasm32v1-none"]
+targets = ["wasm32v1-none"]

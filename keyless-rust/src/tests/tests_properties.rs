@@ -43,6 +43,9 @@ const CHARSET: &[u8; 64] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO
 fn random_name(rng: &mut Rng) -> AccountName {
     let mut bytes = [0u8; 10];
     for byte in &mut bytes {
+        // `% 64` takes xorshift64*'s statistically weakest low bits — deliberately
+        // kept identical across the Rust/Python/TypeScript property suites and the
+        // fixture generator; changing it would desynchronize the shared streams.
         *byte = CHARSET[(rng.next_u64() % 64) as usize];
     }
     AccountName::new(&bytes).expect("generated from the allowed charset")
@@ -70,7 +73,7 @@ fn prng_matches_the_reference_sequence() {
 fn prop_app_agent_roundtrip() {
     let mut rng = Rng(0x5EED_0001);
     let ids = (0..1000).map(|_| rng.next_u32()).chain([0, 1, u32::MAX]);
-    for app_agent_id in ids {
+    for app_agent_id in ids.map(AppAgentId::new) {
         let account = encode_app_agent_account(app_agent_id);
         assert_eq!(
             decode_account_info(&account),
@@ -107,8 +110,10 @@ fn prop_transactional_roundtrip() {
         (u32::MAX, 0),
         (u32::MAX, u32::MAX),
     ]);
-    for (app_agent_id, ta_id) in ids {
-        let account = encode_transactional_account(app_agent_id, ta_id);
+    for (app_agent_id, ta_id) in ids.map(|(aa, ta)| (AppAgentId::new(aa), TransactionalId::new(ta)))
+    {
+        let identifiers = TransactionalAccountIdentifiers::new(app_agent_id, ta_id);
+        let account = encode_transactional_account(identifiers);
         assert_eq!(
             decode_account_info(&account),
             BlockchainAccountInfo::Transactional {
@@ -117,17 +122,18 @@ fn prop_transactional_roundtrip() {
                 ta_id
             }
         );
-        assert_eq!(
-            decode_transactional_account(&account),
-            Ok(DecodedTransactionalAccount {
-                app_agent_id,
-                ta_id
-            })
-        );
+        assert_eq!(decode_transactional_account(&account), Ok(identifiers));
         assert_eq!(
             decode_app_agent_account(&account),
             Err(KeylessDecodeError::WrongAccountType {
                 expected: AccountType::AppAgent,
+                found: AccountType::Transactional
+            })
+        );
+        assert_eq!(
+            decode_named_account(&account),
+            Err(KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Named,
                 found: AccountType::Transactional
             })
         );
@@ -139,9 +145,10 @@ fn prop_transactional_roundtrip() {
 fn prop_named_roundtrip() {
     let mut rng = Rng(0x5EED_0003);
     for _ in 0..1000 {
-        let app_agent_id = rng.next_u32();
+        let app_agent_id = AppAgentId::new(rng.next_u32());
         let name = random_name(&mut rng);
-        let account = encode_named_account(app_agent_id, name);
+        let identifiers = NamedAccountIdentifiers::new(app_agent_id, name);
+        let account = encode_named_account(identifiers);
         assert_eq!(
             decode_account_info(&account),
             BlockchainAccountInfo::Named {
@@ -150,17 +157,18 @@ fn prop_named_roundtrip() {
                 account_name: name
             }
         );
-        assert_eq!(
-            decode_named_account(&account),
-            Ok(DecodedNamedAccount {
-                app_agent_id,
-                account_name: name
-            })
-        );
+        assert_eq!(decode_named_account(&account), Ok(identifiers));
         assert_eq!(
             decode_app_agent_account(&account),
             Err(KeylessDecodeError::WrongAccountType {
                 expected: AccountType::AppAgent,
+                found: AccountType::Named
+            })
+        );
+        assert_eq!(
+            decode_transactional_account(&account),
+            Err(KeylessDecodeError::WrongAccountType {
+                expected: AccountType::Transactional,
                 found: AccountType::Named
             })
         );
@@ -196,9 +204,15 @@ fn prop_single_byte_corruption_demotes_to_regular() {
     // recomputed checksum no longer matches the stored bytes.
     let mut rng = Rng(0x5EED_0005);
     let accounts = [
-        encode_app_agent_account(rng.next_u32()),
-        encode_transactional_account(rng.next_u32(), rng.next_u32()),
-        encode_named_account(rng.next_u32(), random_name(&mut rng)),
+        encode_app_agent_account(AppAgentId::new(rng.next_u32())),
+        encode_transactional_account(TransactionalAccountIdentifiers::new(
+            AppAgentId::new(rng.next_u32()),
+            TransactionalId::new(rng.next_u32()),
+        )),
+        encode_named_account(NamedAccountIdentifiers::new(
+            AppAgentId::new(rng.next_u32()),
+            random_name(&mut rng),
+        )),
     ];
     for account in accounts {
         let original: [u8; 32] = account.into();

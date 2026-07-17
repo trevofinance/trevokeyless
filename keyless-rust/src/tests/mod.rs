@@ -9,6 +9,7 @@ mod tests_binary;
 mod tests_conformance;
 mod tests_encoding;
 mod tests_properties;
+mod tests_version;
 mod types;
 
 #[cfg(feature = "test-accounts")]
