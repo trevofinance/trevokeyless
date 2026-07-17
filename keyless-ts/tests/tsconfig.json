@@ -1,0 +1,16 @@
+{
+  // Type-checking context for the test files: the build tsconfig includes src/ only
+  // (so tests never end up in dist/), which would leave tests invisible to ESLint's
+  // typed linting. This project exists solely so the project service (and editors)
+  // can type the tests; nothing is emitted from it.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    // TypeScript 6 no longer auto-includes every package under node_modules/@types,
+    // so name the ambient type packages the tests rely on: the jest globals and the
+    // node builtins (@types/node arrives transitively via jest's @jest/types).
+    "types": ["jest", "node"]
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts"]
+}

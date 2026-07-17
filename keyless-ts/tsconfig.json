@@ -2,7 +2,21 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
+    // `module: commonjs` implies the deprecated node10 module resolution (explicit in
+    // tsconfig.cjs.json), which TypeScript 6 hard-errors on wherever it is spelled out —
+    // ts-jest normalizes it to explicit, so the whole suite needs this sanctioned bridge.
+    // It buys time until TS 7; migrating the CJS build's resolution is a separate
+    // decision (see the declaration note in tsconfig.cjs.json before touching it).
+    "ignoreDeprecations": "6.0",
     "strict": true,
+    // Index access on a byte array or decoded buffer yields `T | undefined`, so every
+    // `data[0]` / `accountId[4]` must be guarded (or provably in-bounds after a length
+    // check) — exactly the accesses a byte-level codec wants checked.
+    "noUncheckedIndexedAccess": true,
+    // Every file must be independently transpilable: types are re-exported with
+    // `export type`, so a bundler that erases types file-by-file (esbuild, swc, babel)
+    // cannot emit a runtime re-export of a type that does not exist at runtime.
+    "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "./dist",

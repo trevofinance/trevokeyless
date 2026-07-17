@@ -29,11 +29,13 @@ const blocks = [...readFileSync(readmePath, "utf8").matchAll(fence)].map(
   (m) => m[1],
 );
 
-// Catches a silent extraction regression (e.g. the fence tags being renamed): the
-// README currently holds the import prelude plus seven examples.
-if (blocks.length < 8) {
+// The exact block count is pinned so a silent extraction regression (e.g. the fence
+// tags being renamed) or a removed/unparsed example cannot pass silently: the README
+// currently holds the import prelude plus eleven examples. Update the number when
+// adding a README example.
+if (blocks.length !== 12) {
   console.error(
-    `expected the README's JavaScript examples to be found, got ${blocks.length} blocks`,
+    `expected exactly 12 JavaScript blocks in the README, got ${blocks.length}`,
   );
   process.exit(1);
 }
@@ -47,8 +49,12 @@ if (!prelude.includes("require(")) {
 // script file's directory chain, so the files need the cwd's node_modules (where the
 // packed tarball is installed) above them.
 const workDir = mkdtempSync(join(process.cwd(), "readme-examples-"));
+// process.exit() does not unwind, so exiting inside the try block would skip the
+// finally cleanup; the failure path only sets a flag and exits after the temp dir
+// has been removed.
+let failed = false;
 try {
-  examples.forEach((example, index) => {
+  for (const [index, example] of examples.entries()) {
     const file = join(workDir, `example-${index}.cjs`);
     writeFileSync(file, `${prelude}\n${example}`);
     const result = spawnSync(process.execPath, [file], {
@@ -57,11 +63,19 @@ try {
     });
     if (result.status !== 0) {
       console.error(`README example ${index} failed:\n${example}`);
-      console.error(result.stderr);
-      process.exit(1);
+      // The example's stdout carries its console.log diagnostics — print it too.
+      if (result.stdout) {
+        console.error(`--- stdout ---\n${result.stdout}`);
+      }
+      console.error(`--- stderr ---\n${result.stderr}`);
+      failed = true;
+      break;
     }
-  });
-  console.log(`README examples OK: ${examples.length} blocks executed`);
+  }
 } finally {
   rmSync(workDir, { recursive: true, force: true });
 }
+if (failed) {
+  process.exit(1);
+}
+console.log(`README examples OK: ${examples.length} blocks executed`);

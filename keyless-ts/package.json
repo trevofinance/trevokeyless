@@ -1,15 +1,16 @@
 {
   "name": "@trevofinance/trevokeyless",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "license": "Apache-2.0",
   "description": "Encoding, decoding, and classification of Trevo keyless addresses: application agent, transactional, and named.",
   "homepage": "https://trevo.finance",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/trevo-finance/trevo-keyless.git"
+    "url": "git+https://github.com/trevo-finance/trevokeyless.git",
+    "directory": "keyless-ts"
   },
   "bugs": {
-    "url": "https://github.com/trevo-finance/trevo-keyless/issues"
+    "url": "https://github.com/trevo-finance/trevokeyless/issues"
   },
   "keywords": [
     "trevo",
@@ -19,36 +20,70 @@
     "keyless",
     "address"
   ],
-  "main": "dist/keyless.js",
-  "types": "dist/keyless.d.ts",
+  "main": "dist/cjs/keyless.js",
+  "module": "dist/esm/keyless.js",
+  "types": "dist/cjs/keyless.d.ts",
+  "browser": "dist/esm/keyless.js",
+  "react-native": "dist/esm/keyless.js",
   "exports": {
     ".": {
-      "types": "./dist/keyless.d.ts",
-      "default": "./dist/keyless.js"
-    }
+      "react-native": {
+        "types": "./dist/esm/keyless.d.ts",
+        "default": "./dist/esm/keyless.js"
+      },
+      "browser": {
+        "types": "./dist/esm/keyless.d.ts",
+        "default": "./dist/esm/keyless.js"
+      },
+      "import": {
+        "types": "./dist/esm/keyless.d.ts",
+        "default": "./dist/esm/keyless.js"
+      },
+      "require": {
+        "types": "./dist/cjs/keyless.d.ts",
+        "default": "./dist/cjs/keyless.js"
+      },
+      "default": "./dist/esm/keyless.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/*/keyless.js",
+    "./dist/*/ss58.js"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "test": "npx jest",
-    "format-check": "npx prettier . --check",
-    "format-fix": "npx prettier . --write",
-    "lint-check": "eslint src",
-    "lint-fix": "eslint --fix src",
-    "build": "tsc",
-    "prepublishOnly": "rm -rf dist && tsc"
+    "test": "jest",
+    "format-check": "prettier . --check",
+    "format-fix": "prettier . --write",
+    "lint-check": "eslint .",
+    "lint-fix": "eslint --fix .",
+    "type-check": "tsc --noEmit && tsc -p tests/tsconfig.json",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && node scripts/write-build-metadata.mjs",
+    "check-platform-resolvers": "node scripts/check-platforms.mjs --resolver-only",
+    "check-platforms": "node scripts/check-platforms.mjs --runtime",
+    "check-package": "node scripts/check-package.mjs",
+    "prepublishOnly": "npm run build && npm run check-platform-resolvers"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
+    "esbuild": "^0.28.1",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
+    "hermes-engine-cli": "0.12.0",
     "jest": "^30.4.2",
+    "playwright": "1.61.1",
     "prettier": "3.9.4",
     "ts-jest": "^29.2.5",
     "typescript": "^6.0.3",
@@ -59,6 +94,9 @@
     "@scure/base": "^2.2.0"
   },
   "overrides": {
-    "jest-util": "^30.0.0"
+    "jest-util": "^30.0.0",
+    "js-yaml": "^4.1.1",
+    "picomatch@^2": "2.3.2",
+    "picomatch@^4": "4.0.5"
   }
 }

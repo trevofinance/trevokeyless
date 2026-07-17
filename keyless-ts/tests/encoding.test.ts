@@ -5,24 +5,31 @@ import {
   encodeTransactionalAddress,
   encodeNamedAddress,
   AccountType,
+  AccountTypeMismatchError,
   BlockchainAccountInfo,
   decodeAppAgentAddress,
   decodeTransactionalAddress,
   decodeNamedAddress,
   decodeAddress,
+  accountName,
+  appAgentId,
+  transactionalId,
 } from "../src/keyless";
 
 describe("AppAgent", () => {
   const ss58_format = 5335;
 
-  const app_agent_id = 123;
+  const app_agent_id = appAgentId(123);
   const account_id =
     "0x7b00000001293833058fc7db52fc03f6ce344bca98bd7825ff747743f1ff63e2";
   const blockchain_address =
     "ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp";
 
   it("Encodes AppAgent address correctly", () => {
-    const encoded_address = encodeAppAgentAddress(app_agent_id, ss58_format);
+    const encoded_address = encodeAppAgentAddress({
+      appAgentId: app_agent_id,
+      ss58Format: ss58_format,
+    });
     expect(encoded_address).toEqual(blockchain_address);
   });
 
@@ -41,8 +48,6 @@ describe("AppAgent", () => {
       accountId: account_id,
       accountType: AccountType.AppAgent,
       appAgentId: app_agent_id,
-      taId: null,
-      accountName: null,
     };
     expect(decoded_info).toEqual(expected_info);
   });
@@ -51,19 +56,19 @@ describe("AppAgent", () => {
 describe("Transactional", () => {
   const ss58_format = 5335;
 
-  const app_agent_id = 123;
-  const transactional_address_id = 456;
+  const app_agent_id = appAgentId(123);
+  const transactional_address_id = transactionalId(456);
   const account_id =
     "0x7b00000002c801000033399aeb61b087f1a20a58c41ea5ff1b7bfb2fda27bfc0";
   const blockchain_address =
     "ttowKp8AmjjQh4GoN7xMiQWwVyyrU1Pu7GRf5HxFmV5t43TXG";
 
   it("Encodes Transactional address correctly", () => {
-    const encoded_address = encodeTransactionalAddress(
-      app_agent_id,
-      transactional_address_id,
-      ss58_format,
-    );
+    const encoded_address = encodeTransactionalAddress({
+      appAgentId: app_agent_id,
+      taId: transactional_address_id,
+      ss58Format: ss58_format,
+    });
     expect(encoded_address).toEqual(blockchain_address);
   });
 
@@ -86,7 +91,6 @@ describe("Transactional", () => {
       accountType: AccountType.Transactional,
       appAgentId: app_agent_id,
       taId: transactional_address_id,
-      accountName: null,
     };
     expect(decoded_info).toEqual(expected_info);
   });
@@ -95,19 +99,19 @@ describe("Transactional", () => {
 describe("Named", () => {
   const ss58_format = 5335;
 
-  const app_agent_id = 123;
-  const address_name = "example123";
+  const app_agent_id = appAgentId(123);
+  const address_name = accountName("example123");
   const account_id =
     "0x7b000000036578616d706c653132330a72315aba532de9903c05a71e7d2d0409";
   const blockchain_address =
     "ttowKp8Amrt2FQ2eNdsbMsW2EEeEsEmsT8KHLvPhVppp9zs8k";
 
   it("Encodes Named address correctly", () => {
-    const encoded_address = encodeNamedAddress(
-      app_agent_id,
-      address_name,
-      ss58_format,
-    );
+    const encoded_address = encodeNamedAddress({
+      appAgentId: app_agent_id,
+      accountName: address_name,
+      ss58Format: ss58_format,
+    });
     expect(encoded_address).toEqual(blockchain_address);
   });
 
@@ -126,7 +130,6 @@ describe("Named", () => {
       accountId: account_id,
       accountType: AccountType.Named,
       appAgentId: app_agent_id,
-      taId: null,
       accountName: address_name,
     };
     expect(decoded_info).toEqual(expected_info);
@@ -166,8 +169,8 @@ describe("Named address with invalid name bytes", () => {
       const address = buildNamedAddress(nameBytes);
       const decoded_info = decodeAddress(address, ss58_format);
       expect(decoded_info.accountType).toEqual(AccountType.Regular);
-      expect(decoded_info.appAgentId).toBeNull();
-      expect(decoded_info.accountName).toBeNull();
+      expect("appAgentId" in decoded_info).toBe(false);
+      expect("accountName" in decoded_info).toBe(false);
     },
   );
 
@@ -180,6 +183,9 @@ describe("Named address with invalid name bytes", () => {
           "Provided address is not a Named address but is a Regular address",
         ),
       );
+      expect(() => decodeNamedAddress(address, ss58_format)).toThrow(
+        AccountTypeMismatchError,
+      );
     },
   );
 
@@ -187,6 +193,9 @@ describe("Named address with invalid name bytes", () => {
     const address = buildNamedAddress(Buffer.from("example123"));
     const decoded_info = decodeAddress(address, ss58_format);
     expect(decoded_info.accountType).toEqual(AccountType.Named);
+    if (decoded_info.accountType !== AccountType.Named) {
+      throw new Error("Expected a Named account-info variant");
+    }
     expect(decoded_info.appAgentId).toEqual(1);
     expect(decoded_info.accountName).toEqual("example123");
   });
@@ -200,11 +209,20 @@ describe("Mismatch of address type", () => {
     "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
   const regular_address = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4";
 
+  it("Classifies the regular address as Regular with Alice's account id", () => {
+    const info = decodeAddress(regular_address, ss58_format);
+    expect(info.accountType).toEqual(AccountType.Regular);
+    expect(info.accountId).toEqual(account_id);
+  });
+
   it("Checks that regular address can not be decoded as an AppAgent address", () => {
     expect(() => decodeAppAgentAddress(regular_address, ss58_format)).toThrow(
       new Error(
         "Provided address is not an AppAgent address but is a Regular address",
       ),
+    );
+    expect(() => decodeAppAgentAddress(regular_address, ss58_format)).toThrow(
+      AccountTypeMismatchError,
     );
   });
 
@@ -216,6 +234,9 @@ describe("Mismatch of address type", () => {
         "Provided address is not a Transactional address but is a Regular address",
       ),
     );
+    expect(() =>
+      decodeTransactionalAddress(regular_address, ss58_format),
+    ).toThrow(AccountTypeMismatchError);
   });
 
   it("Checks that regular address can not be decoded as a Named address", () => {
@@ -223,6 +244,9 @@ describe("Mismatch of address type", () => {
       new Error(
         "Provided address is not a Named address but is a Regular address",
       ),
+    );
+    expect(() => decodeNamedAddress(regular_address, ss58_format)).toThrow(
+      AccountTypeMismatchError,
     );
   });
 });

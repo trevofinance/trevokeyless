@@ -11,19 +11,27 @@
  * reduced runs cover a prefix of the Rust runs.
  */
 import { bytesToHex } from "@noble/hashes/utils.js";
+import type { AccountName } from "../src/keyless";
 import {
   AccountType,
   AccountTypeMismatchError,
   decodeAccountId,
   decodeAddress,
+  decodeAddressWithFormat,
+  decodeAppAgentAccountId,
   decodeAppAgentAddress,
+  decodeNamedAccountId,
   decodeNamedAddress,
+  decodeTransactionalAccountId,
   decodeTransactionalAddress,
   encodeAddress,
   encodeAppAgentAddress,
   encodeNamedAddress,
   encodeTransactionalAddress,
   isKeylessAddress,
+  accountName as asAccountName,
+  appAgentId as asAppAgentId,
+  transactionalId as asTransactionalId,
 } from "../src/keyless";
 
 const ss58Format = 5335;
@@ -75,12 +83,37 @@ class Rng {
 function randomName(rng: Rng): string {
   let name = "";
   for (let i = 0; i < 10; i += 1) {
+    // `% 64` takes xorshift64*'s statistically weakest low bits — deliberately kept
+    // identical across the Rust/Python/TS property suites and the fixture generator;
+    // changing it would desynchronize the shared PRNG streams.
     name += CHARSET[Number(rng.nextU64() % 64n)];
   }
   return name;
 }
 
 const ITERATIONS = 300;
+
+/**
+ * Asserts that `run` throws an `AccountTypeMismatchError` carrying exactly the given
+ * (expected, found) pair — the cross-language contract pinned by the `type_mismatch`
+ * fixture group. Asserting only the class would let a decoder report the wrong pair
+ * (the Python property suite checks the pair too).
+ */
+function expectTypeMismatch(
+  run: () => unknown,
+  expected: AccountType,
+  found: AccountType,
+): void {
+  let thrown: unknown;
+  try {
+    run();
+  } catch (error) {
+    thrown = error;
+  }
+  expect(thrown).toBeInstanceOf(AccountTypeMismatchError);
+  expect((thrown as AccountTypeMismatchError).expected).toEqual(expected);
+  expect((thrown as AccountTypeMismatchError).found).toEqual(found);
+}
 
 describe("PRNG reference sequence", () => {
   it("matches the Rust implementation", () => {
@@ -104,66 +137,116 @@ describe("Round-trip properties", () => {
     const rng = new Rng(0x5eed0001n);
     const ids = Array.from({ length: ITERATIONS }, () => rng.nextU32());
     ids.push(0, 1, U32_MAX);
-    ids.forEach((appAgentId) => {
-      const address = encodeAppAgentAddress(appAgentId, ss58Format);
+    ids.forEach((rawAppAgentId) => {
+      const appAgentId = asAppAgentId(rawAppAgentId);
+      const address = encodeAppAgentAddress({
+        appAgentId: appAgentId,
+        ss58Format: ss58Format,
+      });
       const info = decodeAddress(address, ss58Format);
       expect(info.accountType).toEqual(AccountType.AppAgent);
+      if (info.accountType !== AccountType.AppAgent) {
+        throw new Error("Expected an AppAgent account-info variant");
+      }
       expect(info.appAgentId).toEqual(appAgentId);
-      expect(info.taId).toBeNull();
-      expect(info.accountName).toBeNull();
       expect(decodeAppAgentAddress(address, ss58Format)).toEqual(appAgentId);
-      expect(() => decodeTransactionalAddress(address, ss58Format)).toThrow(
-        AccountTypeMismatchError,
+      expectTypeMismatch(
+        () => decodeTransactionalAddress(address, ss58Format),
+        AccountType.Transactional,
+        AccountType.AppAgent,
       );
-      expect(() => decodeNamedAddress(address, ss58Format)).toThrow(
-        AccountTypeMismatchError,
+      expectTypeMismatch(
+        () => decodeNamedAddress(address, ss58Format),
+        AccountType.Named,
+        AccountType.AppAgent,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
+      // The account-id decoder agrees with the address decoder (the Python property
+      // suite pins the same agreement over this stream).
+      expect(decodeAppAgentAccountId(info.accountId)).toEqual(appAgentId);
     });
   });
 
   it("round-trips random Transactional id pairs", () => {
     const rng = new Rng(0x5eed0002n);
-    const ids = Array.from({ length: ITERATIONS }, () => [
+    const ids = Array.from({ length: ITERATIONS }, (): [number, number] => [
       rng.nextU32(),
       rng.nextU32(),
     ]);
     ids.push([0, 0], [0, U32_MAX], [U32_MAX, 0], [U32_MAX, U32_MAX]);
-    ids.forEach(([appAgentId, taId]) => {
-      const address = encodeTransactionalAddress(appAgentId, taId, ss58Format);
+    ids.forEach(([rawAppAgentId, rawTaId]) => {
+      const appAgentId = asAppAgentId(rawAppAgentId);
+      const taId = asTransactionalId(rawTaId);
+      const address = encodeTransactionalAddress({
+        appAgentId,
+        taId,
+        ss58Format,
+      });
       const info = decodeAddress(address, ss58Format);
       expect(info.accountType).toEqual(AccountType.Transactional);
+      if (info.accountType !== AccountType.Transactional) {
+        throw new Error("Expected a Transactional account-info variant");
+      }
       expect(info.appAgentId).toEqual(appAgentId);
       expect(info.taId).toEqual(taId);
       expect(decodeTransactionalAddress(address, ss58Format)).toEqual({
         appAgentId,
         taId,
       });
-      expect(() => decodeAppAgentAddress(address, ss58Format)).toThrow(
-        AccountTypeMismatchError,
+      expectTypeMismatch(
+        () => decodeAppAgentAddress(address, ss58Format),
+        AccountType.AppAgent,
+        AccountType.Transactional,
+      );
+      expectTypeMismatch(
+        () => decodeNamedAddress(address, ss58Format),
+        AccountType.Named,
+        AccountType.Transactional,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
+      expect(decodeTransactionalAccountId(info.accountId)).toEqual({
+        appAgentId,
+        taId,
+      });
     });
   });
 
   it("round-trips random Named addresses", () => {
     const rng = new Rng(0x5eed0003n);
     for (let i = 0; i < ITERATIONS; i += 1) {
-      const appAgentId = rng.nextU32();
+      const appAgentId = asAppAgentId(rng.nextU32());
       const name = randomName(rng);
-      const address = encodeNamedAddress(appAgentId, name, ss58Format);
+      const address = encodeNamedAddress({
+        appAgentId,
+        accountName: asAccountName(name),
+        ss58Format,
+      });
       const info = decodeAddress(address, ss58Format);
       expect(info.accountType).toEqual(AccountType.Named);
+      if (info.accountType !== AccountType.Named) {
+        throw new Error("Expected a Named account-info variant");
+      }
       expect(info.appAgentId).toEqual(appAgentId);
       expect(info.accountName).toEqual(name);
       expect(decodeNamedAddress(address, ss58Format)).toEqual({
         appAgentId,
         accountName: name,
       });
-      expect(() => decodeAppAgentAddress(address, ss58Format)).toThrow(
-        AccountTypeMismatchError,
+      expectTypeMismatch(
+        () => decodeAppAgentAddress(address, ss58Format),
+        AccountType.AppAgent,
+        AccountType.Named,
+      );
+      expectTypeMismatch(
+        () => decodeTransactionalAddress(address, ss58Format),
+        AccountType.Transactional,
+        AccountType.Named,
       );
       expect(isKeylessAddress(address, ss58Format)).toBe(true);
+      expect(decodeNamedAccountId(info.accountId)).toEqual({
+        appAgentId,
+        accountName: name,
+      });
     }
   });
 });
@@ -178,10 +261,17 @@ describe("Classification properties", () => {
       // Cycle the discriminant byte through 0..=5 so every classification branch
       // (unknown discriminant and all three checksum verifications) is exercised.
       account[4] = i % 6;
-      const info = decodeAccountId(`0x${bytesToHex(account)}`);
+      const accountId = `0x${bytesToHex(account)}`;
+      const info = decodeAccountId(accountId);
       // Random bytes must classify as Regular (a checksum match has probability
-      // ~2^-136 at best).
-      expect(info.accountType).toEqual(AccountType.Regular);
+      // ~2^-136 at best). The whole info object is pinned, not only the type: a Regular
+      // classification must not leak a stale identifier from a partially matched
+      // keyless layout.
+      expect(info).toEqual({
+        address: null,
+        accountId,
+        accountType: AccountType.Regular,
+      });
     }
   });
 
@@ -191,9 +281,20 @@ describe("Classification properties", () => {
     // consumes the 0x5EED_0005 stream exactly like the Rust test.
     const rng = new Rng(0x5eed0005n);
     const addresses = [
-      encodeAppAgentAddress(rng.nextU32(), ss58Format),
-      encodeTransactionalAddress(rng.nextU32(), rng.nextU32(), ss58Format),
-      encodeNamedAddress(rng.nextU32(), randomName(rng), ss58Format),
+      encodeAppAgentAddress({
+        appAgentId: asAppAgentId(rng.nextU32()),
+        ss58Format: ss58Format,
+      }),
+      encodeTransactionalAddress({
+        appAgentId: asAppAgentId(rng.nextU32()),
+        taId: asTransactionalId(rng.nextU32()),
+        ss58Format,
+      }),
+      encodeNamedAddress({
+        appAgentId: asAppAgentId(rng.nextU32()),
+        accountName: asAccountName(randomName(rng)),
+        ss58Format,
+      }),
     ];
     addresses.forEach((address) => {
       const accountIdHex = decodeAddress(address, ss58Format).accountId.slice(
@@ -204,9 +305,15 @@ describe("Classification properties", () => {
         const corrupted = Uint8Array.from(
           accountIdHex.match(/../g)!.map((byte) => parseInt(byte, 16)),
         );
-        corrupted[position] ^= xor;
-        const info = decodeAccountId(`0x${bytesToHex(corrupted)}`);
-        expect(info.accountType).toEqual(AccountType.Regular);
+        corrupted[position] = (corrupted[position] as number) ^ xor;
+        const corruptedId = `0x${bytesToHex(corrupted)}`;
+        const info = decodeAccountId(corruptedId);
+        // The demoted value carries no identifiers of the keyless layout it came from.
+        expect(info).toEqual({
+          address: null,
+          accountId: corruptedId,
+          accountType: AccountType.Regular,
+        });
       }
     });
   });
@@ -219,13 +326,23 @@ describe("Classification properties", () => {
     for (let i = 0; i < ITERATIONS; i += 1) {
       const name = randomName(rng);
       expect(name).toHaveLength(10);
-      encodeNamedAddress(1, name, ss58Format);
+      encodeNamedAddress({
+        appAgentId: asAppAgentId(1),
+        accountName: asAccountName(name),
+        ss58Format,
+      });
 
       const position = Number(rng.nextU64() % 10n);
       const bad = `${name.slice(0, position)}@${name.slice(position + 1)}`;
-      expect(() => encodeNamedAddress(1, bad, ss58Format)).toThrow(
-        "Address name contains invalid characters",
-      );
+      expect(() =>
+        encodeNamedAddress({
+          appAgentId: asAppAgentId(1),
+          // Deliberately out of charset: the cast simulates an untyped JavaScript caller,
+          // so the encoder is what rejects the name.
+          accountName: bad as AccountName,
+          ss58Format,
+        }),
+      ).toThrow("Account name contains invalid characters");
     }
   });
 });
@@ -243,8 +360,14 @@ describe("SS58 properties", () => {
       }
       const address = encodeAddress(accountId, format);
       const info = decodeAddress(address, format);
-      // The SS58 round trip must preserve the account and format.
+      // The SS58 round trip must preserve the account *and* the format: re-reading the
+      // address without an expected format must report the format it was encoded with
+      // (the Rust property checks the same (account, format) pair).
       expect(info.accountId).toEqual(accountId);
+      expect(decodeAddressWithFormat(address)).toEqual({
+        info,
+        ss58Format: format,
+      });
     }
   });
 });

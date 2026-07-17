@@ -13,12 +13,13 @@
  * keyless entry points are part of the public API.
  */
 import { blake2b } from "@noble/hashes/blake2.js";
-import { concatBytes, utf8ToBytes } from "@noble/hashes/utils.js";
+import { concatBytes } from "@noble/hashes/utils.js";
 import { base58 } from "@scure/base";
 
 // Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
-// bound of the Rust implementation (private there too; keyless.ts keeps its own copy
-// for the parameter validation message).
+// bound of the Rust implementation (private there too). keyless.ts imports this one
+// for its parameter validation, so the two layers cannot drift into disagreeing about
+// what is valid (see the export-site note below).
 const SS58_FORMAT_MAX = 0b0011_1111_1111_1111;
 
 // Length in bytes of the SS58 checksum of a 32-byte account id.
@@ -27,15 +28,14 @@ const SS58_CHECKSUM_LENGTH = 2;
 // Length in bytes of a blockchain account id.
 const ACCOUNT_ID_LENGTH = 32;
 
-// Maximum length in characters of an SS58 address of a 32-byte account id: the payload
-// is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
-// base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
-// ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-// whose cost grows quadratically with the input length. The bound is applied to the
+// Conservative pre-decode length bound for an SS58 address of a 32-byte account id.
+// The generic 36-byte payload-size calculation gives 50 base58 characters. Longer input
+// is rejected before base58 decoding, whose cost grows quadratically with the input
+// length. The bound is applied to the
 // UTF-8 byte length, exactly like the Rust reference decoder (bytes and UTF-16 units
-// coincide on the all-ASCII base58 alphabet). It is a safe over-approximation: the
-// first payload byte of a valid address is at most 0x7F, so the longest achievable
-// address is 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
+// coincide on the all-ASCII base58 alphabet). This is deliberately a safe
+// over-approximation, not the maximum achievable valid spelling: the prefix makes the
+// true maximum 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
 export const SS58_MAX_ADDRESS_LENGTH = 50;
 
 /**
@@ -49,22 +49,112 @@ type Ss58ErrorKind =
   | "InvalidFormat"
   | "UnexpectedFormat";
 
+// The five kinds of the shared cross-language taxonomy. The constructor rejects anything
+// else at runtime, so a JavaScript caller cannot mint an Ss58Error with a `kind` outside
+// the taxonomy every implementation (and the conformance fixture) agrees on. Mirrors the
+// closed enum the Rust and Python implementations enforce by construction.
+const SS58_ERROR_KINDS: readonly Ss58ErrorKind[] = [
+  "InvalidBase58",
+  "InvalidLength",
+  "InvalidChecksum",
+  "InvalidFormat",
+  "UnexpectedFormat",
+];
+
+/**
+ * Makes `instanceof` work across the ESM/CommonJS boundary and across realms.
+ *
+ * A dual package is loaded twice in a process that mixes `import` and `require` (an app that
+ * imports us while a transitive dependency requires us, or a bundler resolving the `browser`
+ * condition for app code and CommonJS for a server module). The two copies have distinct class
+ * objects, so a plain `e instanceof Ss58Error` is `false` for an error thrown by the other copy
+ * — silently defeating the error handling this package's README teaches. The same failure
+ * occurs across *realms* (a vm context, an iframe, a worker reached through a non-cloning
+ * channel), where even `Error.prototype` itself is a different object per realm.
+ *
+ * Brand the *prototype* with a `Symbol.for` key (a process-wide registry, so both copies agree
+ * on the symbol) and match on that instead of on prototype identity. Subclass prototypes inherit
+ * the base brand, so `Ss58FormatMismatchError` still satisfies `instanceof Ss58Error`.
+ *
+ * `Symbol.hasInstance` is installed on the *constructor*, and statics are inherited down the
+ * `extends` chain. A consumer's `class MyError extends Ss58Error {}` would therefore inherit
+ * this check and report `true` for *every* Ss58Error in the process, wrecking the `instanceof`
+ * of their own class. So the check only answers for the exact constructor it was installed on,
+ * and defers to the ordinary prototype walk for anything further down the chain.
+ *
+ * A brand alone also says nothing about the *shape* of the value: matching on the symbol only
+ * would let a bare `{ [Symbol.for("…")]: true }` — a JSON payload, say — pass
+ * `instanceof Ss58Error`, after which TypeScript narrows it to `Ss58Error` and the caller reads
+ * `.message` and `.kind` off an object that has neither. A real `Error` is required as well —
+ * from any realm; see `isRealError`.
+ *
+ * The registry key carries the package's major version. `Symbol.for` is a process-wide registry,
+ * so without it two different majors coexisting in one dependency tree — which are precisely the
+ * two that are *not* interchangeable — would cross-brand each other's errors.
+ */
+const BRAND_NAMESPACE = "@trevofinance/trevokeyless@2";
+
+/**
+ * True for real `Error` objects from any realm.
+ *
+ * `value instanceof Error` covers the common case — including the dual-load one — but is
+ * realm-bound: an error created in another realm inherits from *that realm's*
+ * `Error.prototype` and fails it. The fallback reads the `[[ErrorData]]` internal slot
+ * through `Object.prototype.toString`, which every realm's `Error` carries. A plain object
+ * can fake the `"[object Error]"` tag only by installing `Symbol.toStringTag`, which
+ * requires running code — and code that can do that can construct a genuinely branded
+ * error anyway. The brand is a safety net against *accidental* matches (JSON payloads and
+ * the like, which can carry neither symbol keys nor the tag), not a security boundary
+ * against in-process code.
+ */
+function isRealError(value: unknown): boolean {
+  return (
+    value instanceof Error ||
+    Object.prototype.toString.call(value) === "[object Error]"
+  );
+}
+
+function defineCrossRealmBrand(
+  constructor: new (...args: never[]) => Error,
+  key: string,
+): void {
+  const brand = Symbol.for(`${BRAND_NAMESPACE}:${key}`);
+  Object.defineProperty(constructor.prototype, brand, { value: true });
+  Object.defineProperty(constructor, Symbol.hasInstance, {
+    value: function (this: unknown, value: unknown): boolean {
+      if (this !== constructor) {
+        // A subclass inherited this static. Answer for it the ordinary way.
+        return Function.prototype[Symbol.hasInstance].call(this, value);
+      }
+      return (
+        isRealError(value) && (value as Record<symbol, unknown>)[brand] === true
+      );
+    },
+  });
+}
+
 /**
  * Thrown by the SS58 decoding (and encoding, for invalid formats) functions.
  *
  * Mirrors the `Ss58Error` enum of the Rust implementation: `kind` is the variant name
  * and the message matches the Rust `Display` output. For `kind === "UnexpectedFormat"`
- * the `expected` and `found` fields carry the two formats (the Python implementation
- * reports the same pair via `Ss58FormatMismatchError`).
+ * the `expected` and `found` fields carry the two formats; that case is the
+ * `Ss58FormatMismatchError` subclass below (the Python implementation exposes the same
+ * class), so it can be caught by `instanceof` and not only by inspecting `kind`.
  */
 class Ss58Error extends Error {
   readonly kind: Ss58ErrorKind;
 
+  // `declare`, not a plain field: a declared class field is *emitted* as a defineProperty, so
+  // it would exist — as `undefined` — on every Ss58Error, and `"expected" in error` would be
+  // true for all of them. `declare` is type-only, so the property exists exactly when the
+  // constructor assigns it, which is exactly for `kind === "UnexpectedFormat"`.
+
   /** The format required by the caller (`kind === "UnexpectedFormat"` only). */
-  readonly expected?: number;
+  declare readonly expected?: number;
 
   /** The format found in the address (`kind === "UnexpectedFormat"` only). */
-  readonly found?: number;
+  declare readonly found?: number;
 
   constructor(
     kind: Ss58ErrorKind,
@@ -73,10 +163,42 @@ class Ss58Error extends Error {
     found?: number,
   ) {
     super(message);
+    if (!SS58_ERROR_KINDS.includes(kind)) {
+      throw new RangeError(`Unknown Ss58Error kind: ${String(kind)}`);
+    }
+    // "UnexpectedFormat" *is* the Ss58FormatMismatchError case (the class doc and the
+    // README promise so): a bare Ss58Error with that kind would carry no
+    // expected/found pair and fail the subclass instanceof. Reject direct
+    // construction — the Python Ss58Error.__init__ enforces the same — but let the
+    // subclass (and consumer subclasses of it, which new.target reveals) through.
+    // Widened to Function: TypeScript otherwise rejects the comparison of the two
+    // constructor types as overlap-free, which is exactly the case being tested.
+    const target: Function = new.target; // eslint-disable-line @typescript-eslint/no-unsafe-function-type
+    if (
+      kind === "UnexpectedFormat" &&
+      target !== Ss58FormatMismatchError &&
+      !Object.prototype.isPrototypeOf.call(
+        Ss58FormatMismatchError.prototype,
+        target.prototype as object,
+      )
+    ) {
+      throw new RangeError(
+        "kind 'UnexpectedFormat' carries an expected/found format pair; " +
+          "construct Ss58FormatMismatchError(expected, found) instead",
+      );
+    }
     this.name = "Ss58Error";
     this.kind = kind;
-    this.expected = expected;
-    this.found = found;
+    // Assigned only when they carry a value. An unconditional assignment would make
+    // `"expected" in error` true — with the value `undefined` — for every Ss58Error, and
+    // that structural check is the natural JS idiom (it is the one this package uses for
+    // BlockchainAccountInfo: `"appAgentId" in info`).
+    if (expected !== undefined) {
+      this.expected = expected;
+    }
+    if (found !== undefined) {
+      this.found = found;
+    }
   }
 
   static invalidBase58(): Ss58Error {
@@ -95,17 +217,71 @@ class Ss58Error extends Error {
     return new Ss58Error("InvalidFormat", "SS58 format is invalid or reserved");
   }
 
-  static unexpectedFormat(expected: number, found: number): Ss58Error {
-    return new Ss58Error(
+  static unexpectedFormat(
+    expected: number,
+    found: number,
+  ): Ss58FormatMismatchError {
+    return new Ss58FormatMismatchError(expected, found);
+  }
+}
+
+/**
+ * The `"UnexpectedFormat"` case of `Ss58Error`: the address is a valid SS58 address, but
+ * of a different (non-expected) format. Carries both formats, always defined here.
+ *
+ * The Python implementation exposes the same class; the Rust implementation has a single
+ * `Ss58Error::UnexpectedFormat` variant carrying the same pair. `kind` stays
+ * `"UnexpectedFormat"`, so `catch (e) { if (e instanceof Ss58Error) e.kind }` keeps
+ * working unchanged.
+ */
+class Ss58FormatMismatchError extends Ss58Error {
+  declare readonly expected: number;
+
+  declare readonly found: number;
+
+  constructor(expected: number, found: number) {
+    super(
       "UnexpectedFormat",
       `Expected SS58 format ${expected} but found ${found}`,
       expected,
       found,
     );
+    this.name = "Ss58FormatMismatchError";
   }
 }
 
-const SS58_PREFIX = utf8ToBytes("SS58PRE");
+defineCrossRealmBrand(Ss58Error, "Ss58Error");
+defineCrossRealmBrand(Ss58FormatMismatchError, "Ss58FormatMismatchError");
+
+const SS58_PREFIX = Uint8Array.of(83, 83, 53, 56, 80, 82, 69); // ASCII "SS58PRE"
+
+/**
+ * UTF-8 byte length with the same surrogate handling as TextEncoder, without requiring
+ * TextEncoder to exist globally (not all React Native runtimes provide it).
+ */
+function utf8Length(value: string): number {
+  let length = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const first = value.charCodeAt(index);
+    if (first <= 0x7f) {
+      length += 1;
+    } else if (first <= 0x7ff) {
+      length += 2;
+    } else if (first >= 0xd800 && first <= 0xdbff && index + 1 < value.length) {
+      const second = value.charCodeAt(index + 1);
+      if (second >= 0xdc00 && second <= 0xdfff) {
+        length += 4;
+        index += 1;
+      } else {
+        length += 3;
+      }
+    } else {
+      // BMP scalars and lone surrogates both encode to three bytes (the latter via U+FFFD).
+      length += 3;
+    }
+  }
+  return length;
+}
 
 /**
  * Returns true for SS58 formats that can never be used: reserved (46, 47), out of the
@@ -179,8 +355,8 @@ function ss58Decode(address: string): {
   // the byte length of the &str): non-ASCII input can stay within 50 UTF-16 units yet
   // exceed 50 bytes and must classify as a length failure in every implementation. The
   // unit check above keeps the cost O(1) for huge input; this exact check only ever
-  // encodes at most 50 UTF-16 units.
-  if (new TextEncoder().encode(address).length > SS58_MAX_ADDRESS_LENGTH) {
+  // examines at most 50 UTF-16 units.
+  if (utf8Length(address) > SS58_MAX_ADDRESS_LENGTH) {
     throw Ss58Error.invalidLength();
   }
   let data: Uint8Array;
@@ -193,20 +369,24 @@ function ss58Decode(address: string): {
     throw Ss58Error.invalidLength();
   }
 
+  // `data` is non-empty (checked above), so index 0 is in bounds.
+  const first = data[0] as number;
   let prefixLength: number;
   let format: number;
-  if (data[0] <= 63) {
+  if (first <= 63) {
     prefixLength = 1;
-    [format] = data;
-  } else if (data[0] <= 127) {
+    format = first;
+  } else if (first <= 127) {
     if (data.length < 2) {
       throw Ss58Error.invalidLength();
     }
+    // The `data.length < 2` guard above makes index 1 in bounds.
+    const second = data[1] as number;
     prefixLength = 2;
     format =
-      ((data[0] & 0b0011_1111) << 2) |
-      (data[1] >> 6) |
-      ((data[1] & 0b0011_1111) << 8);
+      ((first & 0b0011_1111) << 2) |
+      (second >> 6) |
+      ((second & 0b0011_1111) << 8);
   } else {
     // First bytes 128..=255 are not a valid SS58 prefix encoding.
     throw Ss58Error.invalidFormat();
@@ -230,4 +410,20 @@ function ss58Decode(address: string): {
   return { accountId: data.slice(prefixLength, checksumStart), format };
 }
 
-export { Ss58Error, Ss58ErrorKind, ss58Decode, ss58Encode };
+export type { Ss58ErrorKind };
+
+export {
+  Ss58Error,
+  Ss58FormatMismatchError,
+  // Package-internal: keyless.ts brands its own error classes with the same scheme.
+  defineCrossRealmBrand,
+  // Package-internal: keyless.ts validates the ss58Format parameter against the same bound
+  // the encoder enforces, so the two cannot drift into disagreeing about what is valid.
+  SS58_FORMAT_MAX,
+  ACCOUNT_ID_LENGTH,
+  ss58Decode,
+  ss58Encode,
+  // Package-internal: the account-name length rule of keyless.ts is defined in UTF-8
+  // bytes (like the Rust AccountName::new), and reuses this helper.
+  utf8Length,
+};

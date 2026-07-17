@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    // node10 resolution is deprecated; the inherited `ignoreDeprecations` (root
+    // tsconfig.json) keeps TypeScript 6 accepting it until the TS 7 migration.
+    "moduleResolution": "Node",
+    "outDir": "./dist/cjs",
+    // Declarations are emitted for BOTH builds. dist/cjs has no `type` marker, so it
+    // inherits the package's default (CommonJS) and its .d.ts files are CommonJS
+    // declarations — which is what the `require` condition of the exports map must point
+    // at. Pointing `require` consumers at the ESM .d.ts (inside dist/esm, marked
+    // `type: module`) makes TypeScript reject the package with TS1479 under
+    // module: node16/nodenext.
+    "declaration": true
+  }
+}

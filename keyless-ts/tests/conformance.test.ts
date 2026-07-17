@@ -11,15 +11,31 @@ import * as fs from "fs";
 import * as path from "path";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { ss58Decode, ss58Encode } from "../src/ss58";
+import type { AccountName, AppAgentId, TransactionalId } from "../src/keyless";
 import {
+  ACCOUNT_ID_LENGTH,
+  ACCOUNT_NAME_LENGTH,
+  APP_AGENT_ACCOUNT_IDENTIFIER,
+  AccountNameError,
   AccountType,
   AccountTypeMismatchError,
+  NAMED_ACCOUNT_IDENTIFIER,
+  NotAnAddressError,
+  ParseAccountIdError,
+  SS58_FORMAT_TREVO_ASSET_HUB,
+  SS58_MAX_ADDRESS_LENGTH,
   Ss58Error,
+  TRANSACTIONAL_ACCOUNT_IDENTIFIER,
+  U32_MAX,
   decodeAccountId,
   decodeAddress,
+  decodeAddressWithFormat,
   decodeAppAgentAddress,
   decodeNamedAddress,
   decodeTransactionalAddress,
+  decodeAppAgentAccountId,
+  decodeNamedAccountId,
+  decodeTransactionalAccountId,
   encodeAddress,
   encodeAppAgentAddress,
   encodeNamedAddress,
@@ -29,6 +45,9 @@ import {
   encodeNamedAccountId,
   isKeylessAddress,
   isKeylessAccountId,
+  accountName,
+  appAgentId,
+  transactionalId,
 } from "../src/keyless";
 
 interface AppAgentVector {
@@ -71,6 +90,7 @@ interface Ss58DecodeOnlyVector {
   ss58: string;
   hex: string;
   format: number;
+  canonical_ss58: string;
   reason: string;
 }
 
@@ -78,6 +98,8 @@ interface Ss58InvalidVector {
   ss58: string;
   format: number;
   error_kind: string;
+  /** The rendered message, shared verbatim with Rust and Python. */
+  message: string;
   /** Pinned for `error_kind === "UnexpectedFormat"` vectors only. */
   expected?: number;
   /** Pinned for `error_kind === "UnexpectedFormat"` vectors only. */
@@ -87,11 +109,17 @@ interface Ss58InvalidVector {
 
 interface NamedInvalidEncodeVector {
   name: string;
+  /** The shared AccountNameError kind: "InvalidLength" | "InvalidCharacter". */
+  error_kind: string;
+  /** The rendered message, shared verbatim with Rust and Python. */
+  message: string;
   reason: string;
 }
 
 interface HexInvalidVector {
   input: string;
+  /** The ParseAccountIdError message, shared verbatim with Rust and Python. */
+  message: string;
   reason: string;
 }
 
@@ -106,11 +134,89 @@ interface HexNotAnAddressVector {
   reason: string;
 }
 
+/**
+ * An SS58 format no encoder may put on the wire. The rejection is the cross-language
+ * contract; the classification is not, because an unusable format is a rejected *argument*
+ * — a `RangeError` here, a `ValueError` in Python, `InvalidSs58Format` in Rust. So the group
+ * carries no `error_kind`/`message`.
+ */
+/**
+ * SS58 addresses fed to the raw-account-id entry points: the mirror image of
+ * hex_not_an_address. Rejection only; each implementation reports its own
+ * ParseAccountIdError.
+ */
+interface AddressNotAnAccountIdVector {
+  input: string;
+  reason: string;
+}
+
+interface FormatInvalidEncodeVector {
+  hex: string;
+  format: number;
+  reason: string;
+}
+
+/**
+ * The decode side of the format contract: an expected format outside the 14-bit range, against
+ * an otherwise valid address. Only the rejection is cross-language (Rust reports
+ * Ss58Error::InvalidFormat, Python a ValueError, this package a RangeError), so no error_kind.
+ */
+interface FormatInvalidDecodeVector {
+  ss58: string;
+  format: number;
+  reason: string;
+}
+
+/**
+ * Format values that exist only at the host-language boundary: JSON-representable values
+ * that are not u16-typed (boolean, negative, fractional, beyond u16), fed to the encode
+ * entry points (as ss58Format, with `hex` a valid account id) and to the decode entry
+ * points (as the expected format, against the otherwise valid address `ss58`). Rust's u16
+ * makes them unrepresentable; this package and Python must reject them at runtime. Only
+ * the rejection is cross-language (RangeError here, TypeError/ValueError in Python), so
+ * no error_kind. `boolean` for the `true` vector, as in U32InvalidEncodeVector below.
+ */
+interface FormatInvalidHostVector {
+  hex: string;
+  ss58: string;
+  value: number | boolean;
+  reason: string;
+}
+
+/**
+ * Identifier values every implementation must reject at encode time. Rust enforces the u32
+ * range through its type system; Python and this package must do it at runtime. Only the
+ * rejection is cross-language, so no error_kind.
+ */
+interface U32InvalidEncodeVector {
+  // `boolean` for the `true` vector: Python's bool subclasses int, so the fixture pins
+  // that a boolean is rejected as an identifier in every implementation.
+  value: number | boolean;
+  reason: string;
+}
+
+/**
+ * An exported constant value, read from the Rust crate's own constants. The behavior at
+ * the bounds is pinned by other groups; this pins the constants themselves, which every
+ * implementation exports under the same name (U32_MAX here and in Python; Rust callers
+ * use the native u32::MAX).
+ */
+interface ConstantVector {
+  name: string;
+  value: number;
+}
+
 interface TypeMismatchVector {
   hex: string;
   ss58: string;
   decode_as: keyof typeof AccountType;
   found: keyof typeof AccountType;
+  /**
+   * The address-level mismatch message. This package and the Python one each document their
+   * message as identical to the other's; this pins that claim rather than leaving it to two
+   * independent local literals. (Rust's KeylessDecodeError says "account", not "address".)
+   */
+  address_message: string;
 }
 
 interface Vectors {
@@ -125,6 +231,12 @@ interface Vectors {
   hex_invalid: HexInvalidVector[];
   hex_valid: HexValidVector[];
   hex_not_an_address: HexNotAnAddressVector[];
+  address_not_an_account_id: AddressNotAnAccountIdVector[];
+  format_invalid_encode: FormatInvalidEncodeVector[];
+  format_invalid_decode: FormatInvalidDecodeVector[];
+  format_invalid_host: FormatInvalidHostVector[];
+  u32_invalid_encode: U32InvalidEncodeVector[];
+  constants: ConstantVector[];
   type_mismatch: TypeMismatchVector[];
 }
 
@@ -135,58 +247,186 @@ const vectorsPath = path.join(
   "conformance",
   "vectors.json",
 );
-const vectors: Vectors = JSON.parse(fs.readFileSync(vectorsPath, "utf8"));
+const vectors = JSON.parse(fs.readFileSync(vectorsPath, "utf8")) as Vectors;
+
+/**
+ * The size of every fixture group, pinned. The group *names* alone do not protect the
+ * suite: a generator change that silently drops vectors (e.g. `classify` shrinking from
+ * 401 vectors to 5) would still satisfy a non-emptiness check while gutting the
+ * cross-language coverage. Update these numbers deliberately, together with the
+ * regenerated fixture, whenever vectors are added or removed.
+ */
+const EXPECTED_GROUP_SIZES: Record<keyof Vectors, number> = {
+  app_agent: 63,
+  transactional: 64,
+  named: 67,
+  classify: 401,
+  ss58_formats: 101,
+  ss58_decode_only: 5,
+  ss58_invalid: 37,
+  named_invalid_encode: 16,
+  hex_invalid: 13,
+  hex_valid: 12,
+  hex_not_an_address: 4,
+  address_not_an_account_id: 4,
+  format_invalid_encode: 4,
+  format_invalid_decode: 2,
+  format_invalid_host: 5,
+  u32_invalid_encode: 7,
+  constants: 8,
+  type_mismatch: 9,
+};
 
 describe("Cross-language conformance vectors (generated by keyless-rust)", () => {
+  it("consumes exactly the pinned fixture groups, at their pinned sizes", () => {
+    // The exact group set is pinned, so a newly generated but unconsumed group (or a
+    // dropped one) fails here instead of passing silently; the per-group counts pin the
+    // coverage itself, so a shrunk group cannot pass every consumer silently either.
+    const groups = Object.keys(vectors).sort();
+    expect(groups).toEqual(Object.keys(EXPECTED_GROUP_SIZES).sort());
+    const sizes = Object.fromEntries(
+      groups.map((group) => [
+        group,
+        (vectors as unknown as Record<string, unknown[]>)[group]!.length,
+      ]),
+    );
+    expect(sizes).toEqual(EXPECTED_GROUP_SIZES);
+  });
+
+  it("pins the AccountType numeric values", () => {
+    // The numeric values are a cross-language contract (SCALE variant indices in Rust,
+    // the Python enum values, and — for the keyless variants — the discriminant byte at
+    // [4] of the account id); no vector field carries them, so they are pinned here.
+    expect(AccountType.Regular).toBe(0);
+    expect(AccountType.AppAgent).toBe(1);
+    expect(AccountType.Transactional).toBe(2);
+    expect(AccountType.Named).toBe(3);
+  });
+
   it("reproduces the AppAgent vectors", () => {
     vectors.app_agent.forEach((v) => {
-      expect(encodeAppAgentAddress(v.id)).toEqual(v.ss58);
+      expect(encodeAppAgentAddress({ appAgentId: appAgentId(v.id) })).toEqual(
+        v.ss58,
+      );
       expect(encodeAddress(`0x${v.hex}`)).toEqual(v.ss58);
-      expect(encodeAppAgentAccountId(v.id)).toEqual(`0x${v.hex}`);
+      expect(encodeAppAgentAccountId({ appAgentId: appAgentId(v.id) })).toEqual(
+        `0x${v.hex}`,
+      );
       expect(isKeylessAccountId(`0x${v.hex}`)).toBe(true);
+      expect(isKeylessAddress(v.ss58)).toBe(true);
+      expect(decodeAppAgentAccountId(`0x${v.hex}`)).toEqual(v.id);
       const info = decodeAddress(v.ss58);
       expect(info.accountId).toEqual(`0x${v.hex}`);
       expect(info.accountType).toEqual(AccountType.AppAgent);
+      if (info.accountType !== AccountType.AppAgent) {
+        throw new Error("Expected an AppAgent account-info variant");
+      }
       expect(info.appAgentId).toEqual(v.id);
       expect(decodeAppAgentAddress(v.ss58)).toEqual(v.id);
+      // decodeAddressWithFormat reports the same classification plus the format
+      // found in the address (here the canonical Trevo format).
+      expect(decodeAddressWithFormat(v.ss58)).toEqual({
+        info,
+        ss58Format: SS58_FORMAT_TREVO_ASSET_HUB,
+      });
     });
   });
 
   it("reproduces the Transactional vectors", () => {
     vectors.transactional.forEach((v) => {
-      expect(encodeTransactionalAddress(v.aa, v.ta)).toEqual(v.ss58);
+      expect(
+        encodeTransactionalAddress({
+          appAgentId: appAgentId(v.aa),
+          taId: transactionalId(v.ta),
+        }),
+      ).toEqual(v.ss58);
       expect(encodeAddress(`0x${v.hex}`)).toEqual(v.ss58);
-      expect(encodeTransactionalAccountId(v.aa, v.ta)).toEqual(`0x${v.hex}`);
+      expect(
+        encodeTransactionalAccountId({
+          appAgentId: appAgentId(v.aa),
+          taId: transactionalId(v.ta),
+        }),
+      ).toEqual(`0x${v.hex}`);
       expect(isKeylessAccountId(`0x${v.hex}`)).toBe(true);
+      expect(isKeylessAddress(v.ss58)).toBe(true);
+      expect(decodeTransactionalAccountId(`0x${v.hex}`)).toEqual({
+        appAgentId: v.aa,
+        taId: v.ta,
+      });
       const info = decodeAddress(v.ss58);
       expect(info.accountId).toEqual(`0x${v.hex}`);
       expect(info.accountType).toEqual(AccountType.Transactional);
+      if (info.accountType !== AccountType.Transactional) {
+        throw new Error("Expected a Transactional account-info variant");
+      }
       expect(info.appAgentId).toEqual(v.aa);
       expect(info.taId).toEqual(v.ta);
+      expect(decodeTransactionalAddress(v.ss58)).toEqual({
+        appAgentId: v.aa,
+        taId: v.ta,
+      });
+      expect(decodeAddressWithFormat(v.ss58)).toEqual({
+        info,
+        ss58Format: SS58_FORMAT_TREVO_ASSET_HUB,
+      });
     });
   });
 
   it("reproduces the Named vectors", () => {
     vectors.named.forEach((v) => {
-      expect(encodeNamedAddress(v.aa, v.name)).toEqual(v.ss58);
+      expect(
+        encodeNamedAddress({
+          appAgentId: appAgentId(v.aa),
+          accountName: accountName(v.name),
+        }),
+      ).toEqual(v.ss58);
       expect(encodeAddress(`0x${v.hex}`)).toEqual(v.ss58);
-      expect(encodeNamedAccountId(v.aa, v.name)).toEqual(`0x${v.hex}`);
+      expect(
+        encodeNamedAccountId({
+          appAgentId: appAgentId(v.aa),
+          accountName: accountName(v.name),
+        }),
+      ).toEqual(`0x${v.hex}`);
       expect(isKeylessAccountId(`0x${v.hex}`)).toBe(true);
+      expect(isKeylessAddress(v.ss58)).toBe(true);
+      expect(decodeNamedAccountId(`0x${v.hex}`)).toEqual({
+        appAgentId: v.aa,
+        accountName: v.name,
+      });
       const info = decodeAddress(v.ss58);
       expect(info.accountId).toEqual(`0x${v.hex}`);
       expect(info.accountType).toEqual(AccountType.Named);
+      if (info.accountType !== AccountType.Named) {
+        throw new Error("Expected a Named account-info variant");
+      }
       expect(info.appAgentId).toEqual(v.aa);
       expect(info.accountName).toEqual(v.name);
+      expect(decodeNamedAddress(v.ss58)).toEqual({
+        appAgentId: v.aa,
+        accountName: v.name,
+      });
+      expect(decodeAddressWithFormat(v.ss58)).toEqual({
+        info,
+        ss58Format: SS58_FORMAT_TREVO_ASSET_HUB,
+      });
     });
   });
 
   it("reproduces the classification vectors", () => {
     vectors.classify.forEach((v) => {
       const info = decodeAccountId(`0x${v.hex}`);
+      // Raw account bytes carry no SS58 address: the address field is always null.
+      expect(info.address).toBeNull();
       expect(info.accountType).toEqual(AccountType[v.expected.type]);
-      expect(info.appAgentId).toEqual(v.expected.app_agent_id ?? null);
-      expect(info.taId).toEqual(v.expected.ta_id ?? null);
-      expect(info.accountName).toEqual(v.expected.name ?? null);
+      expect("appAgentId" in info ? info.appAgentId : null).toEqual(
+        v.expected.app_agent_id ?? null,
+      );
+      expect("taId" in info ? info.taId : null).toEqual(
+        v.expected.ta_id ?? null,
+      );
+      expect("accountName" in info ? info.accountName : null).toEqual(
+        v.expected.name ?? null,
+      );
       expect(isKeylessAccountId(`0x${v.hex}`)).toBe(
         v.expected.type !== "Regular",
       );
@@ -205,6 +445,15 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
       expect(info.accountId).toEqual(`0x${v.hex}`);
       // The address field is the input spelling verbatim.
       expect(info.address).toEqual(v.ss58);
+      // Without an expected format, the decode reports the format found.
+      expect(decodeAddressWithFormat(v.ss58)).toEqual({
+        info,
+        ss58Format: v.format,
+      });
+      // The address- and account-id-based keyless checks must agree on every vector.
+      expect(isKeylessAddress(v.ss58, v.format)).toBe(
+        isKeylessAccountId(`0x${v.hex}`),
+      );
     });
   });
 
@@ -222,7 +471,16 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
       // The address field echoes the non-canonical input spelling verbatim;
       // accountId is the canonical key (the canonical address differs).
       expect(info.address).toEqual(v.ss58);
-      expect(encodeAddress(`0x${v.hex}`, v.format)).not.toEqual(v.ss58);
+      // The encoder must produce exactly the pinned canonical spelling — not the
+      // decode-only one, and not some third spelling.
+      expect(encodeAddress(`0x${v.hex}`, v.format)).toEqual(v.canonical_ss58);
+      expect(v.canonical_ss58).not.toEqual(v.ss58);
+      // The non-canonical spelling also decodes without an expected format,
+      // reporting the format pinned by the vector.
+      expect(decodeAddressWithFormat(v.ss58)).toEqual({
+        info,
+        ss58Format: v.format,
+      });
     });
   });
 
@@ -247,33 +505,154 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
       expect(`${v.reason}: ${error.kind}`).toEqual(
         `${v.reason}: ${v.error_kind}`,
       );
+      // The rendered message is shared verbatim with Rust and Python. Asserting the
+      // fixture's copy (generated from the Rust Display) rather than a local literal is what
+      // makes the shared-wording contract executable.
+      expect(`${v.reason}: ${error.message}`).toEqual(
+        `${v.reason}: ${v.message}`,
+      );
       if (v.error_kind === "UnexpectedFormat") {
         // These vectors additionally pin the expected/found pair carried by the error.
         expect([error.expected, error.found]).toEqual([v.expected, v.found]);
+        // Without an expected format the same address is simply a valid address of
+        // another network: decodeAddressWithFormat accepts it and reports the
+        // embedded format.
+        expect(decodeAddressWithFormat(v.ss58).ss58Format).toEqual(v.found);
+      } else {
+        // Structural failures are independent of the expected format:
+        // decodeAddressWithFormat rejects with the same classification.
+        let anyFormatError: unknown;
+        try {
+          decodeAddressWithFormat(v.ss58);
+        } catch (e) {
+          anyFormatError = e;
+        }
+        if (!(anyFormatError instanceof Ss58Error)) {
+          throw new Error(
+            `${JSON.stringify(v.ss58)} must be rejected by decodeAddressWithFormat (${v.reason}); got ${String(anyFormatError)}`,
+          );
+        }
+        expect(`${v.reason}: ${anyFormatError.kind}`).toEqual(
+          `${v.reason}: ${v.error_kind}`,
+        );
       }
+      // The typed address decoders and isKeylessAddress are built on the same SS58
+      // validation and must not bypass or reclassify it: each throws the same kind
+      // (never an AccountTypeMismatchError, never a boolean).
+      const entryPoints: Array<[string, () => unknown]> = [
+        [
+          "decodeAppAgentAddress",
+          () => decodeAppAgentAddress(v.ss58, v.format),
+        ],
+        [
+          "decodeTransactionalAddress",
+          () => decodeTransactionalAddress(v.ss58, v.format),
+        ],
+        ["decodeNamedAddress", () => decodeNamedAddress(v.ss58, v.format)],
+        ["isKeylessAddress", () => isKeylessAddress(v.ss58, v.format)],
+      ];
+      entryPoints.forEach(([name, entryPoint]) => {
+        let typedError: unknown;
+        try {
+          entryPoint();
+        } catch (e) {
+          typedError = e;
+        }
+        if (!(typedError instanceof Ss58Error)) {
+          throw new Error(
+            `${name} must reject ${JSON.stringify(v.ss58)} with Ss58Error (${v.reason}); got ${String(typedError)}`,
+          );
+        }
+        expect(`${name} ${v.reason}: ${typedError.kind}`).toEqual(
+          `${name} ${v.reason}: ${v.error_kind}`,
+        );
+      });
     });
   });
 
-  it("rejects the invalid encode-time names", () => {
-    // Names every implementation must reject at encode time. The thrown error must be
-    // one of the two name-validation messages (length or charset), not an unrelated
-    // TypeError or internal throw — the Python suite pins the same contract via
-    // assertRaises(ValueError). Which of the two a given vector triggers is per-language
-    // (e.g. a multi-byte name is a length failure in Rust but a charset failure here),
-    // so the assertion accepts either rather than pinning one message per vector.
+  it("rejects the invalid encode-time names with the pinned kind", () => {
+    // Names every implementation must reject at encode time, each pinned to the exact
+    // AccountNameError kind of the Rust source of truth: the length rule is defined on
+    // the UTF-8 *byte* length of the name (the bytes that go on the wire), so e.g.
+    // "héllo12345" is a length failure (11 bytes) while "café12345" is a charset
+    // failure (10 bytes, 'é' out of charset). Asserting the kind — not just "some
+    // throw" — is what keeps the taxonomy from drifting between the languages.
     vectors.named_invalid_encode.forEach((v) => {
-      expect(() => encodeNamedAddress(1, v.name)).toThrow(
-        /^Address name (must be exactly 10 characters long|contains invalid characters)$/,
-      );
+      const encoders: Array<[string, () => string]> = [
+        [
+          "encodeNamedAddress",
+          () =>
+            encodeNamedAddress({
+              appAgentId: appAgentId(1),
+              // The vector's name is invalid by construction: the cast simulates an
+              // untyped JavaScript caller, so the encoder itself is what rejects it.
+              accountName: v.name as AccountName,
+            }),
+        ],
+        [
+          "encodeNamedAccountId",
+          () =>
+            encodeNamedAccountId({
+              appAgentId: appAgentId(1),
+              // The vector's name is invalid by construction: the cast simulates an
+              // untyped JavaScript caller, so the encoder itself is what rejects it.
+              accountName: v.name as AccountName,
+            }),
+        ],
+      ];
+      encoders.forEach(([label, encode]) => {
+        let error: unknown;
+        try {
+          encode();
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof AccountNameError)) {
+          throw new Error(
+            `${label}(${JSON.stringify(v.name)}) must be rejected with AccountNameError (${v.reason}); got ${String(error)}`,
+          );
+        }
+        expect(`${v.reason}: ${error.kind}`).toEqual(
+          `${v.reason}: ${v.error_kind}`,
+        );
+        // Shared verbatim with Rust and Python; the fixture carries the Rust rendering,
+        // so a one-language edit fails here instead of passing on a local literal.
+        expect(error.message).toEqual(v.message);
+      });
     });
   });
 
   it("rejects the invalid raw account id strings", () => {
-    // Strings that violate the "0x" + 64 hex contract of decodeAccountId
-    // (encodeAddress shares the same input contract).
+    // Strings that violate the "0x" + 64 hex contract of the raw-account-id entry points
+    // (decodeAccountId, encodeAddress, isKeylessAccountId and the typed account-id
+    // decoders all share it). The class and message are pinned, so this cannot pass on
+    // an unrelated throw; the message mirrors the Rust ParseAccountIdError Display.
+    const parsers: Array<[string, (input: string) => unknown]> = [
+      ["decodeAccountId", decodeAccountId],
+      ["encodeAddress", (input) => encodeAddress(input)],
+      ["isKeylessAccountId", isKeylessAccountId],
+      ["decodeAppAgentAccountId", decodeAppAgentAccountId],
+      ["decodeTransactionalAccountId", decodeTransactionalAccountId],
+      ["decodeNamedAccountId", decodeNamedAccountId],
+    ];
     vectors.hex_invalid.forEach((v) => {
-      expect(() => decodeAccountId(v.input)).toThrow();
-      expect(() => encodeAddress(v.input)).toThrow();
+      parsers.forEach(([label, parse]) => {
+        let error: unknown;
+        try {
+          parse(v.input);
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof ParseAccountIdError)) {
+          throw new Error(
+            `${label}(${JSON.stringify(v.input)}) must throw ParseAccountIdError (${v.reason}); got ${String(error)}`,
+          );
+        }
+        // From the fixture, never a local literal: the message is shared verbatim with Rust
+        // and Python, so a local copy would let a one-language reword leave all three
+        // suites green while silently breaking the contract.
+        expect(error.message).toEqual(v.message);
+      });
     });
   });
 
@@ -281,10 +660,95 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
     // SS58 addresses and raw account ids are separate input classes, so
     // decodeAddress rejects any "0x"-prefixed input outright (use decodeAccountId).
     // The group pins the rejection only - the error classification is per-language
-    // (here a kind-less guidance Error).
+    // (here NotAnAddressError, which carries no cross-language kind).
+    const entryPoints: Array<[string, (input: string) => unknown]> = [
+      ["decodeAddress", (input) => decodeAddress(input)],
+      ["isKeylessAddress", (input) => isKeylessAddress(input)],
+      ["decodeAddressWithFormat", decodeAddressWithFormat],
+      // The typed address decoders are part of the same contract, and the Python suite
+      // already held them to it; without these three the group was enforced asymmetrically.
+      ["decodeAppAgentAddress", (input) => decodeAppAgentAddress(input)],
+      [
+        "decodeTransactionalAddress",
+        (input) => decodeTransactionalAddress(input),
+      ],
+      ["decodeNamedAddress", (input) => decodeNamedAddress(input)],
+    ];
     vectors.hex_not_an_address.forEach((v) => {
-      expect(() => decodeAddress(v.input)).toThrow();
-      expect(() => isKeylessAddress(v.input)).toThrow();
+      entryPoints.forEach(([label, decode]) => {
+        let error: unknown;
+        try {
+          decode(v.input);
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof NotAnAddressError)) {
+          throw new Error(
+            `${label}(${JSON.stringify(v.input)}) must throw NotAnAddressError (${v.reason}); got ${String(error)}`,
+          );
+        }
+        expect(error.message).toEqual(
+          "Raw account id hex is not an SS58 address; use decodeAccountId",
+        );
+      });
+    });
+  });
+
+  it("rejects the invalid encode-time SS58 formats", () => {
+    // SS58 formats every implementation must reject at encode time, through the
+    // raw-account-id encoder and every keyless encoder alike: the reserved formats (46, 47)
+    // and the out-of-range ones. The rejection is the cross-language contract; the
+    // classification is per-language, because an unusable format is a rejected *argument*.
+    // In TypeScript that is a RangeError — and specifically never an Ss58Error, which
+    // reports on an address.
+    vectors.format_invalid_encode.forEach((v) => {
+      const encoders: Array<[string, (format: number) => string]> = [
+        ["encodeAddress", (format) => encodeAddress(`0x${v.hex}`, format)],
+        [
+          "encodeAppAgentAddress",
+          (format) =>
+            encodeAppAgentAddress({
+              appAgentId: appAgentId(123),
+              ss58Format: format,
+            }),
+        ],
+        [
+          "encodeTransactionalAddress",
+          (format) =>
+            encodeTransactionalAddress({
+              appAgentId: appAgentId(123),
+              taId: transactionalId(456),
+              ss58Format: format,
+            }),
+        ],
+        [
+          "encodeNamedAddress",
+          (format) =>
+            encodeNamedAddress({
+              appAgentId: appAgentId(123),
+              accountName: accountName("hot-wallet"),
+              ss58Format: format,
+            }),
+        ],
+      ];
+      encoders.forEach(([label, encode]) => {
+        let error: unknown;
+        try {
+          encode(v.format);
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof RangeError)) {
+          throw new Error(
+            `${label}(format ${v.format}) must throw RangeError (${v.reason}); got ${String(error)}`,
+          );
+        }
+        // Asserting this negative is the point: reserved formats used to fall through to
+        // the SS58 layer and throw Ss58Error("InvalidFormat"), so the same mistake produced
+        // two different types depending only on *how* the format was unusable. A caller
+        // catching RangeError caught 16384 but not 46.
+        expect(error).not.toBeInstanceOf(Ss58Error);
+      });
     });
   });
 
@@ -295,10 +759,18 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
     vectors.hex_valid.forEach((v) => {
       const info = decodeAccountId(v.input);
       expect(info.accountId).toEqual(v.account_id);
+      // decodeAccountId never reports an address (raw account bytes carry none).
+      expect(info.address).toBeNull();
       expect(info.accountType).toEqual(AccountType[v.expected.type]);
-      expect(info.appAgentId).toEqual(v.expected.app_agent_id ?? null);
-      expect(info.taId).toEqual(v.expected.ta_id ?? null);
-      expect(info.accountName).toEqual(v.expected.name ?? null);
+      expect("appAgentId" in info ? info.appAgentId : null).toEqual(
+        v.expected.app_agent_id ?? null,
+      );
+      expect("taId" in info ? info.taId : null).toEqual(
+        v.expected.ta_id ?? null,
+      );
+      expect("accountName" in info ? info.accountName : null).toEqual(
+        v.expected.name ?? null,
+      );
       // encodeAddress accepts both spellings and produces the same address.
       expect(encodeAddress(v.input)).toEqual(encodeAddress(v.account_id));
     });
@@ -320,20 +792,215 @@ describe("Cross-language conformance vectors (generated by keyless-rust)", () =>
         throw new Error("no Regular decoder");
       },
     };
+    // The account-id counterparts (the Rust decode_*_account) carry the same pair.
+    const accountIdDecoders: Record<
+      keyof typeof AccountType,
+      (accountId: string) => unknown
+    > = {
+      AppAgent: decodeAppAgentAccountId,
+      Transactional: decodeTransactionalAccountId,
+      Named: decodeNamedAccountId,
+      Regular: () => {
+        throw new Error("no Regular decoder");
+      },
+    };
     vectors.type_mismatch.forEach((v) => {
-      let error: unknown;
-      try {
-        decoders[v.decode_as](v.ss58);
-      } catch (e) {
-        error = e;
-      }
-      if (!(error instanceof AccountTypeMismatchError)) {
-        throw new Error(
-          `${v.decode_as} on ${v.found} must throw AccountTypeMismatchError; got ${String(error)}`,
-        );
-      }
-      expect(error.expected).toEqual(AccountType[v.decode_as]);
-      expect(error.found).toEqual(AccountType[v.found]);
+      (
+        [
+          ["address", () => decoders[v.decode_as](v.ss58)],
+          ["accountId", () => accountIdDecoders[v.decode_as](`0x${v.hex}`)],
+        ] as Array<[string, () => unknown]>
+      ).forEach(([label, decode]) => {
+        let error: unknown;
+        try {
+          decode();
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof AccountTypeMismatchError)) {
+          throw new Error(
+            `${v.decode_as} (${label}) on ${v.found} must throw AccountTypeMismatchError; got ${String(error)}`,
+          );
+        }
+        expect(error.expected).toEqual(AccountType[v.decode_as]);
+        expect(error.found).toEqual(AccountType[v.found]);
+        // This package and the Python one each document their mismatch message as
+        // identical to the other's; address_message pins that claim rather than leaving it
+        // to two independent local literals.
+        expect(error.message).toEqual(v.address_message);
+      });
+    });
+  });
+
+  it("rejects an out-of-range expected format on decode", () => {
+    // The decode side of the format contract. Only the rejection is cross-language (Rust
+    // reports Ss58Error::InvalidFormat, Python a ValueError, this package a RangeError), so
+    // the fixture pins no error_kind.
+    const decoders: Array<
+      [string, (address: string, format: number) => unknown]
+    > = [
+      ["decodeAddress", (address, format) => decodeAddress(address, format)],
+      [
+        "isKeylessAddress",
+        (address, format) => isKeylessAddress(address, format),
+      ],
+      [
+        "decodeAppAgentAddress",
+        (address, format) => decodeAppAgentAddress(address, format),
+      ],
+    ];
+    vectors.format_invalid_decode.forEach((v) => {
+      // The address itself is valid, so any rejection comes from the parameter.
+      expect(decodeAddress(v.ss58)).toBeDefined();
+      decoders.forEach(([label, decode]) => {
+        expect(() => decode(v.ss58, v.format)).toThrow(RangeError);
+        // Parameter validation, not address validation: never an Ss58Error.
+        let error: unknown;
+        try {
+          decode(v.ss58, v.format);
+        } catch (e) {
+          error = e;
+        }
+        if (error instanceof Ss58Error) {
+          throw new Error(
+            `${label}(format ${v.format}) must reject the parameter, not the address (${v.reason})`,
+          );
+        }
+      });
+    });
+  });
+
+  it("rejects the host-language-only invalid formats on encode and decode paths", () => {
+    // Format values that exist only at the host-language boundary: JSON-representable
+    // values that are not u16-typed (boolean, negative, fractional, beyond u16). Rust's
+    // u16 makes them unrepresentable; this package and Python must reject them at runtime
+    // before any payload work. Rejection only — RangeError here, TypeError/ValueError in
+    // Python — and, as for every rejected format *parameter*, never an Ss58Error.
+    vectors.format_invalid_host.forEach((v) => {
+      // The carrier inputs are valid, so any rejection comes from the parameter.
+      expect(decodeAddress(v.ss58)).toBeDefined();
+      // The cast simulates an untyped caller (the boolean vector cannot even be
+      // spelled in typed code).
+      const format = v.value as number;
+      const entryPoints: Array<[string, () => unknown]> = [
+        ["encodeAddress", () => encodeAddress(`0x${v.hex}`, format)],
+        [
+          "encodeAppAgentAddress",
+          () =>
+            encodeAppAgentAddress({
+              appAgentId: appAgentId(123),
+              ss58Format: format,
+            }),
+        ],
+        ["decodeAddress", () => decodeAddress(v.ss58, format)],
+        ["isKeylessAddress", () => isKeylessAddress(v.ss58, format)],
+        ["decodeAppAgentAddress", () => decodeAppAgentAddress(v.ss58, format)],
+      ];
+      entryPoints.forEach(([label, call]) => {
+        let error: unknown;
+        try {
+          call();
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof RangeError)) {
+          throw new Error(
+            `${label}(format ${String(v.value)}) must throw RangeError (${v.reason}); got ${String(error)}`,
+          );
+        }
+        expect(error).not.toBeInstanceOf(Ss58Error);
+      });
+    });
+  });
+
+  it("pins the exported constant values", () => {
+    // The exported constant values, pinned by the fixture so all three implementations
+    // agree on the numbers users are told to rely on. The name sets must match exactly,
+    // so a constant added to the generator cannot be silently unconsumed here.
+    const exported: Record<string, number> = {
+      ACCOUNT_ID_LENGTH,
+      ACCOUNT_NAME_LENGTH,
+      APP_AGENT_ACCOUNT_IDENTIFIER,
+      TRANSACTIONAL_ACCOUNT_IDENTIFIER,
+      NAMED_ACCOUNT_IDENTIFIER,
+      SS58_FORMAT_TREVO_ASSET_HUB,
+      SS58_MAX_ADDRESS_LENGTH,
+      U32_MAX,
+    };
+    expect(vectors.constants.map((v) => v.name).sort()).toEqual(
+      Object.keys(exported).sort(),
+    );
+    vectors.constants.forEach((v) => {
+      expect(exported[v.name]).toEqual(v.value);
+    });
+  });
+
+  it("rejects the out-of-range identifier values at encode time", () => {
+    // Rust enforces the u32 range through its type system; this package and Python must do
+    // it at runtime. Only the rejection is cross-language: Python splits TypeError from
+    // ValueError, this package raises RangeError for both.
+    vectors.u32_invalid_encode.forEach((v) => {
+      // The cast simulates an untyped caller handing the hostile value straight to
+      // the factory (the boolean vector cannot even be spelled in typed code).
+      expect(() => appAgentId(v.value as number)).toThrow(RangeError);
+      expect(() => transactionalId(v.value as number)).toThrow(RangeError);
+
+      // The group is named *_encode, so drive the encoders too, not just the branded-id
+      // factories. A typed caller is stopped by the factory; an untyped one reaches the
+      // encoder, which must re-validate rather than encode a truncated or wrapped value
+      // into the account bytes. The casts are the point: they simulate that caller.
+      const bad = v.value as unknown as AppAgentId & TransactionalId;
+      expect(() => encodeAppAgentAccountId({ appAgentId: bad })).toThrow(
+        RangeError,
+      );
+      expect(() =>
+        encodeTransactionalAccountId({
+          appAgentId: bad,
+          taId: transactionalId(1),
+        }),
+      ).toThrow(RangeError);
+      expect(() =>
+        encodeTransactionalAccountId({ appAgentId: appAgentId(1), taId: bad }),
+      ).toThrow(RangeError);
+      expect(() =>
+        encodeNamedAccountId({
+          appAgentId: bad,
+          accountName: accountName("hot-wallet"),
+        }),
+      ).toThrow(RangeError);
+      expect(() => encodeAppAgentAddress({ appAgentId: bad })).toThrow(
+        RangeError,
+      );
+    });
+  });
+
+  it("rejects an SS58 address handed to the raw-account-id entry points", () => {
+    // The mirror image of hex_not_an_address: an SS58 *address* fed to a raw-account-id
+    // entry point. The two input classes are separate in both directions — an address is
+    // not "0x" + 64 hex, so it must fail the hex contract rather than being silently
+    // base58-decoded.
+    const entryPoints: Array<[string, (input: string) => unknown]> = [
+      ["decodeAccountId", decodeAccountId],
+      ["isKeylessAccountId", isKeylessAccountId],
+      ["encodeAddress", (input) => encodeAddress(input)],
+      ["decodeAppAgentAccountId", decodeAppAgentAccountId],
+      ["decodeTransactionalAccountId", decodeTransactionalAccountId],
+      ["decodeNamedAccountId", decodeNamedAccountId],
+    ];
+    vectors.address_not_an_account_id.forEach((v) => {
+      entryPoints.forEach(([label, entryPoint]) => {
+        let error: unknown;
+        try {
+          entryPoint(v.input);
+        } catch (e) {
+          error = e;
+        }
+        if (!(error instanceof ParseAccountIdError)) {
+          throw new Error(
+            `${label} must reject the address ${v.input} as not a raw account id (${v.reason}); got ${String(error)}`,
+          );
+        }
+      });
     });
   });
 });
