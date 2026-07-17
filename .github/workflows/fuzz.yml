@@ -1,7 +1,7 @@
-# Longer scheduled fuzzing of the two untrusted-input parsers. The per-PR check-rust
-# workflow runs the same targets as a 30-second smoke test; this runs them for several
-# minutes each on a weekly cadence (and on demand) to catch regressions the smoke run
-# would miss.
+# Longer scheduled fuzzing of the untrusted-input parsers and the classifier. The per-PR
+# check-rust workflow runs the same targets as a 30-second smoke test; this runs them for
+# several minutes each on a weekly cadence (and on demand) to catch regressions the smoke
+# run would miss.
 name: fuzz
 
 on:
@@ -13,15 +13,32 @@ on:
 permissions:
   contents: read
 
+env:
+  # The single source of the fuzz toolchain pin for this workflow. Exporting it as
+  # RUSTUP_TOOLCHAIN (rather than relying on `cargo +nightly-...` per command) also stops the
+  # root rust-toolchain.toml from being resolved by Swatinem/rust-cache, which would otherwise
+  # download an unused stable toolchain and key the cache on it.
+  RUSTUP_TOOLCHAIN: nightly-2026-07-01
+
 jobs:
   fuzz:
+    concurrency:
+      group: scheduled-fuzz-${{ matrix.target }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
     defaults:
       run:
         working-directory: ./keyless-rust
     strategy:
+      # Keep fuzzing the other targets even if one finds a crash: independent findings in
+      # one scheduled run should surface as separate failures, not one.
+      fail-fast: false
       matrix:
-        target: [ss58_decode, accountid_from_str]
+        target: [ss58_decode, accountid_from_str, classify]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -29,14 +46,58 @@ jobs:
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            keyless-rust
+            keyless-rust/fuzz
       - name: Install cargo-fuzz
         uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
         with:
-          tool: cargo-fuzz
+          tool: cargo-fuzz@0.13.2
+      - name: Fuzz lockfile is honoured
+        # cargo-fuzz has no --locked flag, so the builds below could silently re-resolve
+        # and rewrite fuzz/Cargo.lock — fuzzing a dependency set nobody audited (cargo
+        # audit reads the committed lock). `cargo metadata --locked` fails if the lock
+        # does not match the manifests; once it passes, the build resolves to exactly the
+        # locked versions and leaves the file untouched.
+        run: cargo metadata --locked --manifest-path fuzz/Cargo.toml > /dev/null
       # cargo-fuzz defaults --target to the triple it was itself built for; the
       # install-action ships a musl-static binary, so without an explicit --target it
       # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
       # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
+      #
+      # Seed each run from the committed corpus in fuzz/seeds/<target> so every run
+      # starts from known-interesting inputs; new discoveries land in the throwaway
+      # fuzz/corpus/<target> directory.
       - name: Fuzz ${{ matrix.target }}
-        run: cargo +nightly fuzz run ${{ matrix.target }} --target x86_64-unknown-linux-gnu -- -max_total_time=300
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          cargo fuzz run ${{ matrix.target }} fuzz/corpus/${{ matrix.target }} fuzz/seeds/${{ matrix.target }} --target x86_64-unknown-linux-gnu -- -max_total_time=300
+
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: keyless-rust/fuzz/artifacts/
+
+      - name: Open an issue for the failure
+        # Scheduled runs have no PR or push to notify anyone; without this a crash
+        # found on the weekly cadence would sit unnoticed in the Actions tab.
+        # always() + cancelled(): a *hung* fuzz target (a plausible libFuzzer finding
+        # class) is killed by timeout-minutes and ends cancelled, not failed —
+        # failure() alone would file nothing for exactly the discovery that matters.
+        if: always() && (failure() || cancelled())
+        # The job default working-directory is ./keyless-rust; the reporter lives at the
+        # repository root (the same override as audit.yml's rust job — without it this
+        # step errors on a nonexistent path and the issue is never filed).
+        working-directory: .
+        run: bash .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Scheduled fuzz failure - ${{ matrix.target }}
+          BODY: >-
+            The crash reproducer (if any) is attached to the run as
+            fuzz-artifacts-${{ matrix.target }}.

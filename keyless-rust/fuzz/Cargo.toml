@@ -25,6 +25,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "classify"
+path = "fuzz_targets/classify.rs"
+test = false
+doc = false
+bench = false
+
 # Standalone workspace: the fuzz crate is not part of the published package.
 [workspace]
 members = ["."]
