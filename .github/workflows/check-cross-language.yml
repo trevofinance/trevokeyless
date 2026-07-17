@@ -1,0 +1,84 @@
+name: check-cross-language
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  differential:
+    concurrency:
+      group: differential-${{ github.ref }}
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Lets the scheduled run file the divergence it finds; see the last step.
+      issues: write
+    env:
+      # The repository-root rust-toolchain.toml would otherwise override the toolchain
+      # installed below; RUSTUP_TOOLCHAIN takes precedence over that file.
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: keyless-ts/package-lock.json
+      - name: Build TypeScript distribution
+        working-directory: keyless-ts
+        run: |
+          npm ci
+          npm run build
+      - name: Seeded valid and hostile differential check
+        # Pull requests and pushes use the fixed seed so a run is reproducible from the
+        # commit alone. The weekly scheduled run instead seeds from the run id: with a
+        # constant seed it only ever re-explored a superset of the same deterministic
+        # cases, which is exactly what the PR gate already did. The chosen seed is printed
+        # by the script, so a scheduled failure is reproducible locally with --seed.
+        run: >-
+          python3 .github/scripts/check_cross_language.py
+          --seed ${{ github.event_name == 'schedule' && github.run_id || '0x54524556' }}
+          --cases ${{ github.event_name == 'schedule' && 2048 || 256 }}
+
+      - name: Open an issue for the failure
+        # The weekly run explores seeds no PR ever will, and it is the only thing in this
+        # repository that can discover a *new* cross-language divergence — the single most
+        # important thing here. A scheduled run has no PR or push to report a status
+        # against, so without this the divergence would sit unnoticed in the Actions tab.
+        # (fuzz.yml and audit.yml already do this; this workflow was the one that did not.)
+        # always() + cancelled(): a hung differential run is killed by timeout-minutes
+        # and ends cancelled, not failed — failure() alone would file nothing.
+        if: always() && (failure() || cancelled()) && github.event_name == 'schedule'
+        run: .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Scheduled cross-language differential failure
+          BODY: >-
+            The weekly differential run found a divergence between the Rust source of truth
+            and Python or TypeScript, on a seed no pull request exercises. The failing seed
+            is printed in the run log; reproduce it locally with
+            `python3 .github/scripts/check_cross_language.py --seed <seed> --cases 2048`.
