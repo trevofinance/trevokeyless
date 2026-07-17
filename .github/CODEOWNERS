@@ -1,0 +1,16 @@
+# Review is required on every path by default, and explicitly on the two that can do the most
+# damage: the CI/release automation (which holds the trusted-publishing identity) and the
+# conformance fixture (the executable specification of the frozen on-chain encoding — a change
+# to a `value` field of an existing vector means the encoding itself changed).
+#
+# Requires branch protection on `main` with "Require review from Code Owners" enabled;
+# CODEOWNERS alone enforces nothing.
+
+* @trevo-finance/maintainers
+
+# Release automation and trusted publishing.
+/.github/ @trevo-finance/maintainers
+
+# The cross-language specification and its generator.
+/conformance/ @trevo-finance/maintainers
+/keyless-rust/examples/gen_conformance.rs @trevo-finance/maintainers

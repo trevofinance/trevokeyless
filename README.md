@@ -10,7 +10,7 @@ This makes the keyless addresses convenient for use in off-chain applications.
 
 For more detailed docs, visit the README of the specific library:
 
-- Typescript (requires Node.js 22+)
+- TypeScript (requires Node.js 22.13+)
   - Sources: [GitHub](./keyless-ts/)
   - Package: [NPM](https://www.npmjs.com/package/@trevofinance/trevokeyless)
 - Python (requires Python 3.10+)
@@ -49,18 +49,23 @@ What decoding does **not** guarantee:
   merely because it decodes to a particular AppAgent ID.
 - A regular account misclassifying as keyless requires its bytes to match a truncated
   blake2b-256 checksum: probability ≈ 2⁻¹³⁶ in the worst case (Named accounts,
-  17 checksum bytes). Corrupting any byte of a keyless account demotes it to Regular.
+  17 checksum bytes). Corrupting any byte of a keyless account demotes it to Regular with
+  the same overwhelming probability — the checksum detects accidental corruption, it does
+  not *prove* integrity against an attacker who can grind (nobody can: no secret is
+  involved, so anyone can compute a *valid* keyless account for any AppAgent ID at will).
 
 Additional properties:
 
 - **No secrets, no constant time.** Every input and output of these libraries is a
   public identifier; checksum comparisons are deliberately not constant-time because
   there is nothing to hide.
-- **SCALE decoding performs no validation** (Rust, feature `scale`). SCALE `Decode` of
-  `BlockchainAccountInfo` keeps the usual SCALE cost model and does **not** re-check
-  that the embedded identifiers match `account_id` — unlike serde deserialization,
-  which does. Treat SCALE-decoded values from untrusted sources as unverified claims
-  and re-derive them with `decode_account_info`.
+- **SCALE decoding re-derives classification** (Rust, feature `scale`).
+  `BlockchainAccountInfo` encodes only its `AccountId32`; decoding classifies those
+  bytes again and derives the identifiers, so a SCALE payload cannot inject redundant
+  or contradictory claims. This compact representation is a wire-contract change from
+  the 1.x enum encoding; runtime consumers holding persisted 1.x values need the
+  one-time storage migration described in the
+  [Rust changelog](keyless-rust/CHANGELOG.md).
 - **Canonical spellings only.** Decoders reject non-canonical address spellings
   (wrong-length checksums, surrounding whitespace, case variations, out-of-alphabet
   characters) and bound input length before base58 work, so the decoding cost of
@@ -89,18 +94,24 @@ Only two representations are cross-language interchange formats:
 
 Each library converts between the two in both directions: Rust with
 `AccountId32::to_ss58check*` / `from_ss58check*`, Python with `encode_address` /
-`decode_address`, TypeScript with `encodeAddress` / `decodeAddress`.
+`decode_address`, TypeScript with `encodeAddress` / `decodeAddress`. Addresses whose
+SS58 format is not known up front decode with Rust
+`AccountId32::from_ss58check_with_version`, Python `decode_address_with_format`, or
+TypeScript `decodeAddressWithFormat`, each returning the format found in the address
+alongside the decoded account — the raw `AccountId32` in Rust, the classified info object in
+Python and TypeScript.
 
-The decoded info objects are *per-language* shapes: the Rust serde representation of
-`BlockchainAccountInfo` is an externally tagged enum and is **not** interchangeable
-with the flat Python/TypeScript `BlockchainAccountInfo` objects. Do not serialize one
-language's info object and parse it in another; exchange addresses or account ids.
+The decoded info objects are *per-language* shapes: Rust uses an enum, Python a union of
+four frozen dataclasses, and TypeScript a readonly discriminated union. Each variant
+contains only its valid identifiers, but their serialized object shapes are not a
+cross-language contract. Exchange addresses or account ids instead.
 
-Error *messages* are likewise per-language. The only structured error contract shared
-across languages is the typed-decoder mismatch pair: the requested type (`expected`) and
-the account's actual classification (`found`), pinned by the `type_mismatch` group of the
-conformance fixture and carried by the Rust `KeylessDecodeError::WrongAccountType`, the
-Python `AccountTypeMismatchError`, and the TypeScript `AccountTypeMismatchError`.
+SS58 failures share five `kind`/variant names and exact rendered messages across the
+three implementations. Account-name failures likewise expose length/character kinds
+and the same two messages, although a particular non-ASCII JavaScript/Python string can
+reach a different kind than its UTF-8 bytes do in Rust. Typed-decoder mismatches share
+the requested type (`expected`) and actual classification (`found`), pinned by the
+`type_mismatch` fixture group; their rendered message is not an interchange contract.
 
 ## Versioning and compatibility
 
@@ -119,6 +130,33 @@ Python `AccountTypeMismatchError`, and the TypeScript `AccountTypeMismatchError`
   `ts-vX.Y.Z`), and follow [semantic versioning](https://semver.org): breaking changes
   to a package's public API only happen in its major releases. The encoding itself
   never changes at any version.
+- **Raising a runtime or toolchain floor is a breaking change.** Bumping the Rust MSRV,
+  raising the Node `engines` floor, or dropping a supported Python minor removes
+  environments a package previously worked in, so it lands in that package's **major**
+  release — never a minor or patch. (Adding support for a *new* runtime version is not
+  breaking.) The floors are: `rust-version` in `keyless-rust/Cargo.toml`, `engines` in
+  `keyless-ts/package.json`, and `requires-python` in `keyless-python/pyproject.toml`;
+  CI tests each package at exactly its declared floor.
+
+## What the three keyless types are for
+
+All three keyless types are controlled by the same App Agent; they differ in what
+derives their identity, which is what to pick by:
+
+- **AppAgent root** — the single account derived from the AppAgentId alone: the
+  application's own on-chain identity, one per App Agent.
+- **Transactional** — up to 2³² numbered sub-accounts per App Agent, indexed by the
+  TA ID. Built for programmatic fan-out: give each user, payment flow, or job its own
+  isolated on-chain account without managing a key for any of them, and reconstruct
+  the account later from the two numbers alone.
+- **Named** — sub-accounts labeled by a 10-character name embedded verbatim in the
+  account bytes. Built for the small set of long-lived, human-recognizable roles an
+  application points at repeatedly — a treasury, a fee sink, an escrow pool — where a
+  stable label (`Treasury-1`, `fees#pool1`), not a counter, is the natural identity.
+
+Anyone can *compute* any of these addresses from the identifiers (see the security
+model above — classification is not authorization); which operations the Trevo runtime
+actually permits each type is chain-side policy, outside these libraries.
 
 ## Common terms
 
@@ -134,3 +172,7 @@ Python `AccountTypeMismatchError`, and the TypeScript `AccountTypeMismatchError`
 - **AppAgent ID**: an identifier of an AppAgent `uint32`;
 - **TA ID**: an identifier of a Transactional address, `uint32`;
 - **Account name** (`AccountName`): the name embedded in a Named account, 10 ASCII characters from the list `0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#`;
+
+## License
+
+Licensed under the [Apache License, Version 2.0](./LICENSE). Copyright 2025-2026 Trevo Ltd.

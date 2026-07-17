@@ -1,20 +1,36 @@
+# Python bytecode and tool output
+__pycache__/
+*.py[cod]
+.coverage
+coverage.xml
+.venv/
+# ruff and mypy caches appear wherever the tools run — keyless-python/ for the package
+# checks, the repo root for the .github/scripts checks (per CONTRIBUTING) — so ignore
+# them unanchored, covering every location alike.
+.mypy_cache/
+.ruff_cache/
+
 keyless-python/.eggs/*
 keyless-python/.venv
 keyless-python/env
-keyless-python/.mypy_cache/
 keyless-python/.pytest_cache/
-keyless-python/.ruff_cache/
-keyless-python/*/__pycache__/
 keyless-python/build/
 keyless-python/dist/
-keyless-python/trevokeyless.egg-info/
+keyless-python/*.egg-info/
 
 keyless-rust/target
 keyless-rust/fuzz/target
+# The working corpus grows during fuzz runs and stays local; the curated seed inputs
+# live in the committed keyless-rust/fuzz/seeds/ instead.
 keyless-rust/fuzz/corpus
 keyless-rust/fuzz/artifacts
 keyless-rust/fuzz/coverage
-keyless-rust/fuzz/Cargo.lock
 
 keyless-ts/dist
-*/node_modules
+keyless-ts/coverage
+keyless-ts/*.tgz
+node_modules/
+
+# Claude Code: the shared project config in .claude/ is committed; personal
+# per-developer settings stay local.
+.claude/settings.local.json
