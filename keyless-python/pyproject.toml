@@ -1,6 +1,6 @@
 [project]
 name = "trevokeyless"
-version = "1.0.0"
+version = "2.0.0"
 requires-python = ">=3.10"
 
 license = "Apache-2.0"
@@ -14,6 +14,12 @@ classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3 :: Only",
   "Operating System :: OS Independent",
   "Typing :: Typed",
 ]
@@ -22,17 +28,16 @@ classifiers = [
 # trevokeyless._ss58 (the SS58 payloads are at most 36 bytes).
 dependencies = []
 
-[project.optional-dependencies]
-dev = [
-    "mypy>=1.15.0",
-    "ruff>=0.11.2",
-]
+# No [project.optional-dependencies]: the development toolchain lives in
+# requirements-dev.in / requirements-dev.txt (exact, hash-pinned, what CI installs). A
+# `dev` extra here would be metadata that nothing installs, with floors that drift from
+# the lock, shipped in the wheel's METADATA.
 
 
 [project.urls]
 Homepage = "https://trevo.finance"
-Repository = "https://github.com/trevo-finance/trevo-keyless.git"
-Issues = "https://github.com/trevo-finance/trevo-keyless/issues"
+Repository = "https://github.com/trevo-finance/trevokeyless.git"
+Issues = "https://github.com/trevo-finance/trevokeyless/issues"
 
 
 [build-system]

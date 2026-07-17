@@ -7,7 +7,9 @@ vector exactly; the Rust and TypeScript test suites consume the same fixture.
 """
 
 import json
+import os
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -16,47 +18,181 @@ from trevokeyless import Ss58Error
 from trevokeyless._ss58 import ss58_decode, ss58_encode
 
 _VECTORS_PATH = Path(__file__).resolve().parents[2] / "conformance" / "vectors.json"
-_VECTORS: dict[str, Any] = json.loads(_VECTORS_PATH.read_text()) if _VECTORS_PATH.is_file() else {}
+
+# Every group of the fixture with its exact vector count, pinned so an accidentally
+# dropped (or newly generated but unconsumed) group fails here instead of passing
+# silently. The counts are pinned too: without them a generator change that shrinks a
+# group - say `classify` from 401 vectors down to a handful - would still pass every
+# consumer. Update a number here only together with a deliberate generator change.
+_FIXTURE_GROUP_SIZES = {
+    "app_agent": 63,
+    "transactional": 64,
+    "named": 67,
+    "classify": 401,
+    "ss58_formats": 101,
+    "ss58_decode_only": 5,
+    "ss58_invalid": 37,
+    "named_invalid_encode": 16,
+    "hex_invalid": 13,
+    "hex_valid": 12,
+    "hex_not_an_address": 4,
+    "address_not_an_account_id": 4,
+    "format_invalid_encode": 4,
+    "format_invalid_decode": 2,
+    "format_invalid_host": 5,
+    "u32_invalid_encode": 7,
+    "constants": 8,
+    "type_mismatch": 9,
+}
 
 
-@unittest.skipUnless(_VECTORS, "conformance fixture not present (not running from the repository?)")
+def _load_vectors() -> dict[str, Any]:
+    if not _VECTORS_PATH.is_file():
+        # Skipping is an explicit opt-in for runs outside the repository; a missing
+        # fixture in the repository is a broken path and must fail loudly instead of
+        # silently skipping the whole cross-language pin.
+        if os.environ.get("TREVOKEYLESS_CONFORMANCE_SKIP"):
+            # The CI backstop, mirroring the Rust suite: check-python.yml exports the
+            # variable for every job, where the fixture is always checked out, so a
+            # requested skip can only mean a broken path and must not read as green.
+            if os.environ.get("TREVOKEYLESS_CONFORMANCE_REQUIRE"):
+                msg = (
+                    f"conformance fixture not found at {_VECTORS_PATH}, but "
+                    "TREVOKEYLESS_CONFORMANCE_REQUIRE is set: refusing to skip"
+                )
+                raise FileNotFoundError(msg)
+            return {}
+        msg = (
+            f"conformance fixture not found at {_VECTORS_PATH} "
+            "(set TREVOKEYLESS_CONFORMANCE_SKIP=1 to skip outside the repository)"
+        )
+        raise FileNotFoundError(msg)
+    return json.loads(_VECTORS_PATH.read_text())  # type: ignore[no-any-return]
+
+
+_VECTORS = _load_vectors()
+
+
+@unittest.skipUnless(_VECTORS, "conformance fixture skipped via TREVOKEYLESS_CONFORMANCE_SKIP")
 class TestConformanceVectors(unittest.TestCase):
+    def test_group_set(self: "TestConformanceVectors") -> None:
+        # The exact group set and the exact size of every group are pinned: an
+        # accidentally emptied - or quietly shrunk - group would otherwise pass every
+        # consumer silently.
+        self.assertEqual(set(_VECTORS), set(_FIXTURE_GROUP_SIZES))
+        self.assertEqual(
+            {group: len(vectors) for group, vectors in _VECTORS.items()},
+            _FIXTURE_GROUP_SIZES,
+            "fixture group sizes changed; update _FIXTURE_GROUP_SIZES deliberately",
+        )
+
+    def test_account_type_values(self: "TestConformanceVectors") -> None:
+        # The numeric AccountType values are the byte-[4] discriminants of the wire
+        # format, shared verbatim with the Rust and TypeScript implementations. No vector
+        # carries them, so they are pinned here.
+        self.assertEqual(trevokeyless.AccountType.Regular.value, 0)
+        self.assertEqual(trevokeyless.AccountType.AppAgent.value, 1)
+        self.assertEqual(trevokeyless.AccountType.Transactional.value, 2)
+        self.assertEqual(trevokeyless.AccountType.Named.value, 3)
+        self.assertEqual(trevokeyless.APP_AGENT_ACCOUNT_IDENTIFIER, 1)
+        self.assertEqual(trevokeyless.TRANSACTIONAL_ACCOUNT_IDENTIFIER, 2)
+        self.assertEqual(trevokeyless.NAMED_ACCOUNT_IDENTIFIER, 3)
+
     def test_app_agent_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["app_agent"]:
             with self.subTest(id=v["id"]):
-                self.assertEqual(trevokeyless.encode_app_agent_address(v["id"]), v["ss58"])
+                self.assertEqual(
+                    trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(v["id"])),
+                    v["ss58"],
+                )
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
                 self.assertEqual(trevokeyless.encode_app_agent_account_id(v["id"]), "0x" + v["hex"])
                 self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
+                self.assertTrue(trevokeyless.is_keyless_address(v["ss58"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
-                self.assertIs(info.account_type, trevokeyless.AccountType.AppAgent)
+                # `assert isinstance` rather than assertIsInstance: it asserts the same thing
+                # and also narrows the BlockchainAccountInfo union for the type checker.
+                assert isinstance(info, trevokeyless.AppAgentAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
                 self.assertEqual(info.app_agent_id, v["id"])
                 self.assertEqual(trevokeyless.decode_app_agent_address(v["ss58"]), v["id"])
+                # The typed account-id decoder reports the same identifiers from the raw
+                # account id (which carries no SS58 format).
+                self.assertEqual(trevokeyless.decode_app_agent_account_id("0x" + v["hex"]), v["id"])
+                # decode_address_with_format reports the same classification plus the
+                # format found in the address (here the canonical Trevo format).
+                self.assertEqual(
+                    trevokeyless.decode_address_with_format(v["ss58"]),
+                    (info, trevokeyless.SS58_FORMAT_TREVO_ASSET_HUB),
+                )
 
     def test_transactional_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["transactional"]:
             with self.subTest(aa=v["aa"], ta=v["ta"]):
-                self.assertEqual(trevokeyless.encode_transactional_address(v["aa"], v["ta"]), v["ss58"])
+                self.assertEqual(
+                    trevokeyless.encode_transactional_address(
+                        app_agent_id=trevokeyless.AppAgentId(v["aa"]),
+                        ta_id=trevokeyless.TransactionalId(v["ta"]),
+                    ),
+                    v["ss58"],
+                )
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
-                self.assertEqual(trevokeyless.encode_transactional_account_id(v["aa"], v["ta"]), "0x" + v["hex"])
+                self.assertEqual(
+                    trevokeyless.encode_transactional_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(v["aa"]),
+                        ta_id=trevokeyless.TransactionalId(v["ta"]),
+                    ),
+                    "0x" + v["hex"],
+                )
                 self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
+                self.assertTrue(trevokeyless.is_keyless_address(v["ss58"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
-                self.assertIs(info.account_type, trevokeyless.AccountType.Transactional)
+                assert isinstance(info, trevokeyless.TransactionalAccountInfo)  # noqa: S101
                 self.assertEqual((info.app_agent_id, info.ta_id), (v["aa"], v["ta"]))
+                self.assertEqual(trevokeyless.decode_transactional_address(v["ss58"]), (v["aa"], v["ta"]))
+                self.assertEqual(
+                    trevokeyless.decode_transactional_account_id("0x" + v["hex"]),
+                    (v["aa"], v["ta"]),
+                )
+                self.assertEqual(
+                    trevokeyless.decode_address_with_format(v["ss58"]),
+                    (info, trevokeyless.SS58_FORMAT_TREVO_ASSET_HUB),
+                )
 
     def test_named_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["named"]:
             with self.subTest(aa=v["aa"], name=v["name"]):
-                self.assertEqual(trevokeyless.encode_named_address(v["aa"], v["name"]), v["ss58"])
+                self.assertEqual(
+                    trevokeyless.encode_named_address(
+                        app_agent_id=trevokeyless.AppAgentId(v["aa"]),
+                        account_name=v["name"],
+                    ),
+                    v["ss58"],
+                )
                 self.assertEqual(trevokeyless.encode_address("0x" + v["hex"]), v["ss58"])
-                self.assertEqual(trevokeyless.encode_named_account_id(v["aa"], v["name"]), "0x" + v["hex"])
+                self.assertEqual(
+                    trevokeyless.encode_named_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(v["aa"]),
+                        account_name=v["name"],
+                    ),
+                    "0x" + v["hex"],
+                )
                 self.assertTrue(trevokeyless.is_keyless_account_id("0x" + v["hex"]))
+                self.assertTrue(trevokeyless.is_keyless_address(v["ss58"]))
                 info = trevokeyless.decode_address(v["ss58"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
-                self.assertIs(info.account_type, trevokeyless.AccountType.Named)
+                assert isinstance(info, trevokeyless.NamedAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
                 self.assertEqual((info.app_agent_id, info.account_name), (v["aa"], v["name"]))
+                self.assertEqual(trevokeyless.decode_named_address(v["ss58"]), (v["aa"], v["name"]))
+                self.assertEqual(
+                    trevokeyless.decode_named_account_id("0x" + v["hex"]),
+                    (v["aa"], v["name"]),
+                )
+                self.assertEqual(
+                    trevokeyless.decode_address_with_format(v["ss58"]),
+                    (info, trevokeyless.SS58_FORMAT_TREVO_ASSET_HUB),
+                )
 
     def test_classification_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["classify"]:
@@ -64,21 +200,33 @@ class TestConformanceVectors(unittest.TestCase):
             with self.subTest(hex=v["hex"]):
                 info = trevokeyless.decode_account_id("0x" + v["hex"])
                 self.assertEqual(info.account_type.name, expected["type"])
-                self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
-                self.assertEqual(info.ta_id, expected.get("ta_id"))
-                self.assertEqual(info.account_name, expected.get("name"))
+                self.assertEqual(getattr(info, "app_agent_id", None), expected.get("app_agent_id"))
+                self.assertEqual(getattr(info, "ta_id", None), expected.get("ta_id"))
+                self.assertEqual(getattr(info, "account_name", None), expected.get("name"))
                 self.assertEqual(trevokeyless.is_keyless_account_id("0x" + v["hex"]), expected["type"] != "Regular")
+                # Decoding a raw account id reports no address: raw bytes carry no SS58
+                # format. (The TypeScript suite already asserted this for the same group.)
+                self.assertIsNone(info.address)
 
     def test_ss58_format_vectors(self: "TestConformanceVectors") -> None:
         for v in _VECTORS["ss58_formats"]:
             with self.subTest(hex=v["hex"], ss58_format=v["format"]):
                 self.assertEqual(ss58_encode(bytes.fromhex(v["hex"]), v["format"]), v["ss58"])
-                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"], v["format"]), v["ss58"])
+                self.assertEqual(trevokeyless.encode_address("0x" + v["hex"], ss58_format=v["format"]), v["ss58"])
                 self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
-                info = trevokeyless.decode_address(v["ss58"], v["format"])
+                info = trevokeyless.decode_address(v["ss58"], ss58_format=v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 # The address field is the input spelling verbatim.
                 self.assertEqual(info.address, v["ss58"])
+                # Without an expected format, the decode reports the format found.
+                self.assertEqual(trevokeyless.decode_address_with_format(v["ss58"]), (info, v["format"]))
+                # The address and raw-account-id keyless predicates must agree — they are the
+                # same classification reached through two entry points. (The TypeScript suite
+                # already cross-checked this for the same group.)
+                self.assertEqual(
+                    trevokeyless.is_keyless_address(v["ss58"], ss58_format=v["format"]),
+                    trevokeyless.is_keyless_account_id("0x" + v["hex"]),
+                )
 
     def test_ss58_decode_only_vectors(self: "TestConformanceVectors") -> None:
         # Non-canonical two-byte-prefix spellings of formats below 64: the one
@@ -88,12 +236,21 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["ss58_decode_only"]:
             with self.subTest(ss58=v["ss58"], reason=v["reason"]):
                 self.assertEqual(ss58_decode(v["ss58"]), (bytes.fromhex(v["hex"]), v["format"]))
-                info = trevokeyless.decode_address(v["ss58"], v["format"])
+                info = trevokeyless.decode_address(v["ss58"], ss58_format=v["format"])
                 self.assertEqual(info.account_id, "0x" + v["hex"])
                 # The address field echoes the non-canonical input spelling verbatim;
                 # account_id is the canonical key (the canonical address differs).
                 self.assertEqual(info.address, v["ss58"])
-                self.assertNotEqual(trevokeyless.encode_address("0x" + v["hex"], v["format"]), v["ss58"])
+                # The encoder must produce exactly the pinned canonical spelling — not
+                # the decode-only one, and not some third spelling.
+                self.assertEqual(
+                    trevokeyless.encode_address("0x" + v["hex"], ss58_format=v["format"]),
+                    v["canonical_ss58"],
+                )
+                self.assertNotEqual(v["canonical_ss58"], v["ss58"])
+                # The non-canonical spelling also decodes without an expected format,
+                # reporting the format pinned by the vector.
+                self.assertEqual(trevokeyless.decode_address_with_format(v["ss58"]), (info, v["format"]))
 
     def test_ss58_invalid_vectors(self: "TestConformanceVectors") -> None:
         # Rejection vectors: address strings that must not decode in any implementation
@@ -103,57 +260,167 @@ class TestConformanceVectors(unittest.TestCase):
         for v in _VECTORS["ss58_invalid"]:
             with self.subTest(ss58=v["ss58"], reason=v["reason"]):
                 with self.assertRaises(Ss58Error, msg=f"{v['ss58']!r} must be rejected: {v['reason']}") as ctx:
-                    trevokeyless.decode_address(v["ss58"], v["format"])
+                    trevokeyless.decode_address(v["ss58"], ss58_format=v["format"])
                 self.assertEqual(
                     ctx.exception.kind,
                     v["error_kind"],
                     f"error kind of {v['ss58']!r} must match the fixture: {v['reason']}",
                 )
+                # The rendered message is shared verbatim with the Rust and TypeScript
+                # implementations. Asserting the fixture's copy (generated from the Rust
+                # Display) rather than a local literal is what makes the shared-wording
+                # contract executable: a one-language edit now fails here.
+                self.assertEqual(
+                    str(ctx.exception),
+                    v["message"],
+                    f"message of {v['ss58']!r} must match the fixture: {v['reason']}",
+                )
                 if v["error_kind"] == "UnexpectedFormat":
                     # These vectors additionally pin the expected/found pair, carried
-                    # here by the Ss58FormatMismatchError subclass.
-                    self.assertIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
+                    # here by the Ss58FormatMismatchError subclass. `assert isinstance` rather
+                    # than assertIsInstance: it asserts the same thing and also narrows
+                    # Ss58Error to the subclass that has .expected/.found.
+                    assert isinstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)  # noqa: S101
                     self.assertEqual(
                         (ctx.exception.expected, ctx.exception.found),
                         (v["expected"], v["found"]),
                     )
+                    # Without an expected format the same address is simply a valid
+                    # address of another network: decode_address_with_format accepts it
+                    # and reports the embedded format.
+                    result = trevokeyless.decode_address_with_format(v["ss58"])
+                    self.assertEqual(result.ss58_format, v["found"])
+                else:
+                    # Structural failures are independent of the expected format:
+                    # decode_address_with_format rejects with the same classification.
+                    with self.assertRaises(Ss58Error) as ctx_any:
+                        trevokeyless.decode_address_with_format(v["ss58"])
+                    self.assertEqual(ctx_any.exception.kind, v["error_kind"])
+                # The typed address decoders and is_keyless_address are built on the
+                # same SS58 validation and must not bypass or reclassify it: each
+                # raises the same kind (never an AccountTypeMismatchError, never a
+                # bool from is_keyless_address).
+                for entry_point in (
+                    trevokeyless.decode_app_agent_address,
+                    trevokeyless.decode_transactional_address,
+                    trevokeyless.decode_named_address,
+                    trevokeyless.is_keyless_address,
+                ):
+                    with self.assertRaises(Ss58Error) as ctx_typed:
+                        entry_point(v["ss58"], ss58_format=v["format"])
+                    self.assertEqual(
+                        ctx_typed.exception.kind,
+                        v["error_kind"],
+                        f"{entry_point.__name__} must report the pinned kind: {v['reason']}",
+                    )
 
     def test_named_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
-        # Names every implementation must reject at encode time.
+        # Names every implementation must reject at encode time. The error_kind field
+        # pins the failure classification (the Rust AccountNameError variant name, carried
+        # here by AccountNameError.kind), so the name-validation taxonomy cannot drift
+        # apart unnoticed. The rule is the UTF-8 *byte* length of the name, not its number
+        # of code points: "héllo12345" (10 code points, 11 bytes) is an InvalidLength,
+        # while "café12345" (9 code points, 10 bytes) is an InvalidCharacter.
         for v in _VECTORS["named_invalid_encode"]:
-            with (
-                self.subTest(name=v["name"], reason=v["reason"]),
-                self.assertRaises(ValueError, msg=f"{v['name']!r} must be rejected: {v['reason']}"),
-            ):
-                trevokeyless.encode_named_address(1, v["name"])
+            with self.subTest(name=v["name"], reason=v["reason"]):
+                with self.assertRaises(
+                    trevokeyless.AccountNameError,
+                    msg=f"{v['name']!r} must be rejected: {v['reason']}",
+                ) as ctx:
+                    trevokeyless.encode_named_address(app_agent_id=trevokeyless.AppAgentId(1), account_name=v["name"])
+                self.assertEqual(
+                    ctx.exception.kind,
+                    v["error_kind"],
+                    f"error kind of {v['name']!r} must match the fixture: {v['reason']}",
+                )
+                # The two messages are shared verbatim with the Rust and TypeScript
+                # implementations; the fixture carries the Rust rendering, so a divergence
+                # in any one language fails here instead of passing on a local literal.
+                self.assertEqual(str(ctx.exception), v["message"])
+                # The account-id encoder validates the name identically.
+                with self.assertRaises(trevokeyless.AccountNameError) as ctx_id:
+                    trevokeyless.encode_named_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1), account_name=v["name"]
+                    )
+                self.assertEqual(ctx_id.exception.kind, v["error_kind"])
 
     def test_hex_invalid_vectors(self: "TestConformanceVectors") -> None:
         # Raw account id strings that violate the "0x" + 64 hex contract of
-        # decode_account_id.
+        # decode_account_id. Every raw-account-id entry point shares the contract and
+        # reports it as ParseAccountIdError (the counterpart of the Rust
+        # ParseAccountIdError).
+        entry_points: dict[str, Callable[[str], object]] = {
+            "decode_account_id": trevokeyless.decode_account_id,
+            "encode_address": trevokeyless.encode_address,
+            "is_keyless_account_id": trevokeyless.is_keyless_account_id,
+            "decode_app_agent_account_id": trevokeyless.decode_app_agent_account_id,
+            "decode_transactional_account_id": trevokeyless.decode_transactional_account_id,
+            "decode_named_account_id": trevokeyless.decode_named_account_id,
+        }
         for v in _VECTORS["hex_invalid"]:
+            # The ParseAccountIdError message is shared verbatim with Rust and TypeScript.
             with self.subTest(input=v["input"], reason=v["reason"]):
-                with self.assertRaises(ValueError, msg=f"{v['input']!r} must be rejected: {v['reason']}"):
+                with self.assertRaises(trevokeyless.ParseAccountIdError) as ctx_msg:
                     trevokeyless.decode_account_id(v["input"])
-                # encode_address shares the input contract of decode_account_id.
-                with self.assertRaises(ValueError, msg=f"{v['input']!r} must be rejected: {v['reason']}"):
-                    trevokeyless.encode_address(v["input"])
+                self.assertEqual(str(ctx_msg.exception), v["message"])
+            for label, entry_point in entry_points.items():
+                with (
+                    self.subTest(input=v["input"], entry_point=label, reason=v["reason"]),
+                    self.assertRaises(
+                        trevokeyless.ParseAccountIdError,
+                        msg=f"{v['input']!r} must be rejected by {label}: {v['reason']}",
+                    ),
+                ):
+                    entry_point(v["input"])
 
     def test_hex_not_an_address_vectors(self: "TestConformanceVectors") -> None:
-        # Raw account id hex strings fed to the SS58 address entry point: SS58
+        # Raw account id hex strings fed to the SS58 address entry points: SS58
         # addresses and raw account ids are separate input classes, so decode_address
         # rejects any "0x"-prefixed input outright (use decode_account_id). The group
-        # pins the rejection only - the error classification is per-language (here a
-        # kind-less guidance ValueError).
+        # pins the rejection only - the error classification is per-language (here the
+        # kind-less guidance error NotAnAddressError).
+        entry_points: dict[str, Callable[[str], object]] = {
+            "decode_address": trevokeyless.decode_address,
+            "is_keyless_address": trevokeyless.is_keyless_address,
+            "decode_address_with_format": trevokeyless.decode_address_with_format,
+            "decode_app_agent_address": trevokeyless.decode_app_agent_address,
+            "decode_transactional_address": trevokeyless.decode_transactional_address,
+            "decode_named_address": trevokeyless.decode_named_address,
+        }
         for v in _VECTORS["hex_not_an_address"]:
-            with self.subTest(input=v["input"], reason=v["reason"]):
-                with self.assertRaises(
-                    ValueError, msg=f"{v['input']!r} must be rejected by decode_address: {v['reason']}"
+            for label, entry_point in entry_points.items():
+                with (
+                    self.subTest(input=v["input"], entry_point=label, reason=v["reason"]),
+                    self.assertRaises(
+                        trevokeyless.NotAnAddressError,
+                        msg=f"{v['input']!r} must be rejected by {label}: {v['reason']}",
+                    ),
                 ):
-                    trevokeyless.decode_address(v["input"])
-                with self.assertRaises(
-                    ValueError, msg=f"{v['input']!r} must be rejected by is_keyless_address: {v['reason']}"
+                    entry_point(v["input"])
+
+    def test_address_not_an_account_id_vectors(self: "TestConformanceVectors") -> None:
+        # The mirror image of hex_not_an_address: an SS58 *address* handed to a
+        # raw-account-id entry point. The two input classes are separate in both
+        # directions - an address is not "0x" + 64 hex, so it must fail the hex
+        # contract rather than being silently base58-decoded.
+        entry_points: dict[str, Callable[[str], object]] = {
+            "decode_account_id": trevokeyless.decode_account_id,
+            "is_keyless_account_id": trevokeyless.is_keyless_account_id,
+            "encode_address": trevokeyless.encode_address,
+            "decode_app_agent_account_id": trevokeyless.decode_app_agent_account_id,
+            "decode_transactional_account_id": trevokeyless.decode_transactional_account_id,
+            "decode_named_account_id": trevokeyless.decode_named_account_id,
+        }
+        for v in _VECTORS["address_not_an_account_id"]:
+            for label, entry_point in entry_points.items():
+                with (
+                    self.subTest(address=v["input"], entry_point=label, reason=v["reason"]),
+                    self.assertRaises(
+                        trevokeyless.ParseAccountIdError,
+                        msg=f"the address {v['input']!r} must be rejected by {label}: {v['reason']}",
+                    ),
                 ):
-                    trevokeyless.is_keyless_address(v["input"])
+                    entry_point(v["input"])
 
     def test_hex_valid_vectors(self: "TestConformanceVectors") -> None:
         # Mixed-case spellings of valid raw account ids: the "0x" + 64 hex contract
@@ -165,31 +432,207 @@ class TestConformanceVectors(unittest.TestCase):
                 info = trevokeyless.decode_account_id(v["input"])
                 self.assertEqual(info.account_id, v["account_id"])
                 self.assertEqual(info.account_type.name, expected["type"])
-                self.assertEqual(info.app_agent_id, expected.get("app_agent_id"))
-                self.assertEqual(info.ta_id, expected.get("ta_id"))
-                self.assertEqual(info.account_name, expected.get("name"))
+                self.assertEqual(getattr(info, "app_agent_id", None), expected.get("app_agent_id"))
+                self.assertEqual(getattr(info, "ta_id", None), expected.get("ta_id"))
+                self.assertEqual(getattr(info, "account_name", None), expected.get("name"))
+                # Raw account bytes carry no address, so decode_account_id leaves the
+                # address field unset; render one with encode_address.
+                self.assertIsNone(info.address)
                 # encode_address accepts both spellings and produces the same address.
                 self.assertEqual(
                     trevokeyless.encode_address(v["input"]),
                     trevokeyless.encode_address(v["account_id"]),
                 )
 
+    def test_format_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
+        # SS58 formats every implementation must reject at encode time, through the
+        # raw-account-id encoder and every keyless encoder alike: the reserved formats
+        # (46, 47) and the out-of-range ones. The rejection is the cross-language contract;
+        # the classification is per-language, because an unusable format is a rejected
+        # *argument*. In Python that is a ValueError - and specifically *not* an Ss58Error,
+        # which reports on an address. Asserting that negative is the point: reserved
+        # formats used to fall through to the SS58 layer and raise Ss58Error("InvalidFormat"),
+        # so the same mistake produced two different types depending only on *how* the
+        # format was unusable.
+        for v in _VECTORS["format_invalid_encode"]:
+            # A def rather than a lambda: the account id is bound as a default argument (so the
+            # closure does not capture the loop variable, per B023) and mypy can still check the
+            # body against Callable[[int], str], which it cannot do for a lambda with a default.
+            def encode_raw_address(fmt: int, account_id: str = "0x" + v["hex"]) -> str:
+                return trevokeyless.encode_address(account_id, ss58_format=fmt)
+
+            encoders: dict[str, Callable[[int], str]] = {
+                "encode_address": encode_raw_address,
+                "encode_app_agent_address": lambda fmt: trevokeyless.encode_app_agent_address(
+                    trevokeyless.AppAgentId(123), ss58_format=fmt
+                ),
+                "encode_transactional_address": lambda fmt: trevokeyless.encode_transactional_address(
+                    app_agent_id=trevokeyless.AppAgentId(123),
+                    ta_id=trevokeyless.TransactionalId(456),
+                    ss58_format=fmt,
+                ),
+                "encode_named_address": lambda fmt: trevokeyless.encode_named_address(
+                    app_agent_id=trevokeyless.AppAgentId(123),
+                    account_name=trevokeyless.AccountName("hot-wallet"),
+                    ss58_format=fmt,
+                ),
+            }
+            for label, encode in encoders.items():
+                with self.subTest(ss58_format=v["format"], encoder=label, reason=v["reason"]):
+                    with self.assertRaises(ValueError) as ctx:
+                        encode(v["format"])
+                    self.assertNotIsInstance(ctx.exception, Ss58Error)
+
     def test_type_mismatch_vectors(self: "TestConformanceVectors") -> None:
         # The typed decoders raise AccountTypeMismatchError carrying a (expected, found)
         # pair when the address is of a different type. The pair is the cross-language
         # contract (the rendered message is per-language); this pins it for every
         # (decoder, actual-type) mismatch.
-        decoders = {
+        address_decoders: dict[str, Callable[[str], object]] = {
             "AppAgent": trevokeyless.decode_app_agent_address,
             "Transactional": trevokeyless.decode_transactional_address,
             "Named": trevokeyless.decode_named_address,
         }
+        # The account-id decoders classify the same accounts from their raw form and must
+        # report the identical (expected, found) pair.
+        account_id_decoders: dict[str, Callable[[str], object]] = {
+            "AppAgent": trevokeyless.decode_app_agent_account_id,
+            "Transactional": trevokeyless.decode_transactional_account_id,
+            "Named": trevokeyless.decode_named_account_id,
+        }
         for v in _VECTORS["type_mismatch"]:
-            with self.subTest(decode_as=v["decode_as"], found=v["found"]):
-                with self.assertRaises(trevokeyless.AccountTypeMismatchError) as ctx:
-                    decoders[v["decode_as"]](v["ss58"])
-                self.assertIs(ctx.exception.expected, trevokeyless.AccountType[v["decode_as"]])
-                self.assertIs(ctx.exception.found, trevokeyless.AccountType[v["found"]])
+            for label, decode, value in (
+                ("address", address_decoders[v["decode_as"]], v["ss58"]),
+                ("account_id", account_id_decoders[v["decode_as"]], "0x" + v["hex"]),
+            ):
+                with self.subTest(decode_as=v["decode_as"], found=v["found"], input=label):
+                    with self.assertRaises(trevokeyless.AccountTypeMismatchError) as ctx:
+                        decode(value)
+                    self.assertIs(ctx.exception.expected, trevokeyless.AccountType[v["decode_as"]])
+                    self.assertIs(ctx.exception.found, trevokeyless.AccountType[v["found"]])
+                    # This package and the TypeScript one each document their mismatch
+                    # message as identical to the other's; address_message pins that claim
+                    # instead of leaving it to two independent local literals. (The Rust
+                    # KeylessDecodeError says "account", not "address", on purpose.)
+                    self.assertEqual(str(ctx.exception), v["address_message"])
+
+    def test_format_invalid_decode_vectors(self: "TestConformanceVectors") -> None:
+        # The decode side of the format contract: an expected format outside the 14-bit
+        # range must be rejected against an otherwise valid address. Only the rejection is
+        # cross-language (Rust reports Ss58Error::InvalidFormat, this package a plain
+        # ValueError, TypeScript a RangeError), so the fixture pins no error_kind.
+        decoders: dict[str, Callable[[str, int], object]] = {
+            "decode_address": lambda address, fmt: trevokeyless.decode_address(address, ss58_format=fmt),
+            "is_keyless_address": lambda address, fmt: trevokeyless.is_keyless_address(address, ss58_format=fmt),
+            "decode_app_agent_address": lambda address, fmt: trevokeyless.decode_app_agent_address(
+                address, ss58_format=fmt
+            ),
+        }
+        for v in _VECTORS["format_invalid_decode"]:
+            # The address itself is valid, so any rejection comes from the parameter.
+            self.assertIsNotNone(trevokeyless.decode_address(v["ss58"]))
+            for label, decode in decoders.items():
+                with self.subTest(ss58_format=v["format"], decoder=label, reason=v["reason"]):
+                    with self.assertRaises(ValueError) as ctx:
+                        decode(v["ss58"], v["format"])
+                    # Parameter validation, not address validation: never an Ss58Error.
+                    self.assertNotIsInstance(ctx.exception, Ss58Error)
+
+    def _assert_format_parameter_rejected(
+        self: "TestConformanceVectors", value: object, account_id: str, address: str
+    ) -> None:
+        """Every format-taking entry point must reject `value` as a parameter error.
+
+        A helper rather than a loop body so the lambdas close over function parameters
+        (which B023 permits) instead of a loop variable; the hostile value stays untyped
+        through the Callable[[Any], ...] alias, standing in for an untyped caller.
+        """
+        entry_points: dict[str, Callable[[Any], object]] = {
+            "encode_address": lambda fmt: trevokeyless.encode_address(account_id, ss58_format=fmt),
+            "encode_app_agent_address": lambda fmt: trevokeyless.encode_app_agent_address(
+                trevokeyless.AppAgentId(123), ss58_format=fmt
+            ),
+            "decode_address": lambda fmt: trevokeyless.decode_address(address, ss58_format=fmt),
+            "is_keyless_address": lambda fmt: trevokeyless.is_keyless_address(address, ss58_format=fmt),
+            "decode_app_agent_address": lambda fmt: trevokeyless.decode_app_agent_address(address, ss58_format=fmt),
+        }
+        for label, call in entry_points.items():
+            with self.subTest(value=value, entry_point=label):
+                with self.assertRaises((TypeError, ValueError)) as ctx:
+                    call(value)
+                self.assertNotIsInstance(ctx.exception, Ss58Error)
+
+    def test_format_invalid_host_vectors(self: "TestConformanceVectors") -> None:
+        # Format values that exist only at the host-language boundary: JSON-representable
+        # values that are not u16-typed (boolean, negative, fractional, beyond u16).
+        # Rust's u16 makes them unrepresentable; this package must reject them at runtime
+        # on the encode and decode paths alike, before any payload work. Only the
+        # rejection is cross-language (this package splits TypeError/ValueError along the
+        # wrong-type vs wrong-value line, TypeScript raises RangeError for all of them),
+        # so no error_kind — and, as for every rejected format *parameter*, never an
+        # Ss58Error, which reports on an address.
+        for v in _VECTORS["format_invalid_host"]:
+            with self.subTest(reason=v["reason"]):
+                # The carrier inputs are valid, so any rejection comes from the parameter.
+                self.assertIsNotNone(trevokeyless.decode_address(v["ss58"]))
+                self._assert_format_parameter_rejected(v["value"], "0x" + v["hex"], v["ss58"])
+
+    def test_constants_vectors(self: "TestConformanceVectors") -> None:
+        # The exported constant *values*, pinned by the fixture so all three
+        # implementations agree on the numbers users are told to rely on. The behavior at
+        # the bounds is pinned by other groups; this pins the constants themselves.
+        # (U32_MAX is exported here and in TypeScript; Rust callers use the native
+        # u32::MAX.) The name sets must match exactly, so a constant added to the
+        # generator cannot be silently unconsumed here.
+        exported = {
+            "ACCOUNT_ID_LENGTH": trevokeyless.ACCOUNT_ID_LENGTH,
+            "ACCOUNT_NAME_LENGTH": trevokeyless.ACCOUNT_NAME_LENGTH,
+            "APP_AGENT_ACCOUNT_IDENTIFIER": trevokeyless.APP_AGENT_ACCOUNT_IDENTIFIER,
+            "TRANSACTIONAL_ACCOUNT_IDENTIFIER": trevokeyless.TRANSACTIONAL_ACCOUNT_IDENTIFIER,
+            "NAMED_ACCOUNT_IDENTIFIER": trevokeyless.NAMED_ACCOUNT_IDENTIFIER,
+            "SS58_FORMAT_TREVO_ASSET_HUB": trevokeyless.SS58_FORMAT_TREVO_ASSET_HUB,
+            "SS58_MAX_ADDRESS_LENGTH": trevokeyless.SS58_MAX_ADDRESS_LENGTH,
+            "U32_MAX": trevokeyless.U32_MAX,
+        }
+        self.assertEqual({v["name"] for v in _VECTORS["constants"]}, set(exported))
+        for v in _VECTORS["constants"]:
+            with self.subTest(name=v["name"]):
+                self.assertEqual(exported[v["name"]], v["value"])
+
+    def test_u32_invalid_encode_vectors(self: "TestConformanceVectors") -> None:
+        # Identifier values every implementation must reject at encode time. Rust enforces
+        # the u32 range through its type system; this package and TypeScript must do it at
+        # runtime. Only the rejection is cross-language: this package splits the failure
+        # along Python convention (TypeError for a non-int, ValueError for out of range),
+        # TypeScript raises RangeError for both — so no error_kind is pinned.
+        for v in _VECTORS["u32_invalid_encode"]:
+            with self.subTest(value=v["value"], reason=v["reason"]):
+                for identifier in (trevokeyless.AppAgentId, trevokeyless.TransactionalId):
+                    with self.assertRaises((TypeError, ValueError)):
+                        identifier(v["value"])
+                # The group is named *_encode, so drive the encoders too, not just the
+                # identifier constructors. A typed caller is stopped by the constructor; an
+                # untyped one reaches the encoder, which must re-validate rather than encode
+                # a truncated or wrapped value into the account bytes.
+                # The `value` under test is the hostile one and stays raw (the parameter is
+                # typed Any, standing in for an untyped caller); the *other* argument of each
+                # encoder is a valid, properly constructed identifier or name.
+                encoders: list[Callable[[Any], object]] = [
+                    trevokeyless.encode_app_agent_account_id,
+                    trevokeyless.encode_app_agent_address,
+                    lambda value: trevokeyless.encode_transactional_account_id(
+                        app_agent_id=value, ta_id=trevokeyless.TransactionalId(1)
+                    ),
+                    lambda value: trevokeyless.encode_transactional_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1), ta_id=value
+                    ),
+                    lambda value: trevokeyless.encode_named_account_id(
+                        app_agent_id=value, account_name=trevokeyless.AccountName("hot-wallet")
+                    ),
+                ]
+                for encode in encoders:
+                    with self.assertRaises((TypeError, ValueError)):
+                        encode(v["value"])
 
 
 if __name__ == "__main__":

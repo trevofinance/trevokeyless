@@ -24,9 +24,9 @@ _PYTHON_FENCE = re.compile(r"^```\s*python3?\s*$\n(.*?)^```\s*$", re.MULTILINE |
 class TestReadmeExamples(unittest.TestCase):
     def test_every_python_block_executes(self: "TestReadmeExamples") -> None:
         blocks = _PYTHON_FENCE.findall(_README_PATH.read_text(encoding="utf-8"))
-        # Catches a silent extraction regression (e.g. the fence tags being renamed):
-        # the README currently holds seven Python examples.
-        self.assertGreaterEqual(len(blocks), 7, "expected the README's Python examples to be found")
+        # The exact count is pinned (not a floor), so a removed or silently unparsed
+        # example cannot pass; update the number when adding a README example.
+        self.assertEqual(len(blocks), 12, "expected all of the README's Python examples to be found")
         for index, block in enumerate(blocks):
             with self.subTest(block=index, first_line=block.splitlines()[0]):
                 # Executing the documented example verbatim is the point of the test.

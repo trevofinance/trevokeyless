@@ -20,7 +20,7 @@ U32_MAX = 2**32 - 1
 
 _U64_MASK = 0xFFFFFFFFFFFFFFFF
 
-# The 64 characters allowed in an address name.
+# The 64 characters allowed in an account name.
 _CHARSET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-#"
 
 
@@ -52,8 +52,13 @@ class _Rng:
         return bytes(out[:length])
 
 
-def _random_name(rng: _Rng) -> str:
-    return "".join(_CHARSET[rng.next_u64() % 64] for _ in range(10))
+def _random_name(rng: _Rng) -> trevokeyless.AccountName:
+    # `% 64` takes xorshift64*'s statistically weakest low bits — deliberately kept identical
+    # across the Rust/Python/TS property suites and the fixture generator; changing it would
+    # desynchronize the shared PRNG streams.
+    # Every character comes from the allowed charset and exactly 10 are drawn, so the
+    # AccountName constructor always accepts the result.
+    return trevokeyless.AccountName("".join(_CHARSET[rng.next_u64() % 64] for _ in range(10)))
 
 
 class TestPrng(unittest.TestCase):
@@ -77,56 +82,92 @@ class TestRoundTripProperties(unittest.TestCase):
     def test_prop_app_agent_roundtrip(self: "TestRoundTripProperties") -> None:
         rng = _Rng(0x5EED0001)
         ids = [rng.next_u32() for _ in range(self.ITERATIONS)] + [0, 1, U32_MAX]
-        for app_agent_id in ids:
-            address = trevokeyless.encode_app_agent_address(app_agent_id, SS58_FORMAT)
-            info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.account_type, AccountType.AppAgent)
+        for raw_app_agent_id in ids:
+            app_agent_id = trevokeyless.AppAgentId(raw_app_agent_id)
+            address = trevokeyless.encode_app_agent_address(app_agent_id, ss58_format=SS58_FORMAT)
+            info = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
+            # `assert isinstance` rather than assertIsInstance: it asserts the same thing and
+            # also narrows the BlockchainAccountInfo union for the type checker.
+            assert isinstance(info, trevokeyless.AppAgentAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
             self.assertEqual(info.app_agent_id, app_agent_id)
-            self.assertIsNone(info.ta_id)
-            self.assertIsNone(info.account_name)
-            self.assertEqual(trevokeyless.decode_app_agent_address(address, SS58_FORMAT), app_agent_id)
-            with self.assertRaises(AccountTypeMismatchError) as ctx:
-                trevokeyless.decode_transactional_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AccountType.AppAgent)
-            with self.assertRaises(AccountTypeMismatchError):
-                trevokeyless.decode_named_address(address, SS58_FORMAT)
-            self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
+            self.assertEqual(trevokeyless.decode_app_agent_address(address, ss58_format=SS58_FORMAT), app_agent_id)
+            # Both the wrong-type decoders must report the same (expected, found) pair -
+            # the cross-language contract of AccountTypeMismatchError.
+            for decode, expected in (
+                (trevokeyless.decode_transactional_address, AccountType.Transactional),
+                (trevokeyless.decode_named_address, AccountType.Named),
+            ):
+                with self.assertRaises(AccountTypeMismatchError) as ctx:
+                    decode(address, ss58_format=SS58_FORMAT)
+                self.assertIs(ctx.exception.expected, expected)
+                self.assertIs(ctx.exception.found, AccountType.AppAgent)
+            self.assertTrue(trevokeyless.is_keyless_address(address, ss58_format=SS58_FORMAT))
+            # The account-id decoders agree with the address decoders.
+            self.assertEqual(trevokeyless.decode_app_agent_account_id(info.account_id), app_agent_id)
 
     def test_prop_transactional_roundtrip(self: "TestRoundTripProperties") -> None:
         rng = _Rng(0x5EED0002)
         ids = [(rng.next_u32(), rng.next_u32()) for _ in range(self.ITERATIONS)]
         ids += [(0, 0), (0, U32_MAX), (U32_MAX, 0), (U32_MAX, U32_MAX)]
-        for app_agent_id, ta_id in ids:
-            address = trevokeyless.encode_transactional_address(app_agent_id, ta_id, SS58_FORMAT)
-            info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.account_type, AccountType.Transactional)
+        for raw_app_agent_id, raw_ta_id in ids:
+            app_agent_id = trevokeyless.AppAgentId(raw_app_agent_id)
+            ta_id = trevokeyless.TransactionalId(raw_ta_id)
+            address = trevokeyless.encode_transactional_address(
+                app_agent_id=app_agent_id,
+                ta_id=ta_id,
+                ss58_format=SS58_FORMAT,
+            )
+            info = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
+            assert isinstance(info, trevokeyless.TransactionalAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
             self.assertEqual((info.app_agent_id, info.ta_id), (app_agent_id, ta_id))
             self.assertEqual(
-                trevokeyless.decode_transactional_address(address, SS58_FORMAT),
+                trevokeyless.decode_transactional_address(address, ss58_format=SS58_FORMAT),
                 (app_agent_id, ta_id),
             )
-            with self.assertRaises(AccountTypeMismatchError) as ctx:
-                trevokeyless.decode_app_agent_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AccountType.Transactional)
-            self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
+            for decode, expected in (
+                (trevokeyless.decode_app_agent_address, AccountType.AppAgent),
+                (trevokeyless.decode_named_address, AccountType.Named),
+            ):
+                with self.assertRaises(AccountTypeMismatchError) as ctx:
+                    decode(address, ss58_format=SS58_FORMAT)
+                self.assertIs(ctx.exception.expected, expected)
+                self.assertIs(ctx.exception.found, AccountType.Transactional)
+            self.assertTrue(trevokeyless.is_keyless_address(address, ss58_format=SS58_FORMAT))
+            self.assertEqual(
+                trevokeyless.decode_transactional_account_id(info.account_id),
+                (app_agent_id, ta_id),
+            )
 
     def test_prop_named_roundtrip(self: "TestRoundTripProperties") -> None:
         rng = _Rng(0x5EED0003)
         for _ in range(self.ITERATIONS):
-            app_agent_id = rng.next_u32()
+            app_agent_id = trevokeyless.AppAgentId(rng.next_u32())
             name = _random_name(rng)
-            address = trevokeyless.encode_named_address(app_agent_id, name, SS58_FORMAT)
-            info = trevokeyless.decode_address(address, SS58_FORMAT)
-            self.assertIs(info.account_type, AccountType.Named)
+            address = trevokeyless.encode_named_address(
+                app_agent_id=app_agent_id,
+                account_name=name,
+                ss58_format=SS58_FORMAT,
+            )
+            info = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
+            assert isinstance(info, trevokeyless.NamedAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
             self.assertEqual((info.app_agent_id, info.account_name), (app_agent_id, name))
             self.assertEqual(
-                trevokeyless.decode_named_address(address, SS58_FORMAT),
+                trevokeyless.decode_named_address(address, ss58_format=SS58_FORMAT),
                 (app_agent_id, name),
             )
-            with self.assertRaises(AccountTypeMismatchError) as ctx:
-                trevokeyless.decode_app_agent_address(address, SS58_FORMAT)
-            self.assertIs(ctx.exception.found, AccountType.Named)
-            self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
+            for decode, expected in (
+                (trevokeyless.decode_app_agent_address, AccountType.AppAgent),
+                (trevokeyless.decode_transactional_address, AccountType.Transactional),
+            ):
+                with self.assertRaises(AccountTypeMismatchError) as ctx:
+                    decode(address, ss58_format=SS58_FORMAT)
+                self.assertIs(ctx.exception.expected, expected)
+                self.assertIs(ctx.exception.found, AccountType.Named)
+            self.assertTrue(trevokeyless.is_keyless_address(address, ss58_format=SS58_FORMAT))
+            self.assertEqual(
+                trevokeyless.decode_named_account_id(info.account_id),
+                (app_agent_id, name),
+            )
 
 
 class TestClassificationProperties(unittest.TestCase):
@@ -141,12 +182,17 @@ class TestClassificationProperties(unittest.TestCase):
             # Cycle the discriminant byte through 0..=5 so every classification branch
             # (unknown discriminant and all three checksum verifications) is exercised.
             account[4] = i % 6
-            info = trevokeyless.decode_account_id("0x" + bytes(account).hex())
-            self.assertIs(
-                info.account_type,
-                AccountType.Regular,
+            account_id = "0x" + bytes(account).hex()
+            info = trevokeyless.decode_account_id(account_id)
+            # The whole value is pinned, not just the discriminant: a Regular result must
+            # carry no leftover keyless identifiers, and (decoded from raw bytes) no
+            # address.
+            self.assertEqual(
+                info,
+                trevokeyless.RegularAccountInfo(address=None, account_id=account_id),
                 "random bytes must classify as Regular (a checksum match has probability ~2^-136 at best)",
             )
+            self.assertFalse(trevokeyless.is_keyless_account_id(account_id))
 
     def test_prop_single_byte_corruption_demotes_to_regular(
         self: "TestClassificationProperties",
@@ -156,21 +202,31 @@ class TestClassificationProperties(unittest.TestCase):
         # position) consumes the 0x5EED_0005 stream exactly like the Rust test.
         rng = _Rng(0x5EED0005)
         accounts = [
-            trevokeyless.encode_app_agent_address(rng.next_u32(), SS58_FORMAT),
-            trevokeyless.encode_transactional_address(rng.next_u32(), rng.next_u32(), SS58_FORMAT),
-            trevokeyless.encode_named_address(rng.next_u32(), _random_name(rng), SS58_FORMAT),
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(rng.next_u32()), ss58_format=SS58_FORMAT),
+            trevokeyless.encode_transactional_address(
+                app_agent_id=trevokeyless.AppAgentId(rng.next_u32()),
+                ta_id=trevokeyless.TransactionalId(rng.next_u32()),
+                ss58_format=SS58_FORMAT,
+            ),
+            trevokeyless.encode_named_address(
+                app_agent_id=trevokeyless.AppAgentId(rng.next_u32()),
+                account_name=_random_name(rng),
+                ss58_format=SS58_FORMAT,
+            ),
         ]
         for address in accounts:
-            original = bytes.fromhex(trevokeyless.decode_address(address, SS58_FORMAT).account_id[2:])
+            original = bytes.fromhex(trevokeyless.decode_address(address, ss58_format=SS58_FORMAT).account_id[2:])
             for position in range(32):
                 xor = rng.next_u64() % 255 + 1  # non-zero
                 corrupted = bytearray(original)
                 corrupted[position] ^= xor
-                info = trevokeyless.decode_account_id("0x" + bytes(corrupted).hex())
-                self.assertIs(
-                    info.account_type,
-                    AccountType.Regular,
-                    f"corrupting byte {position} of {address} must demote it to Regular",
+                corrupted_id = "0x" + bytes(corrupted).hex()
+                info = trevokeyless.decode_account_id(corrupted_id)
+                self.assertEqual(
+                    info,
+                    trevokeyless.RegularAccountInfo(address=None, account_id=corrupted_id),
+                    f"corrupting byte {position} of {address} must demote it to Regular"
+                    " (with no keyless identifiers left on the result)",
                 )
 
     def test_prop_account_name_validation(self: "TestClassificationProperties") -> None:
@@ -181,12 +237,23 @@ class TestClassificationProperties(unittest.TestCase):
         for _ in range(300):
             name = _random_name(rng)
             self.assertEqual(len(name), 10)
-            trevokeyless.encode_named_address(1, name, SS58_FORMAT)
+            trevokeyless.encode_named_address(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                account_name=name,
+                ss58_format=SS58_FORMAT,
+            )
 
             position = rng.next_u64() % 10
+            # `bad` is out of charset, so AccountName() would reject it and it cannot be
+            # constructed. The raw `str` is passed on purpose — the type: ignore simulates an
+            # untyped caller — to prove the encoder itself re-validates the name at runtime.
             bad = name[:position] + "@" + name[position + 1 :]
-            with self.assertRaisesRegex(ValueError, "^Address name contains invalid characters$"):
-                trevokeyless.encode_named_address(1, bad, SS58_FORMAT)
+            with self.assertRaisesRegex(ValueError, "^Account name contains invalid characters$"):
+                trevokeyless.encode_named_address(
+                    app_agent_id=trevokeyless.AppAgentId(1),
+                    account_name=bad,  # type: ignore[arg-type]
+                    ss58_format=SS58_FORMAT,
+                )
 
 
 class TestSs58Properties(unittest.TestCase):
@@ -199,13 +266,19 @@ class TestSs58Properties(unittest.TestCase):
             ss58_format = rng.next_u64() % 16384
             if ss58_format in (46, 47):
                 ss58_format = 48  # skip the reserved formats
-            address = trevokeyless.encode_address(account_id, ss58_format)
-            info = trevokeyless.decode_address(address, ss58_format)
+            address = trevokeyless.encode_address(account_id, ss58_format=ss58_format)
+            info = trevokeyless.decode_address(address, ss58_format=ss58_format)
             self.assertEqual(
                 info.account_id,
                 account_id,
                 f"SS58 round trip must preserve the account and format {ss58_format}",
             )
+            # The unknown-format decoder must agree on the account and report the format
+            # that was encoded — the same pair the Rust from_ss58check_with_version and
+            # TypeScript decodeAddressWithFormat assert over this stream.
+            decoded = trevokeyless.decode_address_with_format(address)
+            self.assertEqual(decoded.info, info, "the unknown-format decoder must agree with decode_address")
+            self.assertEqual(decoded.ss58_format, ss58_format, "the format found must be the format encoded")
 
 
 if __name__ == "__main__":

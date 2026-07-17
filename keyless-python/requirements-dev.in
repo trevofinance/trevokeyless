@@ -1,0 +1,20 @@
+# Exact direct-tool inputs for the reproducible development/audit environment.
+#
+# requirements-dev.txt is the generated, hash-pinned lock (the name is deliberate:
+# Dependabot's pip ecosystem only picks up requirements*.txt, so a *.lock file would
+# never be bumped). Regenerate it — on Python 3.12, the version the lock header records —
+# with exactly the command CI reruns to detect drift between this file and the lock:
+#
+#   python -m pip install pip-tools==7.5.3
+#   pip-compile --allow-unsafe --generate-hashes --strip-extras \
+#     --output-file=requirements-dev.txt requirements-dev.in
+build==1.5.1
+mypy==2.3.0
+packaging==26.2
+pip==26.1.2
+pip-audit==2.10.1
+pip-tools==7.5.3
+ruff==0.15.21
+setuptools==83.0.0
+twine==6.2.0
+wheel==0.47.0

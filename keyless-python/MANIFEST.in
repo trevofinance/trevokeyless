@@ -3,3 +3,6 @@
 # conformance fixture, which cannot ship with the package — exclude the suite entirely;
 # it runs from the repository.
 prune tests
+
+# Ship the change history with the sdist.
+include CHANGELOG.md

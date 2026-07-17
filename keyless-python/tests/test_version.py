@@ -20,8 +20,12 @@ from pathlib import Path
 
 import trevokeyless
 
+# The package dir follows the import (source tree or site-packages) — it is copied into
+# the no-site-packages subprocess below. pyproject.toml, in contrast, is resolved from
+# this test file, so the suite also passes when run against an *installed* package,
+# whose parent directory is site-packages and holds no manifest.
 _PACKAGE_DIR = Path(trevokeyless.__file__).resolve().parent
-_PYPROJECT = _PACKAGE_DIR.parent / "pyproject.toml"
+_PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 
 
 def _pyproject_version() -> str:

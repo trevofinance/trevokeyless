@@ -18,7 +18,7 @@ This module is private to the package; only the entry points of
 """
 
 from hashlib import blake2b
-from typing import Literal, TypeAlias
+from typing import Final, Literal, TypeAlias, get_args
 
 # Largest valid SS58 format: the prefix encodes 14 bits. Mirrors the SS58_FORMAT_MAX
 # bound of the Rust implementation.
@@ -35,18 +35,26 @@ _TWO_BYTE_PREFIX_FIRST_MAX = 0b0111_1111
 # Length in bytes of the SS58 checksum of a 32-byte account id.
 _SS58_CHECKSUM_LENGTH = 2
 
-# Length in bytes of a blockchain account id.
-_ACCOUNT_ID_LENGTH = 32
+# Length in bytes of a blockchain account id. Re-exported by ``trevokeyless/__init__.py``
+# (the package root) as the public ACCOUNT_ID_LENGTH: one definition, so the modules
+# cannot drift.
+ACCOUNT_ID_LENGTH = 32
+_UTF8_ONE_BYTE_MAX = 0x7F
+_UTF8_TWO_BYTE_MAX = 0x7FF
+_UTF16_HIGH_SURROGATE_MIN = 0xD800
+_UTF16_HIGH_SURROGATE_MAX = 0xDBFF
+_UTF16_LOW_SURROGATE_MIN = 0xDC00
+_UTF16_LOW_SURROGATE_MAX = 0xDFFF
+_UNICODE_BMP_MAX = 0xFFFF
 
-# Maximum length in characters of an SS58 address of a 32-byte account id: the payload
-# is at most 2 (prefix) + 32 (account id) + 2 (checksum) = 36 bytes = 288 bits, and each
-# base58 character carries log2(58) ~ 5.858 bits, so a valid address has at most
-# ceil(288 / 5.858) = 50 characters. Longer input is rejected before base58 decoding,
-# whose cost grows quadratically with the input length. The bound is applied to the
+# Conservative pre-decode length bound for an SS58 address of a 32-byte account id.
+# The generic 36-byte payload-size calculation gives 50 base58 characters. Longer input
+# is rejected before base58 decoding, whose cost grows quadratically with the input
+# length. The bound is applied to the
 # UTF-8 byte length, exactly like the Rust reference decoder (bytes and characters
-# coincide on the all-ASCII base58 alphabet). It is a safe over-approximation: the
-# first payload byte of a valid address is at most 0x7F, so the longest achievable
-# address is 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
+# coincide on the all-ASCII base58 alphabet). This is deliberately a safe
+# over-approximation, not the maximum achievable valid spelling: the prefix makes the
+# true maximum 49 characters (pinned by the all-0xFF/format-16383 conformance vector).
 SS58_MAX_ADDRESS_LENGTH = 50
 
 # The 58 characters of the Bitcoin base58 alphabet used by SS58, in value order.
@@ -77,6 +85,25 @@ The names mirror the variants of the Rust ``Ss58Error`` enum; the TypeScript
 ``trevokeyless.keyless`` (as ``Ss58FormatMismatchError``), never by this module.
 """
 
+# The same five kinds as runtime data, so ``Ss58Error`` can reject an out-of-taxonomy
+# ``kind`` instead of silently carrying it. Adding a kind is a breaking cross-language
+# change (see the root CLAUDE.md).
+_SS58_ERROR_KINDS: Final[tuple[Ss58ErrorKind, ...]] = get_args(Ss58ErrorKind)
+
+# The standard message for each kind this module raises, mirroring the Rust ``Display``
+# output (and matching the TypeScript twin). These strings are a verbatim cross-language
+# contract, pinned by the conformance vectors — do not change the wording. ``Ss58Error``
+# derives its message from ``kind`` through this mapping so a caller cannot forge a message
+# that contradicts the kind. ``"UnexpectedFormat"`` is absent: it is raised only by
+# ``Ss58FormatMismatchError`` (in ``trevokeyless.keyless``), which supplies its own
+# format-specific message.
+_SS58_ERROR_MESSAGES: Final[dict[Ss58ErrorKind, str]] = {
+    "InvalidBase58": "Address is not valid base58",
+    "InvalidLength": "Address has an invalid length",
+    "InvalidChecksum": "Address has an invalid checksum",
+    "InvalidFormat": "SS58 format is invalid or reserved",
+}
+
 
 class Ss58Error(ValueError):
     """Raised by the SS58 decoding (and encoding, for invalid formats) functions.
@@ -93,31 +120,52 @@ class Ss58Error(ValueError):
         kind (Ss58ErrorKind): The failure classification.
     """
 
-    def __init__(self, kind: Ss58ErrorKind, message: str) -> None:
+    def __init__(self, kind: Ss58ErrorKind) -> None:
+        if kind not in _SS58_ERROR_KINDS:
+            msg = f"kind must be one of {', '.join(_SS58_ERROR_KINDS)}, got {kind!r}"
+            raise ValueError(msg)
         self.kind: Ss58ErrorKind = kind
-        super().__init__(message)
+        # The message is derived from the kind — there is no message parameter — so a
+        # kind/message contradiction is unconstructible (the wording is a cross-language
+        # contract). ``Ss58FormatMismatchError``, the ``"UnexpectedFormat"`` case whose
+        # message embeds the expected/found pair and has no fixed standard string, sets
+        # its kind and message itself and does not run this initializer.
+        if kind == "UnexpectedFormat":
+            msg = (
+                "kind 'UnexpectedFormat' carries an expected/found format pair; "
+                "construct Ss58FormatMismatchError(expected, found) instead"
+            )
+            raise ValueError(msg)
+        super().__init__(_SS58_ERROR_MESSAGES[kind])
+
+    def __reduce__(self) -> tuple[type, tuple[object, ...]]:
+        # BaseException.__reduce__ rebuilds the exception as ``cls(*self.args)``, and args
+        # holds only the message — so without this, unpickling (multiprocessing,
+        # ProcessPoolExecutor, Celery) or copying raises a TypeError about the missing
+        # ``kind`` argument instead of reproducing the error.
+        return (self.__class__, (self.kind,))
 
     @classmethod
     def invalid_base58(cls) -> "Ss58Error":
         """The string contains a character outside the base58 alphabet."""
-        return cls("InvalidBase58", "Address is not valid base58")
+        return cls("InvalidBase58")
 
     @classmethod
     def invalid_length(cls) -> "Ss58Error":
         """The address is longer than any valid SS58-encoded 32-byte account id, or the
         decoded payload does not have the expected length."""
-        return cls("InvalidLength", "Address has an invalid length")
+        return cls("InvalidLength")
 
     @classmethod
     def invalid_checksum(cls) -> "Ss58Error":
         """The checksum does not match the payload."""
-        return cls("InvalidChecksum", "Address has an invalid checksum")
+        return cls("InvalidChecksum")
 
     @classmethod
     def invalid_format(cls) -> "Ss58Error":
         """The SS58 format is reserved (46, 47), out of range (> 16383), or its prefix
         byte cannot be parsed."""
-        return cls("InvalidFormat", "SS58 format is invalid or reserved")
+        return cls("InvalidFormat")
 
 
 def _b58encode(data: bytes) -> str:
@@ -199,7 +247,7 @@ def ss58_encode(account_id: bytes, ss58_format: int) -> str:
     """
     if _format_invalid(ss58_format):
         raise Ss58Error.invalid_format()
-    if len(account_id) != _ACCOUNT_ID_LENGTH:
+    if len(account_id) != ACCOUNT_ID_LENGTH:
         raise Ss58Error.invalid_length()
 
     if ss58_format <= _SINGLE_BYTE_FORMAT_MAX:
@@ -218,11 +266,43 @@ def ss58_encode(account_id: bytes, ss58_format: int) -> str:
     return _b58encode(payload + _ss58_hash(payload)[:_SS58_CHECKSUM_LENGTH])
 
 
+def _text_encoder_utf8_length(value: str) -> int:
+    """Return JavaScript TextEncoder's UTF-8 byte length for a Python string.
+
+    Valid Unicode scalar values use their ordinary UTF-8 width. A programmatically
+    constructed UTF-16 surrogate pair is combined into one scalar (four bytes); a lone
+    surrogate is replaced with U+FFFD (three bytes). This keeps hostile host-language
+    strings in the same error category as the TypeScript implementation.
+    """
+    length = 0
+    index = 0
+    while index < len(value):
+        code_point = ord(value[index])
+        if code_point <= _UTF8_ONE_BYTE_MAX:
+            length += 1
+        elif code_point <= _UTF8_TWO_BYTE_MAX:
+            length += 2
+        elif _UTF16_HIGH_SURROGATE_MIN <= code_point <= _UTF16_HIGH_SURROGATE_MAX and index + 1 < len(value):
+            next_code_point = ord(value[index + 1])
+            if _UTF16_LOW_SURROGATE_MIN <= next_code_point <= _UTF16_LOW_SURROGATE_MAX:
+                length += 4
+                index += 1
+            else:
+                length += 3
+        elif code_point <= _UNICODE_BMP_MAX:
+            length += 3
+        else:
+            length += 4
+        index += 1
+    return length
+
+
 def ss58_decode(address: str) -> tuple[bytes, int]:
     """Decodes an SS58 address of any (non-reserved) format.
 
-    Input longer than the maximum length of a valid address (50 characters) is rejected
-    before base58 decoding, so the cost of decoding untrusted input stays bounded.
+    Input longer than the maximum length of a valid address (50 UTF-8 bytes, see
+    ``SS58_MAX_ADDRESS_LENGTH``) is rejected before base58 decoding, so the cost of
+    decoding untrusted input stays bounded.
 
     Args:
         address (str): The SS58 address string.
@@ -238,19 +318,12 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
     # the byte length of the &str): non-ASCII input can stay within 50 characters yet
     # exceed 50 bytes and must classify as a length failure in every implementation.
     # The code-point comparison short-circuits first, keeping the cost O(1) for huge
-    # input; the byte encoding only ever sees at most 50 characters. Unpaired
-    # surrogates - a str can hold them, e.g. from json.loads of a "\ud800" escape - are
-    # counted via surrogatepass (3 bytes each, the byte count TextEncoder gives the
-    # TypeScript implementation), so they classify through this error taxonomy (length
-    # here, charset below) instead of leaking UnicodeEncodeError. Rust cannot represent
-    # such strings at all (&str is always valid UTF-8). Best-effort caveat: a *paired*
-    # surrogate stays two code points in Python (6 bytes) where JavaScript sees one
-    # astral character (4 bytes); such strings cannot reach this code from UTF-8 or
-    # JSON input.
-    if (
-        len(address) > SS58_MAX_ADDRESS_LENGTH
-        or len(address.encode("utf-8", errors="surrogatepass")) > SS58_MAX_ADDRESS_LENGTH
-    ):
+    # input; the exact byte count only ever sees at most 50 code points. Python strings
+    # can also be constructed with UTF-16 surrogate code units. Count a valid high/low
+    # pair as one four-byte scalar, and a lone surrogate as the three-byte replacement
+    # character, matching JavaScript TextEncoder. Standard UTF-8/JSON inputs already
+    # contain the combined scalar. Rust cannot represent lone surrogates at all.
+    if len(address) > SS58_MAX_ADDRESS_LENGTH or _text_encoder_utf8_length(address) > SS58_MAX_ADDRESS_LENGTH:
         raise Ss58Error.invalid_length()
     if not all(c in _BASE58_ALPHABET for c in address):
         raise Ss58Error.invalid_base58()
@@ -271,7 +344,7 @@ def ss58_decode(address: str) -> tuple[bytes, int]:
         raise Ss58Error.invalid_format()
     if _format_invalid(ss58_format):
         raise Ss58Error.invalid_format()
-    if len(data) != prefix_length + _ACCOUNT_ID_LENGTH + _SS58_CHECKSUM_LENGTH:
+    if len(data) != prefix_length + ACCOUNT_ID_LENGTH + _SS58_CHECKSUM_LENGTH:
         raise Ss58Error.invalid_length()
 
     checksum_start = len(data) - _SS58_CHECKSUM_LENGTH

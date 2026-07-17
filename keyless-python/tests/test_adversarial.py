@@ -5,14 +5,31 @@ The crafted inputs are built with the reference construction rules so that each 
 documents exactly what is being fed to the decoder.
 """
 
+import copy
 import dataclasses
 import json
+import pickle
+import string
+import time
 import unittest
 from hashlib import blake2b
 
 import trevokeyless
-from trevokeyless import AccountType, AccountTypeMismatchError, Ss58Error
+from trevokeyless import (
+    SS58_FORMAT_TREVO_ASSET_HUB,
+    AccountNameError,
+    AccountType,
+    AccountTypeMismatchError,
+    AppAgentId,
+    NotAnAddressError,
+    ParseAccountIdError,
+    Ss58Error,
+    Ss58FormatMismatchError,
+    TransactionalId,
+    encode_named_address,
+)
 from trevokeyless._ss58 import _b58decode, _b58encode, ss58_decode, ss58_encode
+from trevokeyless.keyless import _ALLOWED_NAME_CHARS
 
 SS58_FORMAT = 5335
 U32_MAX = 2**32 - 1
@@ -56,23 +73,33 @@ class TestBoundaryValues(unittest.TestCase):
     def test_app_agent_id_boundaries(self: "TestBoundaryValues") -> None:
         for app_agent_id in [0, 1, U32_MAX]:
             with self.subTest(app_agent_id=app_agent_id):
-                address = trevokeyless.encode_app_agent_address(app_agent_id, SS58_FORMAT)
-                decoded = trevokeyless.decode_app_agent_address(address, SS58_FORMAT)
+                address = trevokeyless.encode_app_agent_address(
+                    trevokeyless.AppAgentId(app_agent_id), ss58_format=SS58_FORMAT
+                )
+                decoded = trevokeyless.decode_app_agent_address(address, ss58_format=SS58_FORMAT)
                 self.assertEqual(decoded, app_agent_id)
 
     def test_transactional_id_boundaries(self: "TestBoundaryValues") -> None:
         for app_agent_id, ta_id in [(0, 0), (0, U32_MAX), (U32_MAX, 0), (U32_MAX, U32_MAX)]:
             with self.subTest(app_agent_id=app_agent_id, ta_id=ta_id):
-                address = trevokeyless.encode_transactional_address(app_agent_id, ta_id, SS58_FORMAT)
-                decoded = trevokeyless.decode_transactional_address(address, SS58_FORMAT)
+                address = trevokeyless.encode_transactional_address(
+                    app_agent_id=trevokeyless.AppAgentId(app_agent_id),
+                    ta_id=trevokeyless.TransactionalId(ta_id),
+                    ss58_format=SS58_FORMAT,
+                )
+                decoded = trevokeyless.decode_transactional_address(address, ss58_format=SS58_FORMAT)
                 self.assertEqual(decoded, (app_agent_id, ta_id))
 
     def test_named_boundaries(self: "TestBoundaryValues") -> None:
         for name in ["0000000000", "##########", "----------", "ZZZZZZZZZZ"]:
             for app_agent_id in [0, U32_MAX]:
                 with self.subTest(app_agent_id=app_agent_id, name=name):
-                    address = trevokeyless.encode_named_address(app_agent_id, name, SS58_FORMAT)
-                    decoded = trevokeyless.decode_named_address(address, SS58_FORMAT)
+                    address = trevokeyless.encode_named_address(
+                        app_agent_id=trevokeyless.AppAgentId(app_agent_id),
+                        account_name=trevokeyless.AccountName(name),
+                        ss58_format=SS58_FORMAT,
+                    )
+                    decoded = trevokeyless.decode_named_address(address, ss58_format=SS58_FORMAT)
                     self.assertEqual(decoded, (app_agent_id, name))
 
 
@@ -80,47 +107,304 @@ class TestEncodeIdValidation(unittest.TestCase):
     """Mirrors the TS `rejects out-of-range ids at encoding time` test. The Rust
     implementation enforces the range through the u32 parameter types."""
 
+    def test_multi_identifier_encoders_are_keyword_only(self: "TestEncodeIdValidation") -> None:
+        # The arguments are valid; passing them positionally is the violation, so the ignore
+        # is [call-arg] (too many positional arguments) - the runtime must reject it too.
+        with self.assertRaises(TypeError):
+            trevokeyless.encode_transactional_address(  # type: ignore[call-arg]
+                trevokeyless.AppAgentId(1), trevokeyless.TransactionalId(2)
+            )
+        with self.assertRaises(TypeError):
+            trevokeyless.encode_named_address(  # type: ignore[call-arg]
+                trevokeyless.AppAgentId(1), trevokeyless.AccountName("test123456")
+            )
+
     def test_rejects_out_of_range_ids(self: "TestEncodeIdValidation") -> None:
+        # An out-of-range id cannot be wrapped in AppAgentId/TransactionalId - the constructor
+        # is what rejects it. The raw int is passed on purpose, the type: ignore standing in for
+        # an untyped caller, to prove the encoder re-validates the range at runtime.
         for bad_id in [-1, U32_MAX + 1, 2**40]:
             with self.subTest(bad_id=bad_id):
                 with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
-                    trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)
+                    trevokeyless.encode_app_agent_address(bad_id, ss58_format=SS58_FORMAT)  # type: ignore[arg-type]
                 with self.assertRaisesRegex(ValueError, r"^ta_id must be an integer in \[0, 4294967295\]"):
-                    trevokeyless.encode_transactional_address(1, bad_id, SS58_FORMAT)
+                    trevokeyless.encode_transactional_address(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        ta_id=bad_id,  # type: ignore[arg-type]
+                        ss58_format=SS58_FORMAT,
+                    )
                 with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
-                    trevokeyless.encode_named_address(bad_id, "example123", SS58_FORMAT)
+                    trevokeyless.encode_named_address(
+                        app_agent_id=bad_id,  # type: ignore[arg-type]
+                        account_name=trevokeyless.AccountName("example123"),
+                        ss58_format=SS58_FORMAT,
+                    )
 
     def test_rejects_non_integer_ids(self: "TestEncodeIdValidation") -> None:
         # Wrong types raise TypeError (Python convention, matching the TypeError for
         # non-string address/name parameters); out-of-range ints raise ValueError.
         for bad_id in [1.5, "123", None]:
             with self.subTest(bad_id=bad_id), self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
-                trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)  # type: ignore[arg-type]
+                trevokeyless.encode_app_agent_address(bad_id, ss58_format=SS58_FORMAT)  # type: ignore[arg-type]
 
     def test_rejects_bool_ids(self: "TestEncodeIdValidation") -> None:
         # bool is an int subclass, but silently encoding True as 1 would hide a caller
         # bug that the TypeScript (Number.isInteger) and Rust (u32) implementations
         # reject; it is classified as a wrong type, not an out-of-range value.
+        # A bool cannot be wrapped in AppAgentId/TransactionalId either; the raw bool is passed
+        # on purpose (the type: ignore simulates an untyped caller) so the encoder's own
+        # runtime rejection is what gets tested.
         for bad_id in [True, False]:
             with self.subTest(bad_id=bad_id):
                 with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
-                    trevokeyless.encode_app_agent_address(bad_id, SS58_FORMAT)
+                    trevokeyless.encode_app_agent_address(bad_id, ss58_format=SS58_FORMAT)  # type: ignore[arg-type]
                 with self.assertRaisesRegex(TypeError, "^ta_id must be an int"):
-                    trevokeyless.encode_transactional_address(1, bad_id, SS58_FORMAT)
+                    trevokeyless.encode_transactional_address(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        ta_id=bad_id,  # type: ignore[arg-type]
+                        ss58_format=SS58_FORMAT,
+                    )
 
     def test_accepts_u32_boundaries(self: "TestEncodeIdValidation") -> None:
         for good_id in [0, U32_MAX]:
             with self.subTest(good_id=good_id):
-                trevokeyless.encode_app_agent_address(good_id, SS58_FORMAT)
-                trevokeyless.encode_transactional_address(good_id, good_id, SS58_FORMAT)
-                trevokeyless.encode_named_address(good_id, "example123", SS58_FORMAT)
+                trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(good_id), ss58_format=SS58_FORMAT)
+                trevokeyless.encode_transactional_address(
+                    app_agent_id=trevokeyless.AppAgentId(good_id),
+                    ta_id=trevokeyless.TransactionalId(good_id),
+                    ss58_format=SS58_FORMAT,
+                )
+                trevokeyless.encode_named_address(
+                    app_agent_id=trevokeyless.AppAgentId(good_id),
+                    account_name=trevokeyless.AccountName("example123"),
+                    ss58_format=SS58_FORMAT,
+                )
 
     def test_named_validates_id_before_name(self: "TestEncodeIdValidation") -> None:
         # When both the id and the name are invalid, the id is reported first (argument
         # order), matching the TypeScript implementation. "bad@name!!" is 10 characters
         # but carries out-of-charset bytes, so the order decides which error wins.
+        # Neither argument can be constructed as its nominal type - both are invalid, which is
+        # the point - so both are passed raw, the type: ignore simulating an untyped caller.
         with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
-            trevokeyless.encode_named_address(-1, "bad@name!!", SS58_FORMAT)
+            trevokeyless.encode_named_address(
+                app_agent_id=-1,  # type: ignore[arg-type]
+                account_name="bad@name!!",  # type: ignore[arg-type]
+                ss58_format=SS58_FORMAT,
+            )
+
+    # The raw-account-id encoders share the identifier and name validation of the address
+    # encoders; the cases below mirror the address ones one for one, because an encoder
+    # that skipped a check would silently mint an account id no other implementation can
+    # produce.
+
+    def test_account_id_encoders_reject_out_of_range_ids(self: "TestEncodeIdValidation") -> None:
+        # Out-of-range ids again: unconstructable as the nominal types, so they are passed raw
+        # (the ignores below stand in for an untyped caller) to test the encoder's validation.
+        for bad_id in [-1, U32_MAX + 1, 2**40]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_app_agent_account_id(bad_id)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(ValueError, r"^ta_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_transactional_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        ta_id=bad_id,  # type: ignore[arg-type]
+                    )
+                with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.encode_named_account_id(
+                        app_agent_id=bad_id,  # type: ignore[arg-type]
+                        account_name=trevokeyless.AccountName("example123"),
+                    )
+
+    def test_account_id_encoders_reject_non_integer_ids(self: "TestEncodeIdValidation") -> None:
+        for bad_id in [1.5, "123", None]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
+                    trevokeyless.encode_app_agent_account_id(bad_id)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(TypeError, "^ta_id must be an int"):
+                    trevokeyless.encode_transactional_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        ta_id=bad_id,  # type: ignore[arg-type]
+                    )
+
+    def test_account_id_encoders_reject_bool_ids(self: "TestEncodeIdValidation") -> None:
+        # bools, likewise unconstructable as AppAgentId/TransactionalId: passed raw on purpose
+        # (type: ignore = untyped caller) so the encoder's runtime bool rejection is tested.
+        for bad_id in [True, False]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
+                    trevokeyless.encode_app_agent_account_id(bad_id)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(TypeError, "^ta_id must be an int"):
+                    trevokeyless.encode_transactional_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        ta_id=bad_id,  # type: ignore[arg-type]
+                    )
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
+                    trevokeyless.encode_named_account_id(
+                        app_agent_id=bad_id,  # type: ignore[arg-type]
+                        account_name=trevokeyless.AccountName("example123"),
+                    )
+
+    def test_account_id_encoders_reject_invalid_names(self: "TestEncodeIdValidation") -> None:
+        # Same taxonomy as the address encoder: the UTF-8 byte length decides
+        # InvalidLength, everything else of the right length is InvalidCharacter.
+        # None of these names can be wrapped in AccountName() - the constructor is what rejects
+        # them - so the raw str goes to the encoder, the type: ignore simulating an untyped
+        # caller, proving the encoder re-validates the name itself.
+        for name, kind in [
+            ("short", "InvalidLength"),
+            ("héllo12345", "InvalidLength"),
+            ("invalid@12", "InvalidCharacter"),
+            ("café12345", "InvalidCharacter"),
+        ]:
+            with self.subTest(name=name):
+                with self.assertRaises(trevokeyless.AccountNameError) as ctx:
+                    trevokeyless.encode_named_account_id(
+                        app_agent_id=trevokeyless.AppAgentId(1),
+                        account_name=name,  # type: ignore[arg-type]
+                    )
+                self.assertEqual(ctx.exception.kind, kind)
+        with self.assertRaisesRegex(TypeError, "^name must be a str"):
+            trevokeyless.encode_named_account_id(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                account_name=None,  # type: ignore[arg-type]
+            )
+
+    def test_account_id_encoders_are_keyword_only(self: "TestEncodeIdValidation") -> None:
+        # As above: valid arguments, passed positionally on purpose ([call-arg]).
+        with self.assertRaises(TypeError):
+            trevokeyless.encode_transactional_account_id(  # type: ignore[call-arg]
+                trevokeyless.AppAgentId(1), trevokeyless.TransactionalId(2)
+            )
+        with self.assertRaises(TypeError):
+            trevokeyless.encode_named_account_id(  # type: ignore[call-arg]
+                trevokeyless.AppAgentId(1), trevokeyless.AccountName("test123456")
+            )
+
+    def test_account_id_encoders_accept_u32_boundaries(self: "TestEncodeIdValidation") -> None:
+        for good_id in [0, U32_MAX]:
+            with self.subTest(good_id=good_id):
+                trevokeyless.encode_app_agent_account_id(trevokeyless.AppAgentId(good_id))
+                trevokeyless.encode_transactional_account_id(
+                    app_agent_id=trevokeyless.AppAgentId(good_id),
+                    ta_id=trevokeyless.TransactionalId(good_id),
+                )
+                trevokeyless.encode_named_account_id(
+                    app_agent_id=trevokeyless.AppAgentId(good_id),
+                    account_name=trevokeyless.AccountName("example123"),
+                )
+
+
+class TestIdentifierTypes(unittest.TestCase):
+    """AppAgentId / TransactionalId are validating int subclasses, so an out-of-range
+    identifier fails where it is constructed - like the TypeScript appAgentId() /
+    transactionalId() factories - instead of only at the encoder."""
+
+    def test_constructors_reject_out_of_range(self: "TestIdentifierTypes") -> None:
+        for bad_id in [-1, U32_MAX + 1, 2**40]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.AppAgentId(bad_id)
+                with self.assertRaisesRegex(ValueError, r"^ta_id must be an integer in \[0, 4294967295\]"):
+                    trevokeyless.TransactionalId(bad_id)
+
+    def test_constructors_reject_wrong_types(self: "TestIdentifierTypes") -> None:
+        for bad_id in [1.5, "123", None, True, False]:
+            with self.subTest(bad_id=bad_id):
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int"):
+                    trevokeyless.AppAgentId(bad_id)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(TypeError, "^ta_id must be an int"):
+                    trevokeyless.TransactionalId(bad_id)  # type: ignore[arg-type]
+
+    def test_identifiers_behave_like_ints(self: "TestIdentifierTypes") -> None:
+        app_agent_id = trevokeyless.AppAgentId(123)
+        self.assertEqual(app_agent_id, 123)
+        self.assertEqual(app_agent_id + 1, 124)
+        self.assertEqual(app_agent_id.to_bytes(4, byteorder="little"), (123).to_bytes(4, byteorder="little"))
+        self.assertEqual(hash(app_agent_id), hash(123))
+        self.assertIsInstance(app_agent_id, int)
+        # Equal identifiers of different kinds compare equal as ints; the distinction is
+        # nominal (enforced by the type checker), not structural.
+        self.assertEqual(trevokeyless.TransactionalId(123), app_agent_id)
+
+    def test_decoders_return_validating_identifiers(self: "TestIdentifierTypes") -> None:
+        info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex())
+        self.assertIsInstance(info, trevokeyless.AppAgentAccountInfo)
+        self.assertIsInstance(getattr(info, "app_agent_id", None), trevokeyless.AppAgentId)
+
+
+class TestDecodeAccountIdTypedDecoders(unittest.TestCase):
+    """The typed account-id decoders (the account-id counterparts of the typed address
+    decoders, mirroring the Rust decode_*_account functions)."""
+
+    def test_round_trips(self: "TestDecodeAccountIdTypedDecoders") -> None:
+        app_agent_account = trevokeyless.encode_app_agent_account_id(trevokeyless.AppAgentId(123))
+        self.assertEqual(trevokeyless.decode_app_agent_account_id(app_agent_account), 123)
+
+        transactional_account = trevokeyless.encode_transactional_account_id(
+            app_agent_id=trevokeyless.AppAgentId(123), ta_id=trevokeyless.TransactionalId(456)
+        )
+        self.assertEqual(trevokeyless.decode_transactional_account_id(transactional_account), (123, 456))
+
+        named_account = trevokeyless.encode_named_account_id(
+            app_agent_id=trevokeyless.AppAgentId(123), account_name=trevokeyless.AccountName("hot-wallet")
+        )
+        self.assertEqual(trevokeyless.decode_named_account_id(named_account), (123, "hot-wallet"))
+
+    def test_type_mismatch_carries_expected_and_found(self: "TestDecodeAccountIdTypedDecoders") -> None:
+        app_agent_account = trevokeyless.encode_app_agent_account_id(trevokeyless.AppAgentId(123))
+        for decode, expected in (
+            (trevokeyless.decode_transactional_account_id, AccountType.Transactional),
+            (trevokeyless.decode_named_account_id, AccountType.Named),
+        ):
+            with self.subTest(expected=expected):
+                with self.assertRaises(AccountTypeMismatchError) as ctx:
+                    decode(app_agent_account)
+                self.assertIs(ctx.exception.expected, expected)
+                self.assertIs(ctx.exception.found, AccountType.AppAgent)
+
+        # A regular (key-derived) account: Alice.
+        alice = "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"
+        with self.assertRaises(AccountTypeMismatchError) as ctx_regular:
+            trevokeyless.decode_app_agent_account_id(alice)
+        self.assertIs(ctx_regular.exception.expected, AccountType.AppAgent)
+        self.assertIs(ctx_regular.exception.found, AccountType.Regular)
+
+    def test_reject_malformed_hex(self: "TestDecodeAccountIdTypedDecoders") -> None:
+        decoders = [
+            trevokeyless.decode_app_agent_account_id,
+            trevokeyless.decode_transactional_account_id,
+            trevokeyless.decode_named_account_id,
+        ]
+        bad_inputs = ["", "0x", "0xdeadbeef", "0x" + "zz" * 32, "0x" + "00" * 33, APP_AGENT_123.hex()]
+        for decode in decoders:
+            for bad in bad_inputs:
+                with (
+                    self.subTest(decoder=decode.__name__, input=bad),
+                    self.assertRaises(trevokeyless.ParseAccountIdError),
+                ):
+                    decode(bad)
+
+    def test_reject_non_str(self: "TestDecodeAccountIdTypedDecoders") -> None:
+        decoders = [
+            trevokeyless.decode_app_agent_account_id,
+            trevokeyless.decode_transactional_account_id,
+            trevokeyless.decode_named_account_id,
+        ]
+        for decode in decoders:
+            for bad in [None, 123, b"0x" + APP_AGENT_123.hex().encode()]:
+                with (
+                    self.subTest(decoder=decode.__name__, input=bad),
+                    self.assertRaisesRegex(TypeError, "^account_id must be a str"),
+                ):
+                    decode(bad)  # type: ignore[arg-type]
+
+    def test_reject_ss58_addresses(self: "TestDecodeAccountIdTypedDecoders") -> None:
+        # The account-id decoders take the raw form only; an SS58 address is not a
+        # 0x-prefixed 64-hex string, so it fails the account-id contract.
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
+        with self.assertRaises(trevokeyless.ParseAccountIdError):
+            trevokeyless.decode_app_agent_account_id(address)
 
 
 class TestDecodeValidationOrder(unittest.TestCase):
@@ -129,14 +413,15 @@ class TestDecodeValidationOrder(unittest.TestCase):
     def test_format_is_validated_before_address_type(self: "TestDecodeValidationOrder") -> None:
         # When both the address (wrong type) and the ss58_format (out of range) are
         # invalid, the format error wins - matching the Rust from_ss58check_expecting and
-        # the TypeScript decodeSs58AccountId, which both check the format first.
+        # the TypeScript decodeSs58AccountId, which both check the format first. The address
+        # is deliberately not a str (the ignore stands in for an untyped caller).
         with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-            trevokeyless.decode_address(123, 99999)
+            trevokeyless.decode_address(123, ss58_format=99999)  # type: ignore[arg-type]
 
     def test_format_is_validated_before_raw_hex_rejection(self: "TestDecodeValidationOrder") -> None:
         # A raw 0x account id with an out-of-range format reports the format error first.
         with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-            trevokeyless.decode_address("0x" + "00" * 32, 99999)
+            trevokeyless.decode_address("0x" + "00" * 32, ss58_format=99999)
 
 
 class TestAccountIdLength(unittest.TestCase):
@@ -150,7 +435,7 @@ class TestAccountIdLength(unittest.TestCase):
             with self.subTest(payload=payload):
                 address = _raw_ss58(_format_prefix(SS58_FORMAT) + payload, checksum_length=1)
                 with self.assertRaises(Ss58Error) as ctx:
-                    trevokeyless.decode_address(address, SS58_FORMAT)
+                    trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
                 self.assertEqual(ctx.exception.kind, "InvalidLength")
 
     def test_rejects_one_byte_checksum_on_full_account(self: "TestAccountIdLength") -> None:
@@ -160,7 +445,7 @@ class TestAccountIdLength(unittest.TestCase):
         # Mirrors the TypeScript one-byte-checksum test and the first ss58_invalid vector.
         address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123, checksum_length=1)
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(address, SS58_FORMAT)
+            trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
     def test_rejects_33_byte_payload(self: "TestAccountIdLength") -> None:
@@ -168,14 +453,14 @@ class TestAccountIdLength(unittest.TestCase):
         # 32-byte account id; its address is 51 chars, so the length pre-bound fires.
         address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123 + b"\x00")
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(address, SS58_FORMAT)
+            trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
     def test_rejects_31_byte_payload(self: "TestAccountIdLength") -> None:
         # Not a legal SS58 length at all.
         address = _raw_ss58(_format_prefix(SS58_FORMAT) + APP_AGENT_123[:31])
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(address, SS58_FORMAT)
+            trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
 
@@ -183,12 +468,12 @@ class TestMalformedSs58(unittest.TestCase):
     """Mirrors the Rust `tests_ss58.rs` rejection tests."""
 
     def test_rejects_tampered_ss58_checksum(self: "TestMalformedSs58") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         payload = bytearray(_b58decode(address))
         payload[-1] ^= 0xFF
         tampered = _b58encode(bytes(payload))
         with self.assertRaisesRegex(Ss58Error, "^Address has an invalid checksum$") as ctx:
-            trevokeyless.decode_address(tampered, SS58_FORMAT)
+            trevokeyless.decode_address(tampered, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidChecksum")
 
     def test_tampered_keyless_checksum_decodes_as_regular(self: "TestMalformedSs58") -> None:
@@ -198,9 +483,9 @@ class TestMalformedSs58(unittest.TestCase):
         account = bytearray(APP_AGENT_123)
         account[10] ^= 0xFF
         address = ss58_encode(bytes(account), SS58_FORMAT)
-        info = trevokeyless.decode_address(address, SS58_FORMAT)
-        self.assertIs(info.account_type, AccountType.Regular)
-        self.assertIsNone(info.app_agent_id)
+        info = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
+        self.assertIsInstance(info, trevokeyless.RegularAccountInfo)
+        self.assertFalse(hasattr(info, "app_agent_id"))
 
     def test_rejects_reserved_format(self: "TestMalformedSs58") -> None:
         # Reserved format 46, crafted with a valid checksum (the encoder refuses to
@@ -208,7 +493,7 @@ class TestMalformedSs58(unittest.TestCase):
         reserved_format = 46
         address = _raw_ss58(_format_prefix(reserved_format) + APP_AGENT_123)
         with self.assertRaisesRegex(Ss58Error, "^SS58 format is invalid or reserved$") as ctx:
-            trevokeyless.decode_address(address, reserved_format)
+            trevokeyless.decode_address(address, ss58_format=reserved_format)
         self.assertEqual(ctx.exception.kind, "InvalidFormat")
         with self.assertRaises(Ss58Error) as encode_ctx:
             ss58_encode(APP_AGENT_123, reserved_format)
@@ -220,7 +505,7 @@ class TestMalformedSs58(unittest.TestCase):
         # Rust and TypeScript decoders.
         address = _raw_ss58(bytes([0x80]) + APP_AGENT_123)
         with self.assertRaisesRegex(Ss58Error, "^SS58 format is invalid or reserved$") as ctx:
-            trevokeyless.decode_address(address, 128)
+            trevokeyless.decode_address(address, ss58_format=128)
         self.assertEqual(ctx.exception.kind, "InvalidFormat")
 
     def test_accepts_noncanonical_two_byte_prefix(self: "TestMalformedSs58") -> None:
@@ -234,20 +519,22 @@ class TestMalformedSs58(unittest.TestCase):
             ]
         )
         address = _raw_ss58(noncanonical_prefix + APP_AGENT_123)
-        info = trevokeyless.decode_address(address, small_format)
-        self.assertIs(info.account_type, AccountType.AppAgent)
+        info = trevokeyless.decode_address(address, ss58_format=small_format)
+        # `assert isinstance` rather than assertIsInstance: it asserts the same thing and also
+        # narrows the BlockchainAccountInfo union for the type checker.
+        assert isinstance(info, trevokeyless.AppAgentAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
         self.assertEqual(info.app_agent_id, 123)
 
     def test_rejects_garbage_input(self: "TestMalformedSs58") -> None:
         # All of these must raise ValueError (never IndexError or any other type).
         for garbage in ["", " ", "   ", "0OIl", "x", "1"]:
             with self.subTest(garbage=garbage), self.assertRaises(ValueError):
-                trevokeyless.decode_address(garbage, SS58_FORMAT)
+                trevokeyless.decode_address(garbage, ss58_format=SS58_FORMAT)
 
     def test_rejects_oversized_input_before_base58_decoding(self: "TestMalformedSs58") -> None:
         oversized = "1" * (trevokeyless.SS58_MAX_ADDRESS_LENGTH + 1)
         with self.assertRaisesRegex(Ss58Error, "^Address has an invalid length$") as ctx:
-            trevokeyless.decode_address(oversized, SS58_FORMAT)
+            trevokeyless.decode_address(oversized, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
         # The codec applies the same bound before charset validation: oversized input
@@ -283,7 +570,7 @@ class TestMalformedSs58(unittest.TestCase):
         max_format = 16383
         address = ss58_encode(b"\xff" * 32, max_format)
         self.assertLessEqual(len(address), trevokeyless.SS58_MAX_ADDRESS_LENGTH)
-        info = trevokeyless.decode_address(address, max_format)
+        info = trevokeyless.decode_address(address, ss58_format=max_format)
         self.assertIs(info.account_type, AccountType.Regular)
 
 
@@ -296,7 +583,7 @@ class TestSurroundingWhitespace(unittest.TestCase):
     still checked explicitly before decoding."""
 
     def test_decode_rejects_surrounding_whitespace(self: "TestSurroundingWhitespace") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         spellings = [
             address + " ",
             " " + address,
@@ -306,7 +593,7 @@ class TestSurroundingWhitespace(unittest.TestCase):
         for spelling in spellings:
             with self.subTest(spelling=spelling):
                 with self.assertRaisesRegex(Ss58Error, "^Address is not valid base58$") as ctx:
-                    trevokeyless.decode_address(spelling, SS58_FORMAT)
+                    trevokeyless.decode_address(spelling, ss58_format=SS58_FORMAT)
                 self.assertEqual(ctx.exception.kind, "InvalidBase58")
                 # The codec itself applies the same charset check before base58.b58decode.
                 with self.assertRaises(Ss58Error) as codec_ctx:
@@ -319,29 +606,27 @@ class TestSurroundingWhitespace(unittest.TestCase):
         # code points but 51 UTF-8 bytes, so the byte-length bound fires first - exactly
         # like the Rust decoder, which measures bytes. (The previous expectation of
         # InvalidBase58 pinned a Python-only divergence from the reference.)
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(address + "\u00a0", SS58_FORMAT)
+            trevokeyless.decode_address(address + "\u00a0", ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
 
 class TestUnpairedSurrogates(unittest.TestCase):
     """Strings containing unpaired surrogates - a Python str can hold them, most
     realistically from ``json.loads`` of a ``"\\ud800"`` escape - cannot be encoded by
-    the default UTF-8 codec. The byte-length bound counts them via ``surrogatepass``
-    (3 bytes each, the byte count ``TextEncoder`` gives the TypeScript implementation),
-    so such input classifies through the normal SS58 error taxonomy instead of leaking
-    ``UnicodeEncodeError``. Rust cannot represent these strings at all (``&str`` is
-    always valid UTF-8), so the classification is pinned here and in the TypeScript
-    suite rather than in the conformance fixture (the generator's serde_json cannot
-    emit lone surrogates)."""
+    the default UTF-8 codec. The byte-length bound applies JavaScript TextEncoder's
+    replacement/combination rules so hostile host strings classify identically in Python
+    and TypeScript instead of leaking ``UnicodeEncodeError``. Rust cannot represent lone
+    surrogates (``&str`` is always valid UTF-8), so these cases are host-language tests
+    rather than conformance JSON vectors."""
 
     def test_in_bound_surrogate_is_invalid_base58(self: "TestUnpairedSurrogates") -> None:
         # One lone surrogate: 1 code point, 3 surrogatepass bytes - within the length
         # bound, rejected by the base58 charset check, exactly like the TypeScript
         # implementation classifies it.
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address("\ud800", SS58_FORMAT)
+            trevokeyless.decode_address("\ud800", ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidBase58")
 
         with self.assertRaises(Ss58Error) as codec_ctx:
@@ -352,14 +637,14 @@ class TestUnpairedSurrogates(unittest.TestCase):
         # 50 lone surrogates: 50 code points but 150 surrogatepass bytes - over the
         # 50-byte bound, exactly like the TypeScript implementation classifies it.
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address("\ud800" * 50, SS58_FORMAT)
+            trevokeyless.decode_address("\ud800" * 50, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
 
         # A canonical 49-character address with one appended surrogate: 50 code points
         # but 52 bytes - the byte bound fires first, like for any non-ASCII suffix.
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         with self.assertRaises(Ss58Error) as suffixed_ctx:
-            trevokeyless.decode_address(address + "\ud800", SS58_FORMAT)
+            trevokeyless.decode_address(address + "\ud800", ss58_format=SS58_FORMAT)
         self.assertEqual(suffixed_ctx.exception.kind, "InvalidLength")
 
     def test_json_sourced_surrogate_classifies_via_the_taxonomy(self: "TestUnpairedSurrogates") -> None:
@@ -368,8 +653,55 @@ class TestUnpairedSurrogates(unittest.TestCase):
         surrogate = json.loads('"\\ud800"')
         self.assertEqual(len(surrogate), 1)
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(surrogate, SS58_FORMAT)
+            trevokeyless.decode_address(surrogate, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidBase58")
+
+    def test_programmatic_surrogate_pairs_match_text_encoder(self: "TestUnpairedSurrogates") -> None:
+        # Nine explicit UTF-16 pairs are 18 Python code points but nine four-byte Unicode
+        # scalars to TextEncoder (36 bytes). They are within the byte bound and fail the
+        # base58 alphabet check, matching TypeScript. Standard JSON combines each pair
+        # before it reaches this function.
+        paired_surrogates = "\ud83d\ude00" * 9
+        self.assertEqual(len(paired_surrogates), 18)
+        with self.assertRaises(Ss58Error) as ctx:
+            trevokeyless.decode_address(paired_surrogates, ss58_format=SS58_FORMAT)
+        self.assertEqual(ctx.exception.kind, "InvalidBase58")
+
+    def test_lone_surrogate_names_classify_via_the_name_taxonomy(self: "TestUnpairedSurrogates") -> None:
+        # Account names measure the same TextEncoder UTF-8 bytes as addresses (the
+        # surrogate contract covers "addresses and account names alike", per the
+        # conformance README), so a hostile host string classifies through the
+        # AccountNameError taxonomy \u2014 never UnicodeEncodeError \u2014 identically to the
+        # TypeScript twin. Nine ASCII + one lone surrogate: 10 code points but
+        # 9 + 3 = 12 bytes, so the byte rule reports the length.
+        with self.assertRaises(trevokeyless.AccountNameError) as ctx:
+            trevokeyless.AccountName("abcdefghi\ud800")
+        self.assertEqual(ctx.exception.kind, "InvalidLength")
+
+        # One lone surrogate + seven ASCII: 3 + 7 = exactly 10 bytes, so the length
+        # gate passes and the charset check reports the surrogate itself.
+        with self.assertRaises(trevokeyless.AccountNameError) as charset_ctx:
+            trevokeyless.AccountName("\ud800abcdefg")
+        self.assertEqual(charset_ctx.exception.kind, "InvalidCharacter")
+
+        # Ten lone surrogates: exactly 10 code points but 30 bytes. An implementation
+        # measuring code points would reach the charset check; the byte rule must
+        # report the length.
+        with self.assertRaises(trevokeyless.AccountNameError) as bound_ctx:
+            trevokeyless.AccountName("\udc00" * 10)
+        self.assertEqual(bound_ctx.exception.kind, "InvalidLength")
+
+    def test_programmatic_surrogate_pair_names_match_text_encoder(self: "TestUnpairedSurrogates") -> None:
+        # An explicit UTF-16 pair combines into one four-byte scalar (TextEncoder), so
+        # pair + six ASCII is 8 code points but exactly 10 bytes: the length gate
+        # passes and the charset check fires \u2014 not InvalidLength, which a
+        # replacement-per-unit measurement (3 + 3 + 6 = 12 bytes) would report.
+        # Standard JSON combines the pair before it reaches this constructor.
+        paired_name = "\ud83d\ude00aaaaaa"
+        self.assertEqual(len(paired_name), 8)
+        with self.assertRaises(trevokeyless.AccountNameError) as ctx:
+            trevokeyless.AccountName(paired_name)
+        self.assertEqual(ctx.exception.kind, "InvalidCharacter")
 
 
 class TestVendoredBase58(unittest.TestCase):
@@ -447,42 +779,63 @@ class TestSs58FormatValidation(unittest.TestCase):
         # 5335.5 and NaN are genuinely fractional floats: the SS58 layer's bitwise prefix
         # arithmetic would silently truncate them, so they must be rejected as a wrong
         # type (mirrors the TypeScript "rejects a fractional ss58Format" test).
+        # The formats are wrong-typed on purpose (the ignores stand in for an untyped caller);
+        # the identifiers and the name are valid, so only the format is under test.
         for bad_format in [True, False, 5335.0, 5335.5, float("nan"), "5335", None]:
             with self.subTest(bad_format=bad_format):
                 with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
-                    trevokeyless.encode_app_agent_address(123, bad_format)  # type: ignore[arg-type]
+                    trevokeyless.encode_app_agent_address(
+                        trevokeyless.AppAgentId(123),
+                        ss58_format=bad_format,  # type: ignore[arg-type]
+                    )
                 with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
-                    trevokeyless.encode_transactional_address(123, 456, bad_format)  # type: ignore[arg-type]
+                    trevokeyless.encode_transactional_address(
+                        app_agent_id=trevokeyless.AppAgentId(123),
+                        ta_id=trevokeyless.TransactionalId(456),
+                        ss58_format=bad_format,  # type: ignore[arg-type]
+                    )
                 with self.assertRaisesRegex(TypeError, "^ss58_format must be an int"):
-                    trevokeyless.encode_named_address(123, "example123", bad_format)  # type: ignore[arg-type]
+                    trevokeyless.encode_named_address(
+                        app_agent_id=trevokeyless.AppAgentId(123),
+                        account_name=trevokeyless.AccountName("example123"),
+                        ss58_format=bad_format,  # type: ignore[arg-type]
+                    )
 
     def test_encode_rejects_out_of_range_formats(self: "TestSs58FormatValidation") -> None:
         for bad_format in [-1, 16384]:
             with self.subTest(bad_format=bad_format):
                 with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-                    trevokeyless.encode_app_agent_address(123, bad_format)
+                    trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=bad_format)
                 with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-                    trevokeyless.encode_transactional_address(123, 456, bad_format)
+                    trevokeyless.encode_transactional_address(
+                        app_agent_id=trevokeyless.AppAgentId(123),
+                        ta_id=trevokeyless.TransactionalId(456),
+                        ss58_format=bad_format,
+                    )
                 with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
-                    trevokeyless.encode_named_address(123, "example123", bad_format)
+                    trevokeyless.encode_named_address(
+                        app_agent_id=trevokeyless.AppAgentId(123),
+                        account_name=trevokeyless.AccountName("example123"),
+                        ss58_format=bad_format,
+                    )
 
     def test_decode_rejects_wrong_type_formats(self: "TestSs58FormatValidation") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         for bad_format in [True, 5335.0, 5335.5, float("nan"), None]:
             with (
                 self.subTest(bad_format=bad_format),
                 self.assertRaisesRegex(TypeError, "^ss58_format must be an int"),
             ):
-                trevokeyless.decode_address(address, bad_format)  # type: ignore[arg-type]
+                trevokeyless.decode_address(address, ss58_format=bad_format)  # type: ignore[arg-type]
 
     def test_decode_rejects_out_of_range_formats(self: "TestSs58FormatValidation") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         for bad_format in [-1, 16384]:
             with (
                 self.subTest(bad_format=bad_format),
                 self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
             ):
-                trevokeyless.decode_address(address, bad_format)
+                trevokeyless.decode_address(address, ss58_format=bad_format)
 
     def test_decode_account_id_takes_no_format(self: "TestSs58FormatValidation") -> None:
         # Raw account ids carry no SS58 format; decode_account_id therefore has no
@@ -493,16 +846,41 @@ class TestSs58FormatValidation(unittest.TestCase):
     def test_format_boundaries_accepted(self: "TestSs58FormatValidation") -> None:
         for good_format in [0, 16383]:
             with self.subTest(good_format=good_format):
-                address = trevokeyless.encode_app_agent_address(123, good_format)
-                self.assertEqual(trevokeyless.decode_app_agent_address(address, good_format), 123)
+                address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=good_format)
+                self.assertEqual(trevokeyless.decode_app_agent_address(address, ss58_format=good_format), 123)
 
-    def test_reserved_formats_still_rejected_by_the_ss58_layer(self: "TestSs58FormatValidation") -> None:
-        # 46 and 47 pass the integer range validation; the SS58 layer rejects them.
+    def test_reserved_formats_are_valid_expected_decode_inputs(self: "TestSs58FormatValidation") -> None:
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         for reserved in [46, 47]:
-            with self.subTest(reserved=reserved):
-                with self.assertRaisesRegex(Ss58Error, "^SS58 format is invalid or reserved$") as ctx:
-                    trevokeyless.encode_app_agent_address(123, reserved)
-                self.assertEqual(ctx.exception.kind, "InvalidFormat")
+            with self.subTest(reserved=reserved), self.assertRaises(Ss58Error) as ctx:
+                trevokeyless.decode_address(address, ss58_format=reserved)
+            self.assertEqual(ctx.exception.kind, "UnexpectedFormat")
+            # The "UnexpectedFormat" kind is carried by the Ss58FormatMismatchError subclass,
+            # which is what holds .expected/.found; narrow to it before reading them.
+            assert isinstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)  # noqa: S101
+            self.assertEqual(ctx.exception.expected, reserved)
+            self.assertEqual(ctx.exception.found, SS58_FORMAT)
+
+    def test_reserved_formats_are_rejected_by_the_encoders(self: "TestSs58FormatValidation") -> None:
+        # Reserved values are valid decoder expectations (above), but cannot be put on the
+        # wire. An unusable format is a rejected *argument* however it is unusable, so the
+        # encoders raise the same ValueError as for an out-of-range one - never an Ss58Error,
+        # which reports on an *address*.
+        for reserved in [46, 47]:
+            with (
+                self.subTest(reserved=reserved),
+                self.assertRaisesRegex(ValueError, "^ss58_format must not be a reserved format"),
+            ):
+                trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=reserved)
+
+    def test_reserved_format_rejection_is_not_an_ss58_error(self: "TestSs58FormatValidation") -> None:
+        # The regression this guards: 46/47 used to fall through to the SS58 layer and raise
+        # Ss58Error("InvalidFormat"), so `except RangeError`-style handling (TypeScript) or a
+        # bare `except ValueError` that re-raised Ss58Error saw two different types for the
+        # same mistake depending only on *how* the format was unusable.
+        with self.assertRaises(ValueError) as ctx:
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=46)
+        self.assertNotIsInstance(ctx.exception, Ss58Error)
 
 
 class TestHexAccountIdContract(unittest.TestCase):
@@ -511,7 +889,9 @@ class TestHexAccountIdContract(unittest.TestCase):
 
     def test_valid_hex_account_id_is_classified(self: "TestHexAccountIdContract") -> None:
         info = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex())
-        self.assertIs(info.account_type, AccountType.AppAgent)
+        # `assert isinstance` rather than assertIsInstance: it asserts the same thing and also
+        # narrows the BlockchainAccountInfo union for the type checker.
+        assert isinstance(info, trevokeyless.AppAgentAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
         self.assertEqual(info.app_agent_id, 123)
         self.assertEqual(info.account_id, "0x" + APP_AGENT_123.hex())
         # Raw account bytes carry no address; encode_address renders one explicitly.
@@ -561,9 +941,9 @@ class TestHexAccountIdContract(unittest.TestCase):
                     ValueError, "^Raw account id hex is not an SS58 address; use decode_account_id$"
                 ),
             ):
-                trevokeyless.decode_address(hex_input, SS58_FORMAT)
+                trevokeyless.decode_address(hex_input, ss58_format=SS58_FORMAT)
         with self.assertRaisesRegex(ValueError, "use decode_account_id"):
-            trevokeyless.is_keyless_address("0x" + APP_AGENT_123.hex(), SS58_FORMAT)
+            trevokeyless.is_keyless_address("0x" + APP_AGENT_123.hex(), ss58_format=SS58_FORMAT)
 
 
 class TestEncodeAddress(unittest.TestCase):
@@ -572,13 +952,19 @@ class TestEncodeAddress(unittest.TestCase):
 
     def test_round_trips_with_decode_address(self: "TestEncodeAddress") -> None:
         hex_account = "0x" + APP_AGENT_123.hex()
-        address = trevokeyless.encode_address(hex_account, SS58_FORMAT)
-        self.assertEqual(address, trevokeyless.encode_app_agent_address(123, SS58_FORMAT))
-        self.assertEqual(trevokeyless.decode_address(address, SS58_FORMAT).account_id, hex_account)
+        address = trevokeyless.encode_address(hex_account, ss58_format=SS58_FORMAT)
+        self.assertEqual(
+            address,
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT),
+        )
+        self.assertEqual(trevokeyless.decode_address(address, ss58_format=SS58_FORMAT).account_id, hex_account)
 
     def test_default_format_is_trevo(self: "TestEncodeAddress") -> None:
         hex_account = "0x" + APP_AGENT_123.hex()
-        self.assertEqual(trevokeyless.encode_address(hex_account), trevokeyless.encode_app_agent_address(123))
+        self.assertEqual(
+            trevokeyless.encode_address(hex_account),
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123)),
+        )
 
     def test_rejects_invalid_hex(self: "TestEncodeAddress") -> None:
         clean = APP_AGENT_123.hex()
@@ -601,18 +987,73 @@ class TestEncodeAddress(unittest.TestCase):
                 self.subTest(wrong_type_format=wrong_type_format),
                 self.assertRaisesRegex(TypeError, "^ss58_format must be an int"),
             ):
-                trevokeyless.encode_address(hex_account, wrong_type_format)  # type: ignore[arg-type]
+                trevokeyless.encode_address(hex_account, ss58_format=wrong_type_format)  # type: ignore[arg-type]
         for out_of_range_format in [-1, 16384]:
             with (
                 self.subTest(out_of_range_format=out_of_range_format),
                 self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"),
             ):
-                trevokeyless.encode_address(hex_account, out_of_range_format)
+                trevokeyless.encode_address(hex_account, ss58_format=out_of_range_format)
         for reserved in [46, 47]:
-            with self.subTest(reserved=reserved):
-                with self.assertRaises(Ss58Error) as ctx:
-                    trevokeyless.encode_address(hex_account, reserved)
-                self.assertEqual(ctx.exception.kind, "InvalidFormat")
+            with (
+                self.subTest(reserved=reserved),
+                self.assertRaisesRegex(ValueError, "^ss58_format must not be a reserved format"),
+            ):
+                trevokeyless.encode_address(hex_account, ss58_format=reserved)
+
+    def test_validates_format_before_the_account_id(self: "TestEncodeAddress") -> None:
+        # The validation order is contractual and mirrored across languages: a caller
+        # *parameter* is checked before the *data*, so a caller who got both wrong hears
+        # about their own bug first. encode_address used to check the payload first, so it
+        # disagreed with decode_address about which of two bad arguments to report.
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+            trevokeyless.encode_address("not-an-account-id", ss58_format=99999)
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer in \[0, 16383\]"):
+            trevokeyless.decode_address("not-an-address", ss58_format=99999)
+        # ...and with only the payload wrong, the payload error still surfaces.
+        with self.assertRaises(trevokeyless.ParseAccountIdError):
+            trevokeyless.encode_address("not-an-account-id")
+
+
+class TestKeylessEncoderValidationOrder(unittest.TestCase):
+    """The keyless encoders check their identifier/name arguments *before* ss58_format,
+    in declaration order (the open part is built before the format is examined) —
+    unlike encode_address and the decoders, which check the format parameter first.
+    The TypeScript implementation orders identically; pinning the both-invalid cases
+    keeps a well-meaning reordering in one language from silently diverging from the
+    other with every suite green."""
+
+    def test_identifier_and_name_errors_win_over_the_format(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer"):
+            trevokeyless.encode_app_agent_address(-1, ss58_format=99999)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer"):
+            trevokeyless.encode_transactional_address(
+                app_agent_id=-1,  # type: ignore[arg-type]
+                ta_id=-1,  # type: ignore[arg-type]
+                ss58_format=99999,
+            )
+        with self.assertRaisesRegex(ValueError, r"^ta_id must be an integer"):
+            trevokeyless.encode_transactional_address(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                ta_id=-1,  # type: ignore[arg-type]
+                ss58_format=99999,
+            )
+        with self.assertRaises(trevokeyless.AccountNameError):
+            trevokeyless.encode_named_address(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                account_name="bad",  # type: ignore[arg-type]
+                ss58_format=99999,
+            )
+        # app_agent_id before the name: declaration order within the open part too.
+        with self.assertRaisesRegex(ValueError, r"^app_agent_id must be an integer"):
+            trevokeyless.encode_named_address(
+                app_agent_id=-1,  # type: ignore[arg-type]
+                account_name="bad",  # type: ignore[arg-type]
+                ss58_format=99999,
+            )
+        # With only the format wrong, the format error still surfaces.
+        with self.assertRaisesRegex(ValueError, r"^ss58_format must be an integer"):
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=99999)
 
 
 class TestStringParameterTypes(unittest.TestCase):
@@ -651,7 +1092,7 @@ class TestStringParameterTypes(unittest.TestCase):
         # a non-str name is a type error, not a charset error.
         for bad in [None, b"hot-wallet", 123]:
             with self.subTest(bad=bad), self.assertRaisesRegex(TypeError, "^name must be a str"):
-                trevokeyless.encode_named_address(1, bad)  # type: ignore[arg-type]
+                trevokeyless.encode_named_address(app_agent_id=trevokeyless.AppAgentId(1), account_name=bad)  # type: ignore[arg-type]
 
 
 class TestIsKeylessAddress(unittest.TestCase):
@@ -659,18 +1100,26 @@ class TestIsKeylessAddress(unittest.TestCase):
 
     def test_keyless_addresses(self: "TestIsKeylessAddress") -> None:
         keyless_addresses = [
-            trevokeyless.encode_app_agent_address(1, SS58_FORMAT),
-            trevokeyless.encode_transactional_address(1, 2, SS58_FORMAT),
-            trevokeyless.encode_named_address(1, "test123456", SS58_FORMAT),
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(1), ss58_format=SS58_FORMAT),
+            trevokeyless.encode_transactional_address(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                ta_id=trevokeyless.TransactionalId(2),
+                ss58_format=SS58_FORMAT,
+            ),
+            trevokeyless.encode_named_address(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                account_name=trevokeyless.AccountName("test123456"),
+                ss58_format=SS58_FORMAT,
+            ),
         ]
         for address in keyless_addresses:
             with self.subTest(address=address):
-                self.assertTrue(trevokeyless.is_keyless_address(address, SS58_FORMAT))
+                self.assertTrue(trevokeyless.is_keyless_address(address, ss58_format=SS58_FORMAT))
 
     def test_regular_addresses(self: "TestIsKeylessAddress") -> None:
         # Alice's well-known development account.
         alice = "ttqxHzRJmmjFBcE7Lb5Xs4GNMq2gFSt28JyvTEqjhqzE9EGP4"
-        self.assertFalse(trevokeyless.is_keyless_address(alice, SS58_FORMAT))
+        self.assertFalse(trevokeyless.is_keyless_address(alice, ss58_format=SS58_FORMAT))
         # A zeroed account has no valid keyless discriminant; raw account ids are
         # classified via decode_account_id.
         info = trevokeyless.decode_account_id("0x" + "00" * 32)
@@ -682,16 +1131,54 @@ class TestBlockchainAccountInfoValueSemantics(unittest.TestCase):
     the Rust BlockchainAccountInfo (Copy + Eq + Hash)."""
 
     def test_is_immutable(self: "TestBlockchainAccountInfoValueSemantics") -> None:
-        info = trevokeyless.decode_address(trevokeyless.encode_app_agent_address(123, SS58_FORMAT), SS58_FORMAT)
+        info = trevokeyless.decode_address(
+            trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT),
+            ss58_format=SS58_FORMAT,
+        )
+        assert isinstance(info, trevokeyless.AppAgentAccountInfo)  # noqa: S101 - isinstance narrowing for mypy
         with self.assertRaises(dataclasses.FrozenInstanceError):
-            info.app_agent_id = 124  # type: ignore[misc]
+            # Assigning to a frozen dataclass field is the point of the test; mypy rejects it
+            # statically ([misc]), the runtime must reject it too.
+            info.app_agent_id = trevokeyless.AppAgentId(124)  # type: ignore[misc]
 
     def test_is_hashable(self: "TestBlockchainAccountInfoValueSemantics") -> None:
-        address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
-        info_a = trevokeyless.decode_address(address, SS58_FORMAT)
-        info_b = trevokeyless.decode_address(address, SS58_FORMAT)
+        address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
+        info_a = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
+        info_b = trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
         self.assertEqual(info_a, info_b)
         self.assertEqual(len({info_a, info_b}), 1)
+
+    def test_each_variant_exposes_only_valid_identifiers(
+        self: "TestBlockchainAccountInfoValueSemantics",
+    ) -> None:
+        regular = trevokeyless.decode_account_id("0x" + "00" * 32)
+        app_agent = trevokeyless.decode_account_id("0x" + APP_AGENT_123.hex())
+        transactional = trevokeyless.decode_account_id(
+            trevokeyless.encode_transactional_account_id(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                ta_id=trevokeyless.TransactionalId(2),
+            )
+        )
+        named = trevokeyless.decode_account_id(
+            trevokeyless.encode_named_account_id(
+                app_agent_id=trevokeyless.AppAgentId(1),
+                account_name=trevokeyless.AccountName("test123456"),
+            )
+        )
+
+        self.assertEqual(set(regular.__slots__), {"address", "account_id", "account_type"})
+        self.assertEqual(
+            set(app_agent.__slots__),
+            {"address", "account_id", "account_type", "app_agent_id"},
+        )
+        self.assertEqual(
+            set(transactional.__slots__),
+            {"address", "account_id", "account_type", "app_agent_id", "ta_id"},
+        )
+        self.assertEqual(
+            set(named.__slots__),
+            {"address", "account_id", "account_type", "app_agent_id", "account_name"},
+        )
 
 
 class TestSs58FormatMismatchError(unittest.TestCase):
@@ -699,9 +1186,9 @@ class TestSs58FormatMismatchError(unittest.TestCase):
     Rust ``Ss58Error::UnexpectedFormat`` variant."""
 
     def test_carries_expected_and_found(self: "TestSs58FormatMismatchError") -> None:
-        substrate_generic = trevokeyless.encode_app_agent_address(123, 42)
+        substrate_generic = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=42)
         with self.assertRaises(trevokeyless.Ss58FormatMismatchError) as ctx:
-            trevokeyless.decode_address(substrate_generic, SS58_FORMAT)
+            trevokeyless.decode_address(substrate_generic, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.expected, SS58_FORMAT)
         self.assertEqual(ctx.exception.found, 42)
         # The "UnexpectedFormat" case of Ss58Error; remains a ValueError, like
@@ -712,22 +1199,45 @@ class TestSs58FormatMismatchError(unittest.TestCase):
         self.assertEqual(str(ctx.exception), "Expected SS58 format 5335 but found 42")
 
     def test_raised_for_two_byte_prefix_addresses(self: "TestSs58FormatMismatchError") -> None:
-        trevo_address = trevokeyless.encode_app_agent_address(123, SS58_FORMAT)
+        trevo_address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=SS58_FORMAT)
         with self.assertRaises(trevokeyless.Ss58FormatMismatchError) as ctx:
-            trevokeyless.decode_address(trevo_address, 16383)
+            trevokeyless.decode_address(trevo_address, ss58_format=16383)
         self.assertEqual((ctx.exception.expected, ctx.exception.found), (16383, SS58_FORMAT))
+
+    def test_direct_construction_validates_both_formats(self: "TestSs58FormatMismatchError") -> None:
+        # The decode paths always pass pre-validated formats, so this pins direct
+        # construction: both fields are validated like every sibling error
+        # constructor's inputs. A huge adversarial int must produce the documented
+        # ValueError — capped by _describe_rejected_int — not CPython's int->str
+        # digit-limit error escaping from the message f-string; a wrong-typed value
+        # must raise TypeError instead of minting a nonsense error.
+        with self.assertRaises(ValueError) as huge_ctx:
+            trevokeyless.Ss58FormatMismatchError(10**10000, 42)
+        self.assertIn("must be an integer in [0, 16383]", str(huge_ctx.exception))
+        with self.assertRaises(TypeError):
+            trevokeyless.Ss58FormatMismatchError("a", "b")  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            trevokeyless.Ss58FormatMismatchError(SS58_FORMAT, 16384)
+        with self.assertRaises(TypeError):
+            # bool is an int subclass, so this needs no type-ignore; the constructor
+            # still rejects it, like every other int-taking entry point.
+            trevokeyless.Ss58FormatMismatchError(True, 42)
+        # The reserved formats stay constructible: 46/47 are well-formed *expected*
+        # values (no address carries them, which is exactly what this error reports).
+        reserved = trevokeyless.Ss58FormatMismatchError(46, SS58_FORMAT)
+        self.assertEqual((reserved.expected, reserved.found), (46, SS58_FORMAT))
 
     def test_checksum_failure_wins_over_format_mismatch(self: "TestSs58FormatMismatchError") -> None:
         # An invalid address must raise its validation error, never a format mismatch:
         # the expected format is compared only after the checksum has verified, exactly
         # like the Rust from_ss58check (the format mismatch error must not claim that a
         # corrupt string is "a valid address of another network").
-        substrate_generic = trevokeyless.encode_app_agent_address(123, 42)
+        substrate_generic = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(123), ss58_format=42)
         payload = bytearray(_b58decode(substrate_generic))
         payload[-1] ^= 0xFF
         corrupted = _b58encode(bytes(payload))
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(corrupted, SS58_FORMAT)
+            trevokeyless.decode_address(corrupted, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidChecksum")
         self.assertNotIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
 
@@ -736,16 +1246,20 @@ class TestSs58FormatMismatchError(unittest.TestCase):
         truncated_payload = _format_prefix(42) + APP_AGENT_123[:31]
         address = _raw_ss58(truncated_payload)
         with self.assertRaises(Ss58Error) as ctx:
-            trevokeyless.decode_address(address, SS58_FORMAT)
+            trevokeyless.decode_address(address, ss58_format=SS58_FORMAT)
         self.assertEqual(ctx.exception.kind, "InvalidLength")
         self.assertNotIsInstance(ctx.exception, trevokeyless.Ss58FormatMismatchError)
 
 
 class TestAccountTypeMismatchError(unittest.TestCase):
     def test_carries_expected_and_found(self: "TestAccountTypeMismatchError") -> None:
-        named_address = trevokeyless.encode_named_address(1, "test123456", SS58_FORMAT)
+        named_address = trevokeyless.encode_named_address(
+            app_agent_id=trevokeyless.AppAgentId(1),
+            account_name=trevokeyless.AccountName("test123456"),
+            ss58_format=SS58_FORMAT,
+        )
         with self.assertRaises(AccountTypeMismatchError) as ctx:
-            trevokeyless.decode_app_agent_address(named_address, SS58_FORMAT)
+            trevokeyless.decode_app_agent_address(named_address, ss58_format=SS58_FORMAT)
         self.assertIs(ctx.exception.expected, AccountType.AppAgent)
         self.assertIs(ctx.exception.found, AccountType.Named)
         # Backwards compatibility: the error is still a ValueError. The message renders
@@ -759,15 +1273,244 @@ class TestAccountTypeMismatchError(unittest.TestCase):
     def test_article_agrees_with_found_type(self: "TestAccountTypeMismatchError") -> None:
         # The article must agree with both type names, not only the expected one:
         # when the found type is AppAgent, the found side must read "an AppAgent".
-        app_agent_address = trevokeyless.encode_app_agent_address(1, SS58_FORMAT)
+        app_agent_address = trevokeyless.encode_app_agent_address(trevokeyless.AppAgentId(1), ss58_format=SS58_FORMAT)
         with self.assertRaises(AccountTypeMismatchError) as ctx:
-            trevokeyless.decode_transactional_address(app_agent_address, SS58_FORMAT)
+            trevokeyless.decode_transactional_address(app_agent_address, ss58_format=SS58_FORMAT)
         self.assertIs(ctx.exception.expected, AccountType.Transactional)
         self.assertIs(ctx.exception.found, AccountType.AppAgent)
         self.assertEqual(
             str(ctx.exception),
             "Provided address is not a Transactional address but is an AppAgent address",
         )
+
+    def test_direct_construction_rejects_bool(self: "TestAccountTypeMismatchError") -> None:
+        # bool subclasses int, so True would otherwise coerce to AccountType.AppAgent
+        # through the IntEnum call; the package-wide convention is that bool never
+        # stands in for an int. The plain numeric values (0-3) keep coercing.
+        with self.assertRaises(TypeError):
+            AccountTypeMismatchError(True, AccountType.Named)  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            AccountTypeMismatchError(AccountType.AppAgent, False)  # type: ignore[arg-type]
+        numeric = AccountTypeMismatchError(1, 3)  # type: ignore[arg-type]
+        self.assertIs(numeric.expected, AccountType.AppAgent)
+        self.assertIs(numeric.found, AccountType.Named)
+
+
+class TestExceptionsSurviveSerialization(unittest.TestCase):
+    """Every public exception must survive pickling and copying with its structured data.
+
+    ``BaseException.__reduce__`` rebuilds an exception as ``cls(*self.args)``, and ``args``
+    holds only the message — so an exception whose ``__init__`` signature differs from that
+    (all of ours do) is either unreconstructable or, worse, silently rebuilt wrong. This is
+    not academic: an off-chain consumer that propagates a decoding error across a process
+    boundary (``multiprocessing``, ``concurrent.futures.ProcessPoolExecutor``, Celery) or
+    deep-copies a result object carrying one hits exactly this path.
+    """
+
+    def _cases(self) -> list[BaseException]:
+        return [
+            Ss58Error("InvalidBase58"),
+            Ss58Error("InvalidChecksum"),
+            Ss58FormatMismatchError(SS58_FORMAT_TREVO_ASSET_HUB, 42),
+            AccountNameError("InvalidLength"),
+            AccountNameError("InvalidCharacter"),
+            AccountTypeMismatchError(AccountType.Named, AccountType.Regular),
+            ParseAccountIdError(),
+            NotAnAddressError(),
+        ]
+
+    def test_pickle_round_trip_preserves_type_message_and_data(self) -> None:
+        for error in self._cases():
+            with self.subTest(error=type(error).__name__, message=str(error)):
+                # S301: round-tripping our own exception objects, not untrusted data.
+                restored = pickle.loads(pickle.dumps(error))  # noqa: S301
+                self.assertIs(type(restored), type(error))
+                # The message must not drift. AccountNameError in particular used to
+                # unpickle with its message flipped to the InvalidCharacter text while
+                # its kind still said InvalidLength.
+                self.assertEqual(str(restored), str(error))
+                self.assertEqual(getattr(restored, "kind", None), getattr(error, "kind", None))
+                self.assertEqual(getattr(restored, "expected", None), getattr(error, "expected", None))
+                self.assertEqual(getattr(restored, "found", None), getattr(error, "found", None))
+
+    def test_copy_round_trip_preserves_type_message_and_data(self) -> None:
+        for error in self._cases():
+            with self.subTest(error=type(error).__name__):
+                restored = copy.copy(error)
+                self.assertIs(type(restored), type(error))
+                self.assertEqual(str(restored), str(error))
+                self.assertEqual(getattr(restored, "kind", None), getattr(error, "kind", None))
+
+    def test_deepcopy_of_a_result_carrying_an_error(self) -> None:
+        # The realistic shape: an error stored in a result object that gets deep-copied.
+        errors = {"failure": AccountNameError("InvalidLength")}
+        restored = copy.deepcopy(errors)["failure"]
+        self.assertEqual(restored.kind, "InvalidLength")
+        self.assertEqual(str(restored), "Account name must be exactly 10 characters long")
+
+
+class TestIntegralFloatsAreRejected(unittest.TestCase):
+    """The host-number twin of the TypeScript negative-zero rejection.
+
+    JSON ``123.0`` parses to a float here (rejected: wrong type) but to the number 123 in
+    JavaScript (accepted: 123.0 *is* 123 in IEEE-754, so there is nothing left to
+    reject), and JSON ``-0`` parses to int 0 here (accepted) but to the double -0 there
+    (rejected). Neither direction can be pinned by a shared fixture vector — see the
+    host-number note in conformance/README.md — so the twin adversarial suites hold the
+    parity: this is the Python half, mirroring the ``-0`` cases in
+    keyless-ts/tests/adversarial.test.ts.
+    """
+
+    def test_integral_floats_are_wrong_types_not_values(self) -> None:
+        for value in (123.0, 1.0, -0.0, 0.0, 4294967295.0):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(TypeError, "^app_agent_id must be an int, got float"):
+                    AppAgentId(value)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(TypeError, "^ta_id must be an int, got float"):
+                    TransactionalId(value)  # type: ignore[arg-type]
+                with self.assertRaisesRegex(TypeError, "^ss58_format must be an int, got float"):
+                    trevokeyless.encode_app_agent_address(AppAgentId(1), ss58_format=value)  # type: ignore[arg-type]
+
+    def test_int_negative_zero_is_plain_zero(self) -> None:
+        # Python's int -0 IS 0 — there is no distinct value to reject — so it is accepted,
+        # the mirror image of JavaScript accepting 123.0. JSON `-0` therefore diverges by
+        # host language: accepted here, rejected in TypeScript.
+        self.assertEqual(AppAgentId(-0), 0)
+
+
+class TestHugeIntegersAreNotEchoedBack(unittest.TestCase):
+    """A rejected out-of-range int is echoed back verbatim only while it is small.
+
+    CPython's int->str conversion limit (default 4300 digits) turns the message f-string
+    itself into the raised error for a huge value — the caller would see CPython's
+    "Exceeds the limit ... for integer string conversion" instead of the documented
+    message — and Pythons without the limit (< 3.10.7) would echo megabytes of
+    adversarial input back at the caller (and into logs). Beyond 64 bits the message
+    reports the bit length instead.
+    """
+
+    def test_huge_identifier_reports_bit_length_not_digits(self) -> None:
+        for ctor, label in ((AppAgentId, "app_agent_id"), (TransactionalId, "ta_id")):
+            with self.subTest(label=label):
+                pattern = rf"^{label} must be an integer in \[0, 4294967295\], got a 33220-bit int$"
+                with self.assertRaisesRegex(ValueError, pattern):
+                    ctor(10**10000)
+
+    def test_huge_negative_identifier_reports_bit_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"got a negative 33220-bit int$"):
+            AppAgentId(-(10**10000))
+
+    def test_huge_ss58_format_reports_bit_length(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError, r"^ss58_format must be an integer in \[0, 16383\], got a 33220-bit int$"
+        ):
+            trevokeyless.encode_app_agent_address(AppAgentId(1), ss58_format=10**10000)
+
+    def test_the_64_bit_boundary_is_still_echoed_verbatim(self) -> None:
+        # Every plausible wrong-width-type mistake (2**40, 2**53 + 1, -(2**32)) stays
+        # echoed verbatim; the rendering only switches at 64 bits.
+        with self.assertRaisesRegex(ValueError, r"got 18446744073709551615$"):
+            AppAgentId(2**64 - 1)
+        with self.assertRaisesRegex(ValueError, r"got a 65-bit int$"):
+            AppAgentId(2**64)
+
+
+class TestErrorKindTaxonomyIsClosed(unittest.TestCase):
+    """The `kind` values are a pinned cross-language contract, so an out-of-taxonomy kind
+    must not be constructible: it used to be silently mapped to the wrong message."""
+
+    def test_ss58_error_rejects_an_unknown_kind(self) -> None:
+        with self.assertRaises(ValueError):
+            Ss58Error("Bogus")  # type: ignore[arg-type]
+
+    def test_account_name_error_rejects_an_unknown_kind(self) -> None:
+        with self.assertRaises(ValueError):
+            AccountNameError("Bogus")  # type: ignore[arg-type]
+
+    def test_the_five_ss58_kinds_are_all_constructible(self) -> None:
+        for kind in ("InvalidBase58", "InvalidLength", "InvalidChecksum", "InvalidFormat"):
+            self.assertEqual(Ss58Error(kind).kind, kind)
+        # The fifth kind carries an expected/found pair and is its dedicated subclass.
+        self.assertEqual(Ss58FormatMismatchError(5335, 42).kind, "UnexpectedFormat")
+
+    def test_unexpected_format_without_a_message_points_to_the_subclass(self) -> None:
+        # Bare construction of the one kind with no fixed standard message used to escape
+        # as a KeyError from the message table — outside the package's own
+        # TypeError/ValueError taxonomy for a documented public kind.
+        with self.assertRaisesRegex(ValueError, "Ss58FormatMismatchError"):
+            Ss58Error("UnexpectedFormat")
+
+    def test_the_message_cannot_be_forged_to_contradict_the_kind(self) -> None:
+        # The message is derived from the kind; there is no message parameter to abuse,
+        # so a kind/message contradiction is unconstructible.
+        with self.assertRaises(TypeError):
+            Ss58Error("InvalidBase58", "Address has an invalid checksum")  # type: ignore[call-arg]
+        self.assertEqual(str(Ss58Error("InvalidBase58")), "Address is not valid base58")
+
+    def test_account_type_mismatch_error_coerces_and_validates_its_pair(self) -> None:
+        # Sibling constructors validate their inputs; this one used to leak an
+        # AttributeError from the message f-string for non-AccountType arguments.
+        error = AccountTypeMismatchError(1, 2)  # type: ignore[arg-type]
+        self.assertIs(error.expected, AccountType.AppAgent)
+        self.assertIs(error.found, AccountType.Transactional)
+        with self.assertRaises(ValueError):
+            AccountTypeMismatchError(7, 2)  # type: ignore[arg-type]
+
+
+class TestIdentifiersRequireAValue(unittest.TestCase):
+    """A forgotten argument must not silently mean AppAgent 0 — the one case that would
+    defeat the purpose of these validating types."""
+
+    def test_app_agent_id_requires_an_argument(self) -> None:
+        with self.assertRaises(TypeError):
+            AppAgentId()  # type: ignore[call-arg]
+
+    def test_transactional_id_requires_an_argument(self) -> None:
+        with self.assertRaises(TypeError):
+            TransactionalId()  # type: ignore[call-arg]
+
+
+class TestAccountNameLengthIsBoundedEarly(unittest.TestCase):
+    """A long name must be rejected without a full scan: encode_named_address is the natural
+    consumer of caller-supplied names, and it was the only entry point that did not bound its
+    input before doing per-character work."""
+
+    def test_a_very_long_name_is_rejected_promptly(self) -> None:
+        started = time.perf_counter()
+        with self.assertRaises(AccountNameError) as caught:
+            # A 5 MB name cannot be wrapped in AccountName() - the length check is what rejects
+            # it - so the raw str goes straight to the encoder (the ignore stands in for an
+            # untyped caller), which is the entry point whose bounding is under test.
+            encode_named_address(
+                app_agent_id=AppAgentId(1),
+                account_name="a" * 5_000_000,  # type: ignore[arg-type]
+            )
+        elapsed = time.perf_counter() - started
+        self.assertEqual(caught.exception.kind, "InvalidLength")
+        # Generous bound: the point is O(1)-ish rejection, not a benchmark, so this stays
+        # well clear of the wall-clock noise on shared CI runners. The unbounded scan took
+        # ~0.3s for this input.
+        self.assertLess(elapsed, 1.0)
+
+
+class TestAccountNameCharsetIsImmutable(unittest.TestCase):
+    """The account-name charset gates the wire format, so it must not be mutable.
+
+    It was a plain module-global `set`: adding a character to it in-process made the
+    encoder accept that character and emit an account id that neither Rust nor TypeScript
+    can produce or classify.
+    """
+
+    def test_the_charset_is_a_frozenset(self: "TestAccountNameCharsetIsImmutable") -> None:
+        charset = _ALLOWED_NAME_CHARS
+        self.assertIsInstance(charset, frozenset)
+        with self.assertRaises(AttributeError):
+            charset.add("!")  # type: ignore[attr-defined] # the point of the test
+
+    def test_the_charset_is_exactly_the_wire_contract(self: "TestAccountNameCharsetIsImmutable") -> None:
+        expected = frozenset(string.digits + string.ascii_lowercase + string.ascii_uppercase + "-#")
+        self.assertEqual(_ALLOWED_NAME_CHARS, expected)
+        self.assertEqual(len(_ALLOWED_NAME_CHARS), 64)
 
 
 if __name__ == "__main__":
