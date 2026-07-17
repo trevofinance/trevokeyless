@@ -9,16 +9,34 @@ on:
     branches: [ main ]
 
   workflow_dispatch:
+  # Lets the publish workflows re-run the full check suite on the tagged commit
+  # instead of duplicating (and drifting from) these steps inline.
+  workflow_call:
 
 permissions:
   contents: read
+
+# The repository fixture is always checked out in CI, so the conformance test's
+# published-crate skip path can only mean a broken path here — make it fail instead of
+# silently passing (Rust has no first-class skip; see tests_conformance.rs).
+env:
+  TREVOKEYLESS_CONFORMANCE_REQUIRE: 1
 
 jobs:
   rust-checks:
     concurrency:
       group: rust-checks-${{ github.ref }}
-      cancel-in-progress: true
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The repository-root rust-toolchain.toml applies to keyless-rust/ and would
+      # otherwise override the toolchain installed above (a directory override beats the
+      # rustup default). RUSTUP_TOOLCHAIN takes precedence over that file, so this is
+      # what makes the job actually run on the toolchain it installs.
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         working-directory: ./keyless-rust
@@ -33,38 +51,60 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
 
       - name: Rustfmt check
         run: cargo fmt --all -- --check
 
+      # Every cargo invocation below passes --locked: without it a pull request that edits
+      # Cargo.toml dependencies without regenerating Cargo.lock passes green, and the
+      # audit job then audits a lockfile that does not match what was committed.
       - name: Clippy (all features)
-        run: cargo clippy --all-features --all-targets -- -D warnings
+        run: cargo clippy --locked --all-features --all-targets -- -D warnings
 
       - name: Run test suite (all features)
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
 
       - name: Run test suite (no default features)
-        run: cargo test --no-default-features
+        run: cargo test --locked --no-default-features
 
       - name: Conformance fixture is up to date
-        run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
+        # `shell: bash` adds `-o pipefail`, so a cargo failure fails the step directly
+        # instead of relying on diff to notice the truncated stream (the default
+        # `bash -e {0}` only propagates the last command's status through a pipe).
+        shell: bash
+        run: cargo run --locked --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
 
       - name: Build no_std (wasm32v1-none, ss58 + serde + scale + test-accounts)
-        run: cargo build --target wasm32v1-none --no-default-features --features ss58,serde,scale,test-accounts
+        run: cargo build --locked --target wasm32v1-none --no-default-features --features ss58,serde,scale,test-accounts
 
       - name: Docs (all features)
-        run: cargo doc --all-features --no-deps
+        run: cargo doc --locked --all-features --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
 
       - name: Publish dry run
-        run: cargo publish --dry-run
+        run: cargo publish --locked --dry-run
+
+      - name: Check crate artifact contents
+        # `cargo publish --dry-run` asserts nothing about the file list of the .crate it
+        # builds; that list comes from the hand-maintained `exclude` in Cargo.toml. This
+        # is the Rust counterpart of the Python/TypeScript artifact allowlists, and the
+        # same script runs against the release in publish-rust.yml.
+        working-directory: .
+        run: python3 .github/scripts/check_rust_artifacts.py
 
   rust-features:
     concurrency:
       group: rust-features-${{ github.ref }}-${{ strategy.job-index }}
-      cancel-in-progress: true
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Overrides the repository-root rust-toolchain.toml; see rust-checks above.
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         working-directory: ./keyless-rust
@@ -91,14 +131,130 @@ jobs:
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
       - name: Test feature combination
-        run: cargo test ${{ matrix.features }}
+        run: cargo test --locked ${{ matrix.features }}
+
+  rust-cross-platform:
+    # The main rust-checks job runs on Linux/x86 only. Python and TypeScript both have
+    # Windows jobs; this is the Rust counterpart. macOS additionally covers the aarch64
+    # runner. The account-id layout is byte-order sensitive, so a platform-portability
+    # regression here would be a wire-format bug, not just a build failure.
+    concurrency:
+      group: rust-cross-platform-${{ github.ref }}-${{ matrix.os }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+      - name: Run test suite (all features)
+        run: cargo test --locked --all-features
+
+  rust-big-endian:
+    # The encoding reads and writes its u32 identifiers with explicit to_le_bytes /
+    # from_le_bytes, so it must produce byte-identical account ids on a big-endian host —
+    # but every other job runs little-endian, so a native-endianness slip would pass them
+    # all. `cross` runs the suite under QEMU on a big-endian target (s390x). This is the
+    # only job that would catch an accidental `from_ne_bytes`.
+    concurrency:
+      group: rust-big-endian-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+      - name: Install cross
+        uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
+        with:
+          # Pinned exactly, like cargo-audit and cargo-fuzz: this job is a publish gate
+          # (via `checks:` in publish-rust.yml), so a floating tool version makes it
+          # non-reproducible and lets an upstream release redden every publish. Bump
+          # deliberately.
+          tool: cross@0.2.5
+      - name: Run test suite on a big-endian target (s390x, under QEMU)
+        run: cross test --locked --all-features --target s390x-unknown-linux-gnu
+
+  rust-feature-powerset:
+    # The matrix above runs the *suite* on a hand-picked lattice; this job type-checks every
+    # remaining combination. Combinations such as `scale,test-accounts` (where the wide test
+    # account ids get their codec impls) and `serde,scale` are otherwise built by nothing.
+    concurrency:
+      group: rust-feature-powerset-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Overrides the repository-root rust-toolchain.toml; see rust-checks above.
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
+        with:
+          tool: cargo-hack@0.6.45
+      - name: Check every feature combination (host)
+        run: cargo hack check --locked --feature-powerset
+      - name: Check every no_std feature combination (wasm32v1-none)
+        # The crate advertises no_std support. Skip both `std` and `default` (which *is*
+        # `std`), leaving the genuinely no_std lattice; cargo-hack already passes
+        # --no-default-features for each subset.
+        run: cargo hack check --locked --feature-powerset --skip std,default --target wasm32v1-none
 
   rust-msrv:
     concurrency:
       group: rust-msrv-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Without this the repository-root rust-toolchain.toml (a newer stable) would
+      # override the MSRV toolchain installed below and the job would prove nothing.
+      # Keep in sync with the `toolchain:` input and keyless-rust/Cargo.toml rust-version.
+      RUSTUP_TOOLCHAIN: 1.85.0
     defaults:
       run:
         working-directory: ./keyless-rust
@@ -110,17 +266,46 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: 1.85.0
-      - name: Check (all features) on MSRV
-        run: cargo check --all-features
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+      # Run the full suite, not just `cargo check`: the dev-dependencies and test code
+      # must also stay MSRV-compatible (verified to compile and pass on 1.85.0).
+      - name: Test (all features) on MSRV
+        run: cargo test --locked --all-features
+
+      - name: Toolchain is really the MSRV
+        # Compares the running rustc against the rust-version the manifest declares,
+        # guarding both drift directions at once: the rust-toolchain.toml override
+        # silently coming back (the running compiler would be the newer pin), and this
+        # workflow's toolchain being bumped without Cargo.toml — which would silently
+        # stop testing the *declared* MSRV. (The opposite drift, a manifest bump without
+        # the workflow, already fails loudly: cargo refuses to build a package whose
+        # rust-version exceeds the toolchain.)
+        run: |
+          declared="$(cargo metadata --locked --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "trevokeyless") | .rust_version')"
+          running="$(rustc --version | awk '{print $2}')"
+          if [ "$running" != "$declared" ]; then
+            echo "::error::MSRV job runs rustc $running but Cargo.toml declares rust-version $declared" >&2
+            exit 1
+          fi
 
   rust-fuzz:
     concurrency:
       group: rust-fuzz-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ./keyless-rust
+    env:
+      # The single source of the fuzz toolchain pin for this workflow. Exporting it as
+      # RUSTUP_TOOLCHAIN (rather than relying on `cargo +nightly-...` per command) also stops
+      # the root rust-toolchain.toml from being resolved by Swatinem/rust-cache below, which
+      # would otherwise download an unused stable toolchain and key the cache on it.
+      RUSTUP_TOOLCHAIN: nightly-2026-07-01
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -128,25 +313,69 @@ jobs:
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: |
+            keyless-rust
+            keyless-rust/fuzz
       - name: Install cargo-fuzz
         uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
         with:
-          tool: cargo-fuzz
+          tool: cargo-fuzz@0.13.2
+      - name: Fuzz lockfile is honoured
+        # cargo-fuzz has no --locked flag, so the builds below could silently re-resolve
+        # and rewrite fuzz/Cargo.lock — fuzzing a dependency set nobody audited (cargo
+        # audit reads the committed lock). `cargo metadata --locked` fails if the lock
+        # does not match the manifests; once it passes, the build resolves to exactly the
+        # locked versions and leaves the file untouched.
+        run: cargo metadata --locked --manifest-path fuzz/Cargo.toml > /dev/null
       # cargo-fuzz defaults --target to the triple it was itself built for; the
       # install-action ships a musl-static binary, so without an explicit --target it
       # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
       # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
+      #
+      # Seed each run from the committed corpus in fuzz/seeds/<target> so even a
+      # 30-second smoke run starts from known-interesting inputs; new discoveries land
+      # in the throwaway fuzz/corpus/<target> directory.
       - name: Fuzz the SS58 decoder (smoke run)
-        run: cargo +nightly fuzz run ss58_decode --target x86_64-unknown-linux-gnu -- -max_total_time=30
+        id: fuzz_ss58
+        continue-on-error: true
+        run: |
+          mkdir -p fuzz/corpus/ss58_decode
+          cargo fuzz run ss58_decode fuzz/corpus/ss58_decode fuzz/seeds/ss58_decode --target x86_64-unknown-linux-gnu -- -max_total_time=30
       - name: Fuzz the AccountId32 hex parser (smoke run)
-        run: cargo +nightly fuzz run accountid_from_str --target x86_64-unknown-linux-gnu -- -max_total_time=30
+        id: fuzz_account_id
+        continue-on-error: true
+        run: |
+          mkdir -p fuzz/corpus/accountid_from_str
+          cargo fuzz run accountid_from_str fuzz/corpus/accountid_from_str fuzz/seeds/accountid_from_str --target x86_64-unknown-linux-gnu -- -max_total_time=30
+      - name: Fuzz the account-id classifier (smoke run)
+        id: fuzz_classify
+        continue-on-error: true
+        run: |
+          mkdir -p fuzz/corpus/classify
+          cargo fuzz run classify fuzz/corpus/classify fuzz/seeds/classify --target x86_64-unknown-linux-gnu -- -max_total_time=30
+      - name: Upload crash reproducers
+        if: steps.fuzz_ss58.outcome == 'failure' || steps.fuzz_account_id.outcome == 'failure' || steps.fuzz_classify.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-smoke-artifacts
+          path: keyless-rust/fuzz/artifacts/
+
+      - name: Fail if any fuzz target failed
+        if: steps.fuzz_ss58.outcome == 'failure' || steps.fuzz_account_id.outcome == 'failure' || steps.fuzz_classify.outcome == 'failure'
+        run: exit 1
 
   rust-audit:
     concurrency:
       group: rust-audit-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Overrides the repository-root rust-toolchain.toml; see rust-checks above.
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         working-directory: ./keyless-rust
@@ -157,9 +386,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
       - name: Install cargo-audit
         uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
         with:
-          tool: cargo-audit
+          # Pinned exactly, like cargo-fuzz below: this gate runs before every publish, so a
+          # floating tool version makes it non-reproducible and lets an upstream
+          # release redden every PR. Bump deliberately.
+          tool: cargo-audit@0.22.2
       - name: Audit dependencies against the RustSec database
         run: cargo audit
+      - name: Audit locked fuzz-harness dependencies against the RustSec database
+        run: cargo audit --file fuzz/Cargo.lock

@@ -1,7 +1,7 @@
 # Publishes the trevokeyless crate to crates.io on a `rust-vX.Y.Z` tag.
 #
 # One-time registry setup (no long-lived token is stored): on crates.io, configure a
-# Trusted Publisher for the crate with repository `trevo-finance/trevo-keyless` and
+# Trusted Publisher for the crate with repository `trevo-finance/trevokeyless` and
 # workflow `publish-rust.yml`; the job exchanges a GitHub OIDC token for a scoped
 # temporary publish token.
 name: publish-rust
@@ -13,13 +13,20 @@ on:
 permissions:
   contents: read
 
+# Never publish two releases of the same crate concurrently, and never cancel a publish
+# in flight: two tags pushed back-to-back must queue at the registry, not race.
+concurrency:
+  group: publish-rust
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  verify-tag:
     runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-      contents: read
+    timeout-minutes: 15
+    env:
+      # The repository-root rust-toolchain.toml would otherwise override the toolchain
+      # installed below; RUSTUP_TOOLCHAIN takes precedence over that file.
+      RUSTUP_TOOLCHAIN: stable
     defaults:
       run:
         working-directory: ./keyless-rust
@@ -27,10 +34,24 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          # Full history: the ancestry check below needs to walk back to main.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
-          components: clippy
+
+      - name: Tagged commit must be on main
+        # The publish trigger is a tag push, and a tag can point at *any* commit. Without
+        # this, anyone able to push a tag could publish unreviewed code under the
+        # repository's trusted-publishing identity.
+        working-directory: .
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not an ancestor of origin/main. Release tags must be pushed on commits merged to main." >&2
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main."
 
       - name: Tag must match the crate version
         run: |
@@ -38,25 +59,164 @@ jobs:
           crate_version="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$tag_version" = "$crate_version" || { echo "tag $tag_version != Cargo.toml $crate_version"; exit 1; }
 
-      # Re-run the release-critical gates on the tagged commit: a tag can point at any
-      # commit, not necessarily one that passed check-rust on a PR.
-      - name: Clippy (all features)
-        run: cargo clippy --all-features --all-targets -- -D warnings
+  # Re-run the full check suite on the tagged commit: a tag can point at any commit,
+  # not necessarily one that passed check-rust on a PR.
+  checks:
+    uses: ./.github/workflows/check-rust.yml
 
-      - name: Run test suite (all features)
-        run: cargo test --all-features
+  docs:
+    uses: ./.github/workflows/check-docs.yml
 
-      - name: Run test suite (no default features)
-        run: cargo test --no-default-features
+  # The cross-language differential check is part of "the full check suite": the crate is
+  # the source of truth the other two implementations are verified against.
+  cross-language:
+    # The called workflow's job requests `issues: write` (its scheduled runs file an issue
+    # on failure). A called workflow can only downgrade the caller's GITHUB_TOKEN, never
+    # elevate it, so the grant must be repeated here — without it GitHub refuses to start
+    # the nested job ("requesting 'issues: write', but is only allowed 'issues: none'")
+    # and this gate blocks every publish. The issue-filing step itself is schedule-only
+    # and never runs on the tag path.
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/check-cross-language.yml
 
-      - name: Conformance fixture is up to date
-        run: cargo run --example gen_conformance --features ss58 | diff - ../conformance/vectors.json
+  # Build the .crate here, in an unprivileged job. `cargo package` runs a verification build,
+  # which executes the build scripts of every dependency — that must never happen in the job
+  # that holds the trusted-publishing credential, and neither must restoring a build cache
+  # (Actions caches are writable from any branch, so a poisoned `target/` entry would execute
+  # with the publish token in scope). The publish job below therefore carries no cache and
+  # uploads with `--no-verify`, which compiles nothing. This job carries no cache either:
+  # it produces the artifact that gets attested and the digest the publish job trusts, so a
+  # poisoned cache here could tamper what publish faithfully verifies. A release builds cold;
+  # the extra minutes are cheap next to the artifact's integrity.
+  package:
+    needs: [verify-tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Overrides the repository-root rust-toolchain.toml; see verify-tag above.
+      RUSTUP_TOOLCHAIN: stable
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    outputs:
+      digest: ${{ steps.package.outputs.digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+
+      - name: Check crate artifact contents
+        # Assert the exact file list of the .crate that is about to be published, with the
+        # same script the PR gate (check-rust.yml) runs.
+        working-directory: .
+        run: python3 .github/scripts/check_rust_artifacts.py
+
+      - name: Package the crate
+        # Builds and verifies the exact .crate file that will be uploaded. `cargo package` is
+        # byte-deterministic for a given source tree and lockfile, so the archive `cargo
+        # publish --no-verify` re-creates in the publish job is the same one attested there —
+        # asserted explicitly against this digest rather than assumed.
+        id: package
+        run: |
+          cargo package --locked
+          crate_file="$(ls target/package/*.crate)"
+          echo "digest=$(sha256sum "$crate_file" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crate
+          path: keyless-rust/target/package/*.crate
+          if-no-files-found: error
+
+  publish:
+    needs: [verify-tag, package, checks, docs, cross-language]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
+      # Lets the job record a signed build-provenance attestation for the .crate. npm gets
+      # this from `--provenance` and PyPI from the PyPA action's PEP 740 attestations;
+      # crates.io has no equivalent of its own, so the crate — the source of truth for the
+      # on-chain encoding — would otherwise be the one artifact published with no attestation.
+      attestations: write
+    env:
+      # Overrides the repository-root rust-toolchain.toml; see verify-tag above.
+      RUSTUP_TOOLCHAIN: stable
+      EXPECTED_DIGEST: ${{ needs.package.outputs.digest }}
+    defaults:
+      run:
+        working-directory: ./keyless-rust
+    steps:
+      # `cargo publish` needs the source tree (it re-creates the archive from it), but with
+      # `--no-verify` it compiles nothing: no dependency build script runs in this job.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: crate
+          path: crate-artifact
+      - name: Downloaded crate must be the packaged one
+        working-directory: .
+        run: |
+          actual="$(sha256sum "$(ls crate-artifact/*.crate)" | cut -d' ' -f1)"
+          if [ "$actual" != "$EXPECTED_DIGEST" ]; then
+            echo "::error::The downloaded .crate ($actual) is not the one built by the package job ($EXPECTED_DIGEST)." >&2
+            exit 1
+          fi
+
+      - name: Attest build provenance
+        # Subject paths are resolved from the workspace root, not this job's working-directory.
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: crate-artifact/*.crate
+
+      - name: Re-created crate must be the attested one, before upload
+        # `cargo publish --no-verify` re-creates the archive from the source tree rather
+        # than uploading the downloaded artifact, so re-create it the same way here —
+        # `cargo package --no-verify` compiles nothing, keeping dependency build scripts
+        # away from this job — and stop before the upload if the bytes are not the
+        # attested ones. The post-publish check below remains as a backstop over what
+        # `cargo publish` actually produced.
+        run: |
+          cargo package --no-verify --locked
+          actual="$(sha256sum "$(ls target/package/*.crate)" | cut -d' ' -f1)"
+          if [ "$actual" != "$EXPECTED_DIGEST" ]; then
+            echo "::error::The re-created .crate ($actual) is not the attested one ($EXPECTED_DIGEST); refusing to publish." >&2
+            exit 1
+          fi
+          echo "Re-created .crate matches the attested digest: $actual"
 
       - name: Authenticate with crates.io (trusted publishing)
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: auth
 
       - name: Publish
-        run: cargo publish
+        # --no-verify: the verification build already ran in the unprivileged package job.
+        # Skipping it here is what keeps dependency build scripts away from the token.
+        run: cargo publish --no-verify --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Uploaded crate must be the attested one
+        # `cargo publish` re-packages before uploading. If that archive ever stopped matching
+        # the one attested above, the attestation would vouch for bytes nobody published —
+        # worse than having no attestation at all. Fail loudly instead.
+        run: |
+          actual="$(sha256sum "$(ls target/package/*.crate)" | cut -d' ' -f1)"
+          if [ "$actual" != "$EXPECTED_DIGEST" ]; then
+            echo "::error::The published .crate ($actual) is not the attested one ($EXPECTED_DIGEST)." >&2
+            exit 1
+          fi
+          echo "Published .crate matches the attested digest: $actual"

@@ -1,7 +1,7 @@
 # Publishes @trevofinance/trevokeyless to npm on a `ts-vX.Y.Z` tag.
 #
 # One-time registry setup (no token is stored): on npmjs.com, configure a Trusted
-# Publisher for the package with repository `trevo-finance/trevo-keyless` and workflow
+# Publisher for the package with repository `trevo-finance/trevokeyless` and workflow
 # `publish-ts.yml`. Publishing via trusted publishing requires npm >= 11.5 (bundled
 # with Node 24) and attaches provenance automatically.
 name: publish-ts
@@ -13,21 +13,37 @@ on:
 permissions:
   contents: read
 
+# Never publish two releases of the same package concurrently, and never cancel a publish
+# in flight: two tags pushed back-to-back must queue at the registry, not race.
+concurrency:
+  group: publish-ts
+  cancel-in-progress: false
+
 jobs:
-  publish:
+  verify-tag:
     runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      id-token: write
-      contents: read
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          # Full history: the ancestry check below needs to walk back to main.
+          fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
+
+      - name: Tagged commit must be on main
+        # The publish trigger is a tag push, and a tag can point at *any* commit. Without
+        # this, anyone able to push a tag could publish unreviewed code under the
+        # repository's trusted-publishing identity.
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not an ancestor of origin/main. Release tags must be pushed on commits merged to main." >&2
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main."
 
       - name: Tag must match the package version
         run: |
@@ -36,14 +52,72 @@ jobs:
           pkg_version="$(node -p "require('./package.json').version")"
           test "$tag_version" = "$pkg_version" || { echo "tag $tag_version != package.json $pkg_version"; exit 1; }
 
-      - name: Build and test
+      - name: Build and pack
+        # Build the tarball here, in an unprivileged job. Installing the dev-dependency tree
+        # runs its lifecycle scripts (esbuild, playwright, ...), which must never happen in
+        # the job that holds the trusted-publishing credential.
         run: |
           cd keyless-ts
           npm ci
           npm run build
-          npm run test
+          npm run check-platform-resolvers
+          # --ignore-scripts: prepublishOnly already ran above, explicitly.
+          TARBALL="$(npm pack --ignore-scripts --silent)"
+          mv "$TARBALL" package.tgz
 
-      - name: Publish to npm (trusted publishing, with provenance)
+      - name: Check artifact contents
+        # Assert against the exact tarball that will be uploaded to npm, with the same script
+        # the PR gate (check-ts.yml) runs.
         run: |
           cd keyless-ts
-          npm publish --provenance --access public
+          npm run check-package -- "$PWD/package.tgz"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-package
+          path: keyless-ts/package.tgz
+
+  # Re-run the full check suite on the tagged commit: a tag can point at any commit,
+  # not necessarily one that passed check-ts on a PR.
+  checks:
+    uses: ./.github/workflows/check-ts.yml
+
+  docs:
+    uses: ./.github/workflows/check-docs.yml
+
+  # Part of "the full check suite": this package must still agree with the Rust source of
+  # truth on the tagged commit.
+  cross-language:
+    # The called workflow's job requests `issues: write` (its scheduled runs file an issue
+    # on failure). A called workflow can only downgrade the caller's GITHUB_TOKEN, never
+    # elevate it, so the grant must be repeated here — without it GitHub refuses to start
+    # the nested job ("requesting 'issues: write', but is only allowed 'issues: none'")
+    # and this gate blocks every publish. The issue-filing step itself is schedule-only
+    # and never runs on the tag path.
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/check-cross-language.yml
+
+  publish:
+    needs: [verify-tag, checks, docs, cross-language]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      # No checkout, no `npm ci`, no lifecycle scripts: this job holds the
+      # trusted-publishing credential and does nothing but hand the already-built,
+      # already-verified tarball from `verify-tag` to the registry.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-package
+
+      - name: Publish to npm (trusted publishing, with provenance)
+        run: npm publish --provenance --access public --ignore-scripts package.tgz

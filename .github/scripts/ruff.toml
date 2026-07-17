@@ -1,0 +1,18 @@
+# Lint/format configuration for the release-critical CI helper scripts in this
+# directory. It mirrors keyless-python/pyproject.toml [tool.ruff] so the scripts are held
+# to the same standard as the package; ruff discovers this file by walking up from each
+# script, so `ruff check .github/scripts` from the repository root picks it up.
+target-version = "py312"
+line-length = 120
+fix = false
+
+[lint]
+select = ["E", "W", "F", "C90", "I", "N", "UP", "ANN", "S", "B", "A", "COM", "DTZ", "EM", "FA", "ISC", "PIE", "T20", "PYI", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "INT", "ARG", "PTH", "TD", "FIX", "PL", "TRY", "RUF"]
+# COM812/UP040: as in the package. The rest are exemptions these command-line scripts
+# genuinely need, and are ignored here instead of being repeated as per-line `# noqa`s:
+#   T201  - print() is how a CI script reports; there is no logger.
+#   EM101/EM102/TRY003 - the failure message *is* the product; hoisting each one into a
+#                        variable or an exception subclass would only obscure it.
+#   S607  - cargo/npm/git are intentionally resolved from PATH (the runner installs them).
+ignore = ["COM812", "UP040", "T201", "EM101", "EM102", "TRY003", "S607"]
+fixable = ["ALL"]

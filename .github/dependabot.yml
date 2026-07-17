@@ -1,21 +1,59 @@
 version: 2
 updates:
+  # Each ecosystem's bumps arrive as one grouped PR: CI runs once per ecosystem
+  # instead of once per dependency, and there is a single thing to review.
+  # dtolnay/rust-toolchain is intentionally pinned to a master-branch SHA: the action
+  # publishes no releases, so Dependabot cannot bump it — update that pin manually.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      github-actions-deps:
+        patterns:
+          - "*"
 
   - package-ecosystem: "cargo"
     directory: "/keyless-rust"
     schedule:
       interval: monthly
+    groups:
+      cargo-deps:
+        patterns:
+          - "*"
 
+  # The fuzz harness is its own crate with its own lockfile; without this entry its
+  # dependencies (libfuzzer-sys and friends) would never be bumped. Monthly like the
+  # library crate: the harness is repository-internal and its lock is audited weekly
+  # by audit.yml regardless.
+  - package-ecosystem: "cargo"
+    directory: "/keyless-rust/fuzz"
+    schedule:
+      interval: monthly
+    groups:
+      cargo-fuzz-deps:
+        patterns:
+          - "*"
+
+  # requirements-dev.txt is a pip-compile lock, and pip-compile's output depends on the
+  # interpreter that produced it. Dependabot regenerates the lock itself, so it must use the
+  # same interpreter as the CI drift check (check-python.yml), or every dependency PR would
+  # arrive with a lock CI immediately regenerates differently — and fail on arrival. Both
+  # read keyless-python/.python-version; Dependabot's pip updater honours that file.
   - package-ecosystem: "pip"
     directory: "/keyless-python"
     schedule:
       interval: monthly
+    groups:
+      pip-deps:
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/keyless-ts"
     schedule:
       interval: monthly
+    groups:
+      npm-deps:
+        patterns:
+          - "*"

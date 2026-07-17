@@ -1,7 +1,7 @@
 # Publishes the trevokeyless package to PyPI on a `python-vX.Y.Z` tag.
 #
 # One-time registry setup (no API token is stored): on PyPI, configure a Trusted
-# Publisher for the project with repository `trevo-finance/trevo-keyless`, workflow
+# Publisher for the project with repository `trevo-finance/trevokeyless`, workflow
 # `publish-python.yml`, and environment `release`.
 name: publish-python
 
@@ -12,16 +12,42 @@ on:
 permissions:
   contents: read
 
+# Never publish two releases of the same package concurrently, and never cancel a publish
+# in flight: two tags pushed back-to-back must queue at the registry, not race.
+concurrency:
+  group: publish-python
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          # Full history: the ancestry check below needs to walk back to main.
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: "3.12"
+          # The interpreter the hash-pinned lock was compiled with. Read from
+          # keyless-python/.python-version like the check-python jobs, so a future
+          # interpreter bump cannot leave release builds behind.
+          python-version-file: keyless-python/.python-version
+          cache: pip
+          cache-dependency-path: keyless-python/requirements-dev.txt
+
+      - name: Tagged commit must be on main
+        # The publish trigger is a tag push, and a tag can point at *any* commit. Without
+        # this, anyone able to push a tag could publish unreviewed code under the
+        # repository's trusted-publishing identity.
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not an ancestor of origin/main. Release tags must be pushed on commits merged to main." >&2
+            exit 1
+          fi
+          echo "$GITHUB_SHA is on main."
 
       - name: Tag must match the package version
         run: |
@@ -30,27 +56,51 @@ jobs:
           pkg_version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
           test "$tag_version" = "$pkg_version" || { echo "tag $tag_version != pyproject $pkg_version"; exit 1; }
 
-      - name: Run tests
-        run: |
-          cd keyless-python
-          pip install .[dev]
-          python3 -m unittest discover
-
       - name: Build and validate
         run: |
           cd keyless-python
-          pip install --upgrade build twine packaging
-          python3 -m build
+          python -m pip install --require-hashes -r requirements-dev.txt
+          python3 -m build --no-isolation
           twine check --strict dist/*
+
+      - name: Check artifact contents
+        # Assert against the exact artifacts that will be uploaded to PyPI, with the
+        # same script the PR gate (check-python.yml) runs.
+        run: |
+          cd keyless-python
+          python3 ../.github/scripts/check_python_artifacts.py
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
           path: keyless-python/dist/
 
+  # Re-run the full check suite on the tagged commit: a tag can point at any commit,
+  # not necessarily one that passed check-python on a PR.
+  checks:
+    uses: ./.github/workflows/check-python.yml
+
+  docs:
+    uses: ./.github/workflows/check-docs.yml
+
+  # Part of "the full check suite": this package must still agree with the Rust source of
+  # truth on the tagged commit.
+  cross-language:
+    # The called workflow's job requests `issues: write` (its scheduled runs file an issue
+    # on failure). A called workflow can only downgrade the caller's GITHUB_TOKEN, never
+    # elevate it, so the grant must be repeated here — without it GitHub refuses to start
+    # the nested job ("requesting 'issues: write', but is only allowed 'issues: none'")
+    # and this gate blocks every publish. The issue-filing step itself is schedule-only
+    # and never runs on the tag path.
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/check-cross-language.yml
+
   publish:
-    needs: build
+    needs: [build, checks, docs, cross-language]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: release
     permissions:
       id-token: write

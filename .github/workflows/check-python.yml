@@ -2,21 +2,33 @@ name: check-python
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
   workflow_dispatch:
+  # Lets the publish workflow re-run the full check suite on the tagged commit
+  # instead of duplicating (and drifting from) these steps inline.
+  workflow_call:
 
 permissions:
   contents: read
+
+# The repository fixture is always checked out in CI, so the conformance test's
+# skip-outside-the-repository path can only mean a broken path here — make it fail
+# instead of silently passing (mirrors check-rust.yml; see test_conformance.py).
+env:
+  TREVOKEYLESS_CONFORMANCE_REQUIRE: 1
 
 jobs:
   python-checks:
     concurrency:
       group: python-checks-${{ github.ref }}-${{ matrix.python-version }}
-      cancel-in-progress: true
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         # Oldest supported version (requires-python >= 3.10) through current stable.
@@ -30,63 +42,157 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: keyless-python/requirements-dev.txt
 
       - name: Install deps
         run: |
-            cd keyless-python
-            pip install .[dev]
-
-      - name: Audit dependencies
-        run: |
-            cd keyless-python
-            pip install pip-audit
-            pip-audit
+          cd keyless-python
+          python -m pip install --require-hashes -r requirements-dev.txt
+          python -m pip install --no-deps --no-build-isolation .
 
       - name: Check code formatting with ruff
         run: |
-            cd keyless-python
-            ruff format --check
+          cd keyless-python
+          ruff format --check
 
       - name: Check code with ruff
         run: |
-            cd keyless-python
-            ruff check
+          cd keyless-python
+          ruff check
 
       - name: Check code with mypy
         run: |
-            cd keyless-python
-            mypy trevokeyless
+          cd keyless-python
+          mypy trevokeyless tests
 
       - name: Run tests
         # Discovery picks up every tests/test_*.py module; the previous explicit module
         # list silently skipped test_adversarial.py.
+        #
+        # This run imports the SOURCE tree: `python -m unittest` puts the current
+        # directory first on sys.path, so `import trevokeyless` resolves to
+        # keyless-python/trevokeyless/, not to the wheel installed above.
         run: |
-            cd keyless-python
-            python3 -m unittest discover --verbose
+          cd keyless-python
+          python3 -m unittest discover --verbose
+
+      - name: Run tests against the installed package
+        # The whole suite again, but discovered from keyless-python/tests with the
+        # repository root as the working directory, so keyless-python/ is *not* on
+        # sys.path and `import trevokeyless` resolves to the non-editable install from the
+        # "Install deps" step. This is what actually exercises the shipped artifact (the
+        # TypeScript suite likewise tests its packed tarball). The guard below fails loudly
+        # if the import ever silently falls back to the source tree.
+        run: |
+          python3 -c "import pathlib, sys, trevokeyless; p = pathlib.Path(trevokeyless.__file__).resolve(); print(f'importing trevokeyless from {p}'); sys.exit(0 if 'site-packages' in p.parts else 1)"
+          python3 -m unittest discover --verbose -t keyless-python/tests -s keyless-python/tests
 
       - name: Build and validate distribution artifacts
         run: |
-            cd keyless-python
-            pip install --upgrade build twine packaging
-            python3 -m build
-            twine check --strict dist/*
+          cd keyless-python
+          python3 -m build --no-isolation
+          twine check --strict dist/*
 
       - name: Check artifact contents
         # The MANIFEST.in pruning and the package-data globs are release-critical;
-        # verify the built artifacts instead of trusting the configuration.
+        # verify the built artifacts instead of trusting the configuration. The same
+        # script runs against the release artifacts in publish-python.yml.
         run: |
-            cd keyless-python
-            python3 - <<'EOF'
-            import glob, tarfile, zipfile
+          cd keyless-python
+          python3 ../.github/scripts/check_python_artifacts.py
 
-            [whl] = glob.glob("dist/*.whl")
-            names = zipfile.ZipFile(whl).namelist()
-            assert any(n.endswith("trevokeyless/py.typed") for n in names), names
-            assert not any("tests/" in n for n in names), names
-            assert not any(n.endswith(".pyi") for n in names), names
+  # The development lockfile and the release-critical helper scripts under .github/scripts
+  # are both outside the per-package gates above: the lock could silently disagree with
+  # requirements-dev.in, and the scripts were never linted or type-checked at all.
+  lock-and-scripts:
+    concurrency:
+      group: python-lock-and-scripts-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
-            [sdist] = glob.glob("dist/*.tar.gz")
-            tnames = tarfile.open(sdist).getnames()
-            assert not any("/tests/" in n for n in tnames), tnames
-            print("wheel:", len(names), "entries; sdist:", len(tnames), "entries - OK")
-            EOF
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          # The interpreter the committed lock was compiled with (see its header).
+          # pip-compile output is interpreter-dependent, so the drift check must match it —
+          # and so must Dependabot, which regenerates the lock itself. Read from
+          # keyless-python/.python-version, which is the file Dependabot's pip updater
+          # honours, so the two cannot drift apart.
+          python-version-file: keyless-python/.python-version
+          cache: pip
+          cache-dependency-path: keyless-python/requirements-dev.txt
+
+      - name: Install the locked toolchain and the package
+        run: |
+          cd keyless-python
+          python -m pip install --require-hashes -r requirements-dev.txt
+          # check_cross_language.py imports trevokeyless, so mypy needs it importable.
+          python -m pip install --no-deps --no-build-isolation .
+
+      - name: Audit dependencies
+        # Once per run, here rather than in every matrix leg above: the audited input is
+        # the committed lock, which does not vary with the interpreter, so five identical
+        # audits bought nothing but latency and advisory-service traffic.
+        run: |
+          cd keyless-python
+          # Requirement mode audits exactly the committed lock, independent of
+          # packages preinstalled by the runner image or setup-python.
+          pip-audit --disable-pip -r requirements-dev.txt
+
+      - name: Lockfile agrees with requirements-dev.in
+        # Regenerate the lock from the .in with the exact documented command and fail on
+        # any diff: otherwise a Dependabot (or human) bump of requirements-dev.in is a
+        # silent no-op, because CI only ever installs the lock.
+        run: |
+          cd keyless-python
+          pip-compile --quiet --allow-unsafe --generate-hashes --strip-extras \
+            --output-file=requirements-dev.txt requirements-dev.in
+          if ! git diff --exit-code -- requirements-dev.txt; then
+            echo "::error::requirements-dev.txt is out of date with requirements-dev.in; regenerate it (see the header of requirements-dev.in)." >&2
+            exit 1
+          fi
+
+      - name: Check the CI helper scripts with ruff and mypy
+        run: |
+          ruff format --check .github/scripts
+          ruff check .github/scripts
+          mypy --config-file .github/scripts/mypy.ini .github/scripts
+
+  windows-package-smoke:
+    concurrency:
+      group: python-windows-package-smoke-${{ github.ref }}
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          # The interpreter the hash-pinned lock installed below was compiled with.
+          python-version-file: keyless-python/.python-version
+          cache: pip
+          cache-dependency-path: keyless-python/requirements-dev.txt
+      - name: Build and inspect Windows artifacts
+        working-directory: keyless-python
+        # `shell: bash`, not the Windows default pwsh: pwsh does not abort on a failing
+        # *native* command mid-script (only the last exit code propagates), so a failed
+        # `twine check` would be masked by the artifact-allowlist script succeeding
+        # afterwards. bash runs with `-eo pipefail` and stops at the failure.
+        shell: bash
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.txt
+          python -m pip install --no-deps --no-build-isolation .
+          python -m build --no-isolation
+          twine check --strict dist/*
+          python ../.github/scripts/check_python_artifacts.py

@@ -2,11 +2,14 @@ name: check-ts
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
   workflow_dispatch:
+  # Lets the publish workflow re-run the full check suite on the tagged commit
+  # instead of duplicating (and drifting from) these steps inline.
+  workflow_call:
 
 permissions:
   contents: read
@@ -15,13 +18,17 @@ jobs:
   ts-checks:
     concurrency:
       group: ts-checks-${{ github.ref }}-${{ matrix.node_version }}
-      cancel-in-progress: true
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
-        # Active LTS versions (Node 20 reached end of life in April 2026).
-        node_version: [22, 24]
+        # Exercise the declared floor exactly so dependency floor drift cannot hide
+        # behind the newest patch release, plus the current LTS line.
+        node_version: ["22.13.0", "24"]
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -31,58 +38,88 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: ${{ matrix.node_version }}
+          cache: npm
+          cache-dependency-path: keyless-ts/package-lock.json
       - run: |
           cd keyless-ts
           npm ci
           npm run format-check
           npm run lint-check
+          npm run type-check
           npm run build
           npm run test
 
-      - name: Audit production dependencies
+      - name: Audit dependencies
+        # Covers production and development dependencies at once; a separate
+        # `--omit=dev` run could never fail without this one failing too.
         run: |
           cd keyless-ts
-          npm audit --omit=dev --audit-level=high
+          npm audit --audit-level=moderate
 
       - name: Check package contents
-        # The "files" allowlist is release-critical; verify the packed tarball instead
-        # of trusting the configuration.
-        run: |
-          cd keyless-ts
-          npm pack --dry-run --json > /tmp/pack-report.json
-          node -e "
-          const files = require('/tmp/pack-report.json')[0].files.map((f) => f.path);
-          const allowed = (f) => f.startsWith('dist/') || ['package.json', 'README.md', 'LICENSE'].includes(f);
-          if (files.length === 0 || !files.every(allowed)) { console.error('unexpected package contents:', files); process.exit(1); }
-          console.log('npm package contents OK:', files.length, 'files');
-          "
-
-      - name: Module interop smoke test (require and import)
-        # The package deliberately ships a single CommonJS build; the README promises
-        # it works from both require and ESM import (named imports resolve via Node's
-        # CJS interop). Prove the promise against the packed tarball, not src/.
+        # Check the exact tarball allowlist, not only broad permitted prefixes. Pack once
+        # here and reuse the tarball path (via $GITHUB_ENV) in the later steps.
         run: |
           cd keyless-ts
           TARBALL="$PWD/$(npm pack --silent)"
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+          npm run check-package -- "$TARBALL"
+
+      - name: Module interop smoke test (require and import)
+        # Prove the CommonJS and native ESM entry points against the packed tarball.
+        run: |
           mkdir -p /tmp/interop-smoke && cd /tmp/interop-smoke
           npm init -y > /dev/null
           npm install --no-save "$TARBALL"
           node --input-type=commonjs -e "
-          const { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevokeyless');
-          const address = encodeAppAgentAddress(123);
+          const { appAgentId, encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevokeyless');
+          const address = encodeAppAgentAddress({ appAgentId: appAgentId(123) });
           if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
           if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
           if (typeof Ss58Error !== 'function') process.exit(1);
           console.log('require interop OK');
           "
           node --input-type=module -e "
-          import { encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } from '@trevofinance/trevokeyless';
-          const address = encodeAppAgentAddress(123);
+          import { appAgentId, encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } from '@trevofinance/trevokeyless';
+          const address = encodeAppAgentAddress({ appAgentId: appAgentId(123) });
           if (address !== 'ttowKp8AmQuGfbBGikG2pbdYNnErhHRaLrdktJeZEfJVeVnTp') process.exit(1);
           if (encodeAddress(decodeAddress(address).accountId) !== address) process.exit(1);
           if (typeof Ss58Error !== 'function') process.exit(1);
           console.log('import interop OK');
           "
+
+      - name: TypeScript consumer resolves types under both module systems
+        # `npm run type-check` compiles the package's own sources with node10 resolution and
+        # can never see this: the exports map must offer a *CommonJS* .d.ts to `require`
+        # consumers. Pointing them at the ESM declarations (inside dist/esm, which is marked
+        # `type: module`) makes tsc reject the package with TS1479 under module: node16 —
+        # the modern default — while every test here still passes.
+        run: |
+          cd /tmp/interop-smoke
+          npm install --no-save typescript@5
+          cat > tsconfig.json <<'JSON'
+          {"compilerOptions":{"module":"node16","moduleResolution":"node16","strict":true,"noEmit":true,"target":"ES2022"}}
+          JSON
+          cat > use.mts <<'TS'
+          import { appAgentId, encodeAppAgentAddress } from "@trevofinance/trevokeyless";
+          export const address: string = encodeAppAgentAddress({ appAgentId: appAgentId(1) });
+          TS
+          cp use.mts use.cts
+          npx tsc -p tsconfig.json
+
+      - name: Browser and React Native artifact resolver tests
+        run: |
+          node "$GITHUB_WORKSPACE/keyless-ts/scripts/check-platforms.mjs" --resolver-only /tmp/interop-smoke
+
+      - name: Install current Chromium
+        if: matrix.node_version == '24'
+        working-directory: keyless-ts
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser and Hermes runtime tests
+        if: matrix.node_version == '24'
+        run: |
+          node "$GITHUB_WORKSPACE/keyless-ts/scripts/check-platforms.mjs" --runtime /tmp/interop-smoke
 
       - name: README examples run against the packed tarball
         # The Rust README is compiled as a doctest; this is the TypeScript
@@ -91,3 +128,36 @@ jobs:
         run: |
           cd /tmp/interop-smoke
           node "$GITHUB_WORKSPACE/keyless-ts/scripts/run-readme.mjs" "$GITHUB_WORKSPACE/keyless-ts/README.md"
+
+  windows-package-smoke:
+    concurrency:
+      group: ts-windows-package-smoke-${{ github.ref }}
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - name: Use Node.js 22.13.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: "22.13.0"
+          cache: npm
+          cache-dependency-path: keyless-ts/package-lock.json
+      - name: Build, pack, and run Hermes on Windows
+        working-directory: keyless-ts
+        # `shell: bash`, not the Windows default pwsh: pwsh does not abort on a failing
+        # *native* command mid-script (only the last exit code propagates), so a failed
+        # resolver or Hermes check would be masked by the pack/allowlist commands
+        # succeeding afterwards. bash runs with `-eo pipefail` and stops at the failure.
+        shell: bash
+        run: |
+          npm ci
+          npm run build
+          npm run check-platform-resolvers
+          node scripts/check-platforms.mjs --runtime --hermes-only
+          tarball="$(npm pack --silent)"
+          node scripts/check-package.mjs "$tarball"

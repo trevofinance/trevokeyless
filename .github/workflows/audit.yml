@@ -1,0 +1,132 @@
+# Weekly dependency audit across all three ecosystems.
+#
+# The per-package check-* workflows already audit on every push and pull request, but three
+# *published* packages need a cadence that does not depend on someone opening a PR: a critical
+# advisory in a runtime dependency (blake2b_simd, bs58, @noble/hashes, @scure/base) would
+# otherwise go unnoticed until the next change, and Dependabot only runs monthly.
+#
+# A scheduled run has no PR or push to report against, so a failure opens (or comments on) an
+# issue, exactly as fuzz.yml does.
+name: audit
+
+on:
+  schedule:
+    # Mondays, 05:00 UTC.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    defaults:
+      run:
+        working-directory: keyless-rust
+    env:
+      # The repository-root rust-toolchain.toml would otherwise override the toolchain
+      # installed below (a directory override beats the rustup default).
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
+        with:
+          tool: cargo-audit@0.22.2
+      - name: Audit dependencies against the RustSec database
+        run: cargo audit
+      - name: Audit locked fuzz-harness dependencies against the RustSec database
+        run: cargo audit --file fuzz/Cargo.lock
+
+      - name: Open an issue for the failure
+        # always() + cancelled(): a job killed by timeout-minutes (or a manual
+        # cancellation) ends *cancelled*, not failed — failure() alone would file
+        # nothing and the miss would sit unnoticed, the exact gap this step closes.
+        if: always() && (failure() || cancelled())
+        working-directory: .
+        run: bash .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Scheduled dependency audit failure - Rust (cargo audit)
+          BODY: The weekly `Rust (cargo audit)` audit reported a vulnerable dependency. See the run log for the advisory details.
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          # The interpreter the hash-pinned lock was compiled with — read from the same
+          # file as check-python.yml and publish-python.yml, so an interpreter bump
+          # cannot leave this weekly job installing a lock compiled for another Python.
+          python-version-file: keyless-python/.python-version
+      - name: Install dev requirements
+        run: |
+          cd keyless-python
+          python -m pip install --require-hashes -r requirements-dev.txt
+      - name: Audit dependencies
+        run: |
+          cd keyless-python
+          # Requirement mode audits exactly the committed lock, independent of packages
+          # preinstalled by the runner image or setup-python.
+          pip-audit --disable-pip -r requirements-dev.txt
+
+      - name: Open an issue for the failure
+        # always() + cancelled(): a job killed by timeout-minutes (or a manual
+        # cancellation) ends *cancelled*, not failed — failure() alone would file
+        # nothing and the miss would sit unnoticed, the exact gap this step closes.
+        if: always() && (failure() || cancelled())
+        run: bash .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Scheduled dependency audit failure - Python (pip-audit)
+          BODY: The weekly `Python (pip-audit)` audit reported a vulnerable dependency. See the run log for the advisory details.
+
+  ts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: keyless-ts/package-lock.json
+      - name: Audit dependencies
+        # Covers production and development dependencies at once; a separate `--omit=dev`
+        # run could never fail without this one failing too.
+        run: |
+          cd keyless-ts
+          npm audit --audit-level=moderate
+
+      - name: Open an issue for the failure
+        # always() + cancelled(): a job killed by timeout-minutes (or a manual
+        # cancellation) ends *cancelled*, not failed — failure() alone would file
+        # nothing and the miss would sit unnoticed, the exact gap this step closes.
+        if: always() && (failure() || cancelled())
+        run: bash .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Scheduled dependency audit failure - TypeScript (npm audit)
+          BODY: The weekly `TypeScript (npm audit)` audit reported a vulnerable dependency. See the run log for the advisory details.

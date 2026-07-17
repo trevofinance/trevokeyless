@@ -7,24 +7,85 @@ on:
     branches: [ main ]
 
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
   stale-symbols:
+    concurrency:
+      group: stale-symbols-${{ github.ref }}
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The repository-root rust-toolchain.toml would otherwise override the toolchain
+      # installed below; RUSTUP_TOOLCHAIN takes precedence over that file. The release
+      # metadata check shells out to cargo (conformance fixture freshness).
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: keyless-rust
+
+      - name: No references to stale renamed symbols (outside changelogs)
+        # Changelogs retain rename history, and this workflow names the dead symbols in its
+        # own pattern/comment; exclude only those from the live-documentation search. Every
+        # other file in the tree — reports included — is held to the current names.
+        #
+        # git grep exits 1 for "no matches" but >=2 for an error (a bad pattern or a
+        # pathspec typo after a future edit); a plain `if` folds both into the passing
+        # branch, turning the gate silently green forever. Tell the two apart.
+        run: |
+          set +e
+          git grep -nE 'AddressType|BlockchainAddressInfo|DecodedTransactionalAccount|DecodedNamedAccount' -- ':!*CHANGELOG.md' ':!.github/workflows/check-docs.yml'
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Found references to pre-1.0 renamed symbols. Use AccountType / AccountTypeMismatchError / BlockchainAccountInfo (old names allowed only in changelogs)." >&2
+            exit 1
+          elif [ "$status" -ne 1 ]; then
+            echo "::error::git grep itself failed with status $status (bad pattern or pathspec?)" >&2
+            exit "$status"
+          fi
+          echo "No stale renamed-symbol references found."
+
+      - name: Release metadata is synchronized
+        run: python3 .github/scripts/release_metadata.py
+
+      - name: Release helper tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' --verbose
+
+  link-check:
+    concurrency:
+      group: link-check-${{ github.ref }}
+      # Cancel superseded runs on PR branches, but never on main: a cancelled main
+      # run would leave a commit with no completed status.
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: No references to pre-1.0 renamed symbols (outside CHANGELOG)
-        # CHANGELOG.md keeps the rename history, and this workflow names the dead
-        # symbols in its own pattern/comment; both are excluded from the search.
-        run: |
-          if git grep -nE 'AddressType|BlockchainAddressInfo' -- ':!CHANGELOG.md' ':!.github/workflows/check-docs.yml'; then
-            echo "::error::Found references to pre-1.0 renamed symbols. Use AccountType / AccountTypeMismatchError / BlockchainAccountInfo (old names allowed only in CHANGELOG.md)." >&2
-            exit 1
-          fi
-          echo "No stale renamed-symbol references found."
+      - name: Check links in Markdown files
+        # lychee respects .gitignore by default, so build output (node_modules, dist,
+        # target) is never scanned.
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --no-progress --max-retries 2 './**/*.md'
+          fail: true
+        env:
+          # Authenticated requests keep github.com link checks from tripping the
+          # anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}

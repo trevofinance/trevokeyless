@@ -1,0 +1,47 @@
+# Files an issue when a publish run ends *cancelled*.
+#
+# The publish workflows serialize per package with `cancel-in-progress: false`, but a
+# GitHub concurrency group keeps only one running plus one *pending* run: a third tag
+# pushed while two are in flight silently replaces (cancels) the pending middle run.
+# Cancelled is the one conclusion a publish can reach with nobody notified — a failure
+# marks the run red and a success publishes — so treat it the way the scheduled
+# workflows treat failures and file an issue. Recovery is documented in RELEASING.md
+# (re-run the cancelled workflow run once the queue drains; every gate re-runs from
+# scratch).
+name: publish-watch
+
+on:
+  workflow_run:
+    workflows: [publish-rust, publish-python, publish-ts]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  report-cancelled:
+    if: github.event.workflow_run.conclusion == 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Open an issue for the cancelled publish
+        # The run link the reporter script prepends is this watcher's own run; the
+        # cancelled publish run's URL is carried in BODY. All workflow_run fields are
+        # passed through env, never interpolated into the script text.
+        run: bash .github/scripts/report_scheduled_failure.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Cancelled publish run - ${{ github.event.workflow_run.name }}
+          BODY: >-
+            A ${{ github.event.workflow_run.name }} run for
+            `${{ github.event.workflow_run.head_branch }}` ended cancelled — most likely a
+            third tag replaced it in the publish queue (the concurrency group keeps one
+            running plus one pending run), so this tag was never published. Re-run it from
+            the Actions tab once the queue drains; see RELEASING.md. Cancelled run:
+            ${{ github.event.workflow_run.html_url }}
