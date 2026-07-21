@@ -4,13 +4,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 crate follows [semantic versioning](https://semver.org). The byte encoding itself is
 frozen and never changes at any version.
 
-## [Unreleased]
+## [2.0.0] — 2026-07-21
 
-Everything below is unpublished: 1.0.0 is the only version of this crate ever released.
-The in-between version bumps (1.0.1, 1.1.0, 1.2.0, 2.0.0) were prepared but never
-published; their notes are folded into this section as a single delta against 1.0.0.
-(The 1.0.1 dependency refresh and the 1.1.0 `test-accounts` feature were already part
-of the tree the 1.0.0 release was cut from and are covered by the 1.0.0 notes below.)
+Everything below is the delta against 1.1.0, the previous release on crates.io.
 
 ### Added
 
@@ -46,7 +42,7 @@ of the tree the 1.0.0 release was cut from and are covered by the 1.0.0 notes be
   non-exhaustive so downstream crates cannot construct inconsistent values directly,
   and serde deserialization re-validates that the embedded identifiers match
   `account_id`.
-  *Migrating persisted 1.x values:* the 1.0.0 wire form was the derived enum layout
+  *Migrating persisted 1.x values:* the 1.x wire form was the derived enum layout
   (a variant-index byte, then the fields); 2.0.0 reads exactly the 32 account-id
   bytes, so 1.x payloads no longer decode. A runtime (or off-chain store) holding
   1.x-encoded values needs a one-time storage migration: decode each value with a
@@ -135,7 +131,24 @@ of the tree the 1.0.0 release was cut from and are covered by the 1.0.0 notes be
 - Locked the standalone fuzz harness dependencies and added their lockfile to the
   RustSec audit and Dependabot paths; CI also pins its nightly and cargo-fuzz versions.
 
-## [1.0.0] — 2026-07-05
+## [1.1.0] — 2026-06-24
+
+### Added
+
+- The `test-accounts` feature: `AccountId64` and `AccountId128`, fixed-width padded
+  account-id containers for Substrate runtime tests that instantiate
+  `frame_system::Config::AccountId` at widths other than 32 bytes. Each carries a
+  32-byte keyless account in its leading bytes, right-padded with zeros, and reuses the
+  32-byte codec through `From<AccountId32>` / `to_account_id32()`. Off by default.
+
+## [1.0.1] — 2026-06-23
+
+### Changed
+
+- Development-dependency and CI refresh (`array-bytes` 6.2.3 → 9.3.0, GitHub Actions
+  bumps). The library, its runtime dependencies, and the encoding are unchanged.
+
+## [1.0.0] — 2026-06-23
 
 ### Added
 
@@ -143,7 +156,4 @@ of the tree the 1.0.0 release was cut from and are covered by the 1.0.0 notes be
   (`encode_*_account`, `decode_account_info`, typed `decode_*_account`,
   `is_keyless_account`), `AccountId32` with the `0x` + 64-hex interchange form, the
   SS58 codec (feature `ss58`), SCALE (feature `scale`) and serde (feature `serde`)
-  support, the `test-accounts` feature (`AccountId64` / `AccountId128`, fixed-width
-  padded account-id containers for Substrate runtime tests that instantiate
-  `frame_system::Config::AccountId` at widths other than 32 bytes), `no_std`
-  compatibility, and the cross-language conformance fixture.
+  support, `no_std` compatibility, and the cross-language conformance fixture.
