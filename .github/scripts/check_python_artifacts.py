@@ -7,10 +7,18 @@ cannot silently enter a release artifact.
 
 from __future__ import annotations
 
+import sys
 import tarfile
-import tomllib
 import zipfile
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    # This script runs on every interpreter in the check-python matrix, and tomllib is
+    # only in the standard library from 3.11. tomli is its backport (and the same code):
+    # it is in requirements-dev.txt on every platform, via pip-audit.
+    import tomli as tomllib
 
 
 def only(pattern: str) -> Path:

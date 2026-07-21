@@ -2,7 +2,10 @@
 # directory. It mirrors keyless-python/pyproject.toml [tool.ruff] so the scripts are held
 # to the same standard as the package; ruff discovers this file by walking up from each
 # script, so `ruff check .github/scripts` from the repository root picks it up.
-target-version = "py312"
+# py310, not the 3.12 these scripts are usually run with: check_python_artifacts.py runs
+# once per interpreter in the check-python matrix, whose floor is the package's own
+# requires-python (3.10). Lint them all against the lowest interpreter any of them sees.
+target-version = "py310"
 line-length = 120
 fix = false
 

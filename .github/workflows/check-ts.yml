@@ -73,7 +73,10 @@ jobs:
         run: |
           mkdir -p /tmp/interop-smoke && cd /tmp/interop-smoke
           npm init -y > /dev/null
-          npm install --no-save "$TARBALL"
+          # Recorded in package.json on purpose: a later `npm install` in this same
+          # directory (the TypeScript consumer step below) prunes anything that is not,
+          # and the step after it would then be type-checking against nothing.
+          npm install "$TARBALL"
           node --input-type=commonjs -e "
           const { appAgentId, encodeAppAgentAddress, decodeAddress, encodeAddress, Ss58Error } = require('@trevofinance/trevokeyless');
           const address = encodeAppAgentAddress({ appAgentId: appAgentId(123) });
@@ -99,7 +102,7 @@ jobs:
         # the modern default — while every test here still passes.
         run: |
           cd /tmp/interop-smoke
-          npm install --no-save typescript@5
+          npm install typescript@5
           cat > tsconfig.json <<'JSON'
           {"compilerOptions":{"module":"node16","moduleResolution":"node16","strict":true,"noEmit":true,"target":"ES2022"}}
           JSON
