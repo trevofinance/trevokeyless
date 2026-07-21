@@ -4,12 +4,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 package follows [semantic versioning](https://semver.org). The byte encoding itself is
 frozen and never changes at any version.
 
-## [Unreleased]
+## [2.0.0] — 2026-07-21
 
-Everything below is unpublished: 1.0.0 is the only version of this package ever
-released. The in-between version bumps (1.2.0 — 1.1.0 was skipped to align the three
-packages' numbers — and 2.0.0) were prepared but never published; their notes are
-folded into this section as a single delta against 1.0.0.
+Everything below is the delta against 1.0.0, the previous — and only other — release of
+this package on npm.
 
 ### Added
 
