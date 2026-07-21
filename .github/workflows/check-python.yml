@@ -30,6 +30,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # One failing interpreter must not cancel the others: a version-specific break and
+      # a break on every version look identical when the surviving legs never report.
+      fail-fast: false
       matrix:
         # Oldest supported version (requires-python >= 3.10) through current stable.
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]

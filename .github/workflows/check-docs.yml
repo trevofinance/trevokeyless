@@ -81,9 +81,17 @@ jobs:
       - name: Check links in Markdown files
         # lychee respects .gitignore by default, so build output (node_modules, dist,
         # target) is never scanned.
+        #
+        # www.npmjs.com answers datacenter traffic with 403 Forbidden regardless of the
+        # package existing, so the only two outcomes it can produce here are a false
+        # failure and a false failure after a retry. The registry links for the other two
+        # packages (crates.io, pypi.org) are still checked for real.
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: --no-progress --max-retries 2 './**/*.md'
+          args: >-
+            --no-progress --max-retries 2
+            --exclude '^https://www\.npmjs\.com/'
+            './**/*.md'
           fail: true
         env:
           # Authenticated requests keep github.com link checks from tripping the

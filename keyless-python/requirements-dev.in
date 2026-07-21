@@ -18,3 +18,23 @@ ruff==0.15.21
 setuptools==83.0.0
 twine==6.2.0
 wheel==0.47.0
+
+# Transitive dependencies of the tools above that pip-compile cannot see, and why they
+# have to be named here.
+#
+# pip-compile resolves for the interpreter and platform it runs on (Linux, Python 3.12),
+# so a transitive dependency guarded by an environment marker that is false there is
+# absent from the lock entirely. On the CI legs where the marker *is* true,
+# `pip install --require-hashes` then aborts rather than pull an unpinned, unhashed
+# requirement — which is what broke the 3.10/3.11 matrix legs (backports.tarfile,
+# importlib-metadata, zipp) and the Windows packaging smoke job (pywin32-ctypes).
+#
+# The pins are unconditional on purpose: a marker here would be false at compile time
+# too, and pip-compile drops such a requirement instead of passing the marker through.
+# All five are tiny pure-Python wheels, so installing them where they are not needed
+# costs nothing. Re-check this list whenever a tool above changes its dependencies.
+backports.tarfile==1.2.0  # Python < 3.12; via twine -> keyring -> jaraco.context
+colorama==0.4.6  # Windows; via build
+importlib-metadata==9.0.0  # Python < 3.12; via twine -> keyring
+pywin32-ctypes==0.2.3  # Windows; via twine -> keyring
+zipp==4.1.0  # Python < 3.12; via importlib-metadata

@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      # One failing Node version must not cancel the others: a version-specific break and
+      # a break on every version look identical when the surviving legs never report.
+      fail-fast: false
       matrix:
         # Exercise the declared floor exactly so dependency floor drift cannot hide
         # behind the newest patch release, plus the current LTS line.

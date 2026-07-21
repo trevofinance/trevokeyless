@@ -109,6 +109,9 @@ jobs:
       run:
         working-directory: ./keyless-rust
     strategy:
+      # One failing feature combination must not cancel the rest of the lattice: which
+      # combinations survive is exactly the signal that localizes a cfg break.
+      fail-fast: false
       matrix:
         # The feature lattice between the main job's no-default and all-features runs:
         # each optional feature alone, with and without std, plus the full no_std

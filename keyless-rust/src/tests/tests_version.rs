@@ -37,12 +37,17 @@ fn test_fuzz_lockfile_pins_the_crate_version() {
         eprintln!("fuzz lockfile not found; skipping (running from a published crate?)");
         return;
     };
-    let pin = format!(
-        "name = \"trevokeyless\"\nversion = \"{}\"",
-        env!("CARGO_PKG_VERSION")
-    );
+    // Line-based, not a `contains` of a `\n`-joined pair: a Windows checkout with
+    // `core.autocrlf=true` has CRLF line endings, and `lines()` normalizes them away.
+    let version = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
+    let pinned = lock
+        .lines()
+        .zip(lock.lines().skip(1))
+        .any(|(name_line, next_line)| {
+            name_line == "name = \"trevokeyless\"" && next_line == version
+        });
     assert!(
-        lock.contains(&pin),
+        pinned,
         "fuzz/Cargo.lock must pin trevokeyless at {} \
          (release_metadata.py --set rust rewrites it)",
         env!("CARGO_PKG_VERSION")
