@@ -42,7 +42,10 @@ jobs:
         # this, anyone able to push a tag could publish unreviewed code under the
         # repository's trusted-publishing identity.
         run: |
-          git fetch --no-tags origin main
+          # origin/main comes from the fetch-depth: 0 checkout above, which fetches every
+          # branch. Do not fetch here: the checkout strips its credentials afterwards
+          # (persist-credentials: false), so a fetch at this point runs unauthenticated
+          # and fails on a private repository.
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::Tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not an ancestor of origin/main. Release tags must be pushed on commits merged to main." >&2
             exit 1
