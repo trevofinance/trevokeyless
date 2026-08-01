@@ -83,10 +83,10 @@
     "eslint-config-prettier": "^10.1.8",
     "hermes-engine-cli": "0.12.0",
     "jest": "^30.4.2",
-    "playwright": "1.61.1",
-    "prettier": "3.9.4",
+    "playwright": "1.62.0",
+    "prettier": "3.9.6",
     "ts-jest": "^29.2.5",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.62.1"
   },
   "dependencies": {
