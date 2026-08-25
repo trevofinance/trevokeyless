@@ -16,7 +16,7 @@ acts on behalf of its keyless accounts by submitting App Transactions on Trevo b
 secret of any kind — *anyone* can construct a valid keyless account embedding *any* AppAgentId,
 for free. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an account
 merely because it decodes to a particular AppAgentId. See the
-[security model](https://github.com/trevo-finance/trevokeyless#security-model) for the full
+[security model](https://github.com/trevo-finance/trevokeyless/blob/main/docs/security-model.md) for the full
 contract.
 
 ## Byte layout

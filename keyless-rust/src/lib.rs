@@ -17,7 +17,7 @@
 //! keyless layout — never that the embedded App Agent created, requested, or authorized the
 //! account. Never grant privileges (allow-listing, fee waivers, webhook trust, ...) to an
 //! account merely because it decodes to a particular AppAgentId. See the
-//! [security model](https://github.com/trevo-finance/trevokeyless#security-model) for the
+//! [security model](https://github.com/trevo-finance/trevokeyless/blob/main/docs/security-model.md) for the
 //! full contract.
 //!
 //! There are three keyless account types:

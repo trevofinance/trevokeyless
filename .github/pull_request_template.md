@@ -5,7 +5,7 @@
 ## Checklist
 
 - [ ] **The one rule** (see
-      [CONTRIBUTING.md](https://github.com/trevo-finance/trevokeyless/blob/main/CONTRIBUTING.md),
+      [contribution guide](https://github.com/trevo-finance/trevokeyless/blob/main/docs/CONTRIBUTING.md),
       linked absolutely because relative links do not resolve from an instantiated PR
       body): if this changes behaviour of
       the encoding, decoding, classification, SS58 codec, or the shared error taxonomy, then the

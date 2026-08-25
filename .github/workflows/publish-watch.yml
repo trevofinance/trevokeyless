@@ -5,7 +5,7 @@
 # pushed while two are in flight silently replaces (cancels) the pending middle run.
 # Cancelled is the one conclusion a publish can reach with nobody notified — a failure
 # marks the run red and a success publishes — so treat it the way the scheduled
-# workflows treat failures and file an issue. Recovery is documented in RELEASING.md
+# workflows treat failures and file an issue. Recovery is documented in docs/RELEASING.md
 # (re-run the cancelled workflow run once the queue drains; every gate re-runs from
 # scratch).
 name: publish-watch
@@ -43,5 +43,5 @@ jobs:
             `${{ github.event.workflow_run.head_branch }}` ended cancelled — most likely a
             third tag replaced it in the publish queue (the concurrency group keeps one
             running plus one pending run), so this tag was never published. Re-run it from
-            the Actions tab once the queue drains; see RELEASING.md. Cancelled run:
+            the Actions tab once the queue drains; see docs/RELEASING.md. Cancelled run:
             ${{ github.event.workflow_run.html_url }}

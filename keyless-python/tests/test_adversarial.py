@@ -1356,7 +1356,7 @@ class TestIntegralFloatsAreRejected(unittest.TestCase):
     JavaScript (accepted: 123.0 *is* 123 in IEEE-754, so there is nothing left to
     reject), and JSON ``-0`` parses to int 0 here (accepted) but to the double -0 there
     (rejected). Neither direction can be pinned by a shared fixture vector — see the
-    host-number note in conformance/README.md — so the twin adversarial suites hold the
+    host-number note in docs/conformance-schema.md — so the twin adversarial suites hold the
     parity: this is the Python half, mirroring the ``-0`` cases in
     keyless-ts/tests/adversarial.test.ts.
     """

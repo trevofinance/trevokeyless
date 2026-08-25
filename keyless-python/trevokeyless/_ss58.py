@@ -87,7 +87,7 @@ The names mirror the variants of the Rust ``Ss58Error`` enum; the TypeScript
 
 # The same five kinds as runtime data, so ``Ss58Error`` can reject an out-of-taxonomy
 # ``kind`` instead of silently carrying it. Adding a kind is a breaking cross-language
-# change (see the root CLAUDE.md).
+# change (see docs/cross-language-contracts.md).
 _SS58_ERROR_KINDS: Final[tuple[Ss58ErrorKind, ...]] = get_args(Ss58ErrorKind)
 
 # The standard message for each kind this module raises, mirroring the Rust ``Display``

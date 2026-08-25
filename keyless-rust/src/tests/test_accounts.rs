@@ -134,7 +134,7 @@ mod scale_codec {
     }
 
     /// The macro-generated widths must carry distinct `TypeInfo` identities (the
-    /// CLAUDE.md "distinct metadata identities per width" claim): a runtime using both
+    /// keyless-rust/AGENTS.md "distinct metadata identities per width" claim): a runtime using both
     /// must expose them as two different metadata types.
     #[test]
     fn type_info_identities_are_distinct_per_width() {

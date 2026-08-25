@@ -1,4 +1,4 @@
-# Steers vulnerability reports away from public issues, reinforcing SECURITY.md's ask.
+# Steers vulnerability reports away from public issues, reinforcing docs/SECURITY.md.
 # Ordinary blank issues stay enabled: the repository's own automation
 # (report_scheduled_failure.sh, publish-watch) files plain issues.
 blank_issues_enabled: true
@@ -8,4 +8,4 @@ contact_links:
     about: >-
       Please do not open a public issue for suspected vulnerabilities. Use GitHub's
       private vulnerability reporting here, or email support@trevo.finance — see
-      SECURITY.md for the policy and response times.
+      docs/SECURITY.md for the policy and response times.

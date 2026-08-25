@@ -493,7 +493,7 @@ def build_classify_cases(seed: int, encode_results: list[JsonObject], fuzz_cases
     Regular without panicking), keyless accounts whose checksum has been corrupted (which
     must *demote* to Regular), Named accounts carrying out-of-charset name bytes under a
     valid checksum (Regular again — anyone can craft one, no key is needed), and the typed
-    decoders' (expected, found) mismatch pair, which the root CLAUDE.md calls an explicit
+    decoders' (expected, found) mismatch pair, which docs/cross-language-contracts.md calls an explicit
     cross-language contract and which nothing else here exercises.
     """
     rng = random.Random(seed ^ 0xC1A551FD)  # noqa: S311 - reproducibility, not cryptography

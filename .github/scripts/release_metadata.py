@@ -88,7 +88,7 @@ def changelog_has_unreleased(path: str) -> bool:
 
     Between releases the notes for the next version accumulate under that heading while
     the manifests may already carry the bumped version; the release PR replaces the
-    heading with ``## [X.Y.Z] — date`` (see RELEASING.md).
+    heading with ``## [X.Y.Z] — date`` (see docs/RELEASING.md).
     """
     return re.search(r"^## \[Unreleased\]$", read(path), re.MULTILINE) is not None
 
@@ -223,8 +223,8 @@ def check_ts_matrix_node_versions() -> list[str]:
 
 
 def assert_node_floor_tested() -> None:
-    """The engines floor is "the supported and exactly tested floor" (keyless-ts
-    CLAUDE.md): the check-ts.yml matrix must test that exact version. Nothing else
+    """The engines floor is "the supported and exactly tested floor" (docs/versioning.md):
+    the check-ts.yml matrix must test that exact version. Nothing else
     couples the two files, so raising one without the other would silently either
     test an unsupported version or ship an untested floor."""
     node_floor = NODE_RANGE.removeprefix(">=")

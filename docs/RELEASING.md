@@ -12,6 +12,10 @@ python3 .github/scripts/release_metadata.py --set ts 2.1.0
 The helper accepts stable release versions in `X.Y.Z` form only; it deliberately rejects
 prerelease and build metadata.
 
+Before choosing a version, apply [the compatibility policy](versioning.md): additive
+public API requires at least a minor bump, breaking API and runtime/toolchain-floor
+changes require a major bump, and the encoded bytes remain frozen.
+
 For `rust` this rewrites four declarations — `Cargo.toml`, `Cargo.lock`,
 `fuzz/Cargo.lock` (the fuzz crate pins the library by path and is audited separately), and
 the install snippet in `keyless-rust/README.md` (the README ships inside the `.crate`).
@@ -27,6 +31,10 @@ Review the generated lockfile diff, and run the checker:
 ```console
 python3 .github/scripts/release_metadata.py
 ```
+
+Then run the released package's named set through `.github/scripts/run_checks.py`; that
+executable owns the reusable check inventory and ordering. Release workflows add their
+artifact and publication-specific gates.
 
 Publish tags are package-specific: `rust-vX.Y.Z`, `python-vX.Y.Z`, and `ts-vX.Y.Z`. Tag
 the merge commit on `main`: before publishing, each publish workflow
@@ -52,3 +60,6 @@ ends cancelled; recover by re-running the cancelled workflow run from the Action
 the queue drains (safe at any time: every gate re-runs from scratch, and the registries
 accept publishing a version lower than the latest). Pushing release tags one at a time,
 waiting for each publish to finish, avoids the situation entirely.
+
+Release preparation never creates or pushes a tag and never publishes a package unless
+the user separately authorizes that external action.

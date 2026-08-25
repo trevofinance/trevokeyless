@@ -335,7 +335,7 @@ fn test_conformance_vectors() {
             "error kind of {address:?} must match the fixture: {reason}"
         );
         // The rendered message is shared verbatim with the Python and TypeScript
-        // implementations (CONTRIBUTING); pinning it in the fixture is what stops one
+        // implementations (docs/cross-language-contracts.md); pinning it in the fixture is what stops one
         // language's wording from drifting while every suite stays green on its own literal.
         assert_eq!(
             error.to_string(),
@@ -619,7 +619,7 @@ fn test_conformance_vectors() {
 
 /// Cross-language contracts that no fixture vector can carry, because they are about the
 /// *shape* of the API rather than about values crossing a language boundary. They are
-/// cheap to pin here, next to the fixture they complement (see the repository CLAUDE.md,
+/// cheap to pin here, next to the fixture they complement (see docs/cross-language-contracts.md,
 /// "Cross-language contracts").
 #[test]
 fn test_cross_language_constants() {

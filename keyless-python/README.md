@@ -12,7 +12,7 @@ This makes the keyless addresses convenient for use in off-chain applications.
 no secret of any kind — anyone can construct a valid keyless address embedding any
 AppAgent ID, for free. Never grant privileges (allow-listing, fee waivers, webhook trust,
 and the like) to an address merely because it decodes to a particular AppAgent ID. See the
-[security model](https://github.com/trevo-finance/trevokeyless#security-model) for the full
+[security model](https://github.com/trevo-finance/trevokeyless/blob/main/docs/security-model.md) for the full
 contract.
 
 ## Byte layout

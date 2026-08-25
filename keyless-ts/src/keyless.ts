@@ -346,7 +346,7 @@ function isValidU32(value: number): boolean {
   // float-typed source, and is rejected, mirroring the Python implementation rejecting
   // the float -0.0 with a TypeError. (One consequence: JSON `-0` parses to an accepted
   // int 0 in Python but to a rejected -0 here; host-number classes like this cannot be
-  // pinned by the JSON fixture — see conformance/README.md.)
+  // pinned by the JSON fixture — see docs/conformance-schema.md.)
   return (
     Number.isInteger(value) &&
     !Object.is(value, -0) &&

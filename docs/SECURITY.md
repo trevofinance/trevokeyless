@@ -71,9 +71,9 @@ verify that an artifact you install really was built here:
 
 ## What this library does and does not guarantee
 
-See the *Security model* section of the [README](./README.md): the keyless checksum is
-a classification and integrity mechanism, **not** authentication. Anyone can construct
-a valid keyless address embedding any AppAgent ID without any secret. Reports built on
+See the [technical security model](security-model.md): the keyless checksum is a
+classification and integrity mechanism, **not** authentication. Anyone can construct a
+valid keyless address embedding any AppAgent ID without any secret. Reports built on
 treating decode results as proof of authorship are out of scope.
 
 No secrets are processed anywhere in these libraries; there are no constant-time

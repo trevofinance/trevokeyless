@@ -140,7 +140,8 @@ fn is_valid_hex_account_id(s: &str) -> bool {
 /// document themselves as sharing it with the other.
 ///
 /// This crate's `KeylessDecodeError` renders a different string on purpose (Rust says
-/// *account*, the two address-level libraries say *address*; see the root CLAUDE.md), so the
+/// *account*, the two address-level libraries say *address*; see
+/// docs/cross-language-contracts.md), so the
 /// wording is generated here from the same `(expected, found)` pair that produces the vector,
 /// rather than read back from a `Display` impl. It is the one field of the fixture that is not
 /// this crate's own output — pinning it is what stops the Python and TypeScript wordings from
@@ -842,7 +843,7 @@ fn main() {
                 js(error_kind),
                 // The message is read back from this crate's Display, never hand-written:
                 // it is shared verbatim with the Python and TypeScript implementations
-                // (CONTRIBUTING), and nothing enforced that before this field existed.
+                // (docs/cross-language-contracts.md), and nothing enforced that before this field existed.
                 js(&error.to_string()),
                 js(reason)
             )
@@ -1180,7 +1181,7 @@ fn main() {
     // One host-value class is deliberately absent: negative zero. JSON `-0` parses to an
     // accepted int 0 in Python but to a rejected -0 double in JavaScript, so no shared
     // vector can pin it; the per-language adversarial suites cover it (see
-    // conformance/README.md).
+    // docs/conformance-schema.md).
     let format_invalid_host: Vec<(&str, &str)> = vec![
         ("-1", "negative"),
         ("1.5", "not an integer"),
