@@ -1,0 +1,5 @@
+# Personal Codex state stays local to each checkout.
+auth.json
+audit/
+history.jsonl
+sessions/

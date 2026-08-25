@@ -1,0 +1,30 @@
+name: check-claude-adapter
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adapter:
+    concurrency:
+      group: check-claude-adapter-${{ github.ref }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Claude adapter topology
+        run: python3 .claude/check_adapter.py
+
+      - name: Claude adapter regression tests
+        run: python3 -m unittest discover -s .claude -p 'test_*.py' --verbose
+
+      - name: Shared adapter contract
+        run: python3 .github/scripts/check_ai_config.py --scope adapters

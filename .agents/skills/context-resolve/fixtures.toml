@@ -1,0 +1,41 @@
+schema_version = 1
+
+[[fixture]]
+name = "rust implementation"
+mode = "implement"
+paths = ["keyless-rust/src/lib.rs"]
+expect_scopes = ["root", "rust"]
+expect_documents = ["keyless-rust/AGENTS.md", "docs/rust-implementation.md"]
+
+[[fixture]]
+name = "cross-language vector"
+mode = "plan"
+paths = ["conformance/vectors.json", "keyless-python/src/trevokeyless/__init__.py", "keyless-ts/src/index.ts"]
+concerns = ["conformance"]
+expect_scopes = ["root", "python", "typescript", "conformance"]
+expect_documents = ["docs/conformance.md", "docs/conformance-schema.md", "docs/cross-language-contracts.md"]
+
+[[fixture]]
+name = "AI configuration"
+mode = "review"
+paths = [".agents/ai-config.toml", ".github/workflows/agent-config.yml"]
+concerns = ["ai-config"]
+expect_scopes = ["root"]
+expect_documents = ["docs/AI-CONFIG.md", "docs/ai-config/ADAPTERS.md", "docs/ai-config/VALIDATION.md"]
+
+[[fixture]]
+name = "installed adapter anchor"
+mode = "implement"
+paths = [".fixture-adapter/check_adapter.py"]
+adapter_roots = [".fixture-adapter"]
+expect_scopes = ["root"]
+expect_concerns = ["ai-config"]
+expect_documents = ["docs/AI-CONFIG.md", "docs/ai-config/ADAPTERS.md"]
+
+[[fixture]]
+name = "pathless release"
+mode = "release"
+task = "prepare package release metadata"
+expect_scopes = ["root"]
+expect_concerns = ["release"]
+expect_documents = ["docs/versioning.md", "docs/RELEASING.md"]

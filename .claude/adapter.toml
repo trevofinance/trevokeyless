@@ -1,0 +1,22 @@
+schema_version = 1
+id = "claude"
+core_entry = "CLAUDE.md"
+skill_source = ".agents/skills"
+static_check = ".claude/check_adapter.py"
+mutation_test = ".claude/test_adapter.py"
+live_smoke = ".claude/SMOKE.md"
+live_evidence = ".claude/live-smoke-evidence.toml"
+boundary_signature = "adapter-to-core-only/v1"
+external_owned_paths = [
+  ".github/workflows/check-claude-adapter.yml",
+  "CLAUDE.md",
+  "keyless-python/CLAUDE.md",
+  "keyless-rust/CLAUDE.md",
+  "keyless-ts/CLAUDE.md",
+]
+
+[support]
+root_context = "native"
+nested_context = "native"
+portable_skills = "fallback"
+delegation = "fallback"

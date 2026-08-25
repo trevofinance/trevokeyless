@@ -1,0 +1,17 @@
+schema_version = 1
+adapter = "gemini"
+client_version = "UNAVAILABLE"
+recorded_at = "2026-08-24"
+input_digest = "sha256:ec8d3be3a8174592c67dbcae691deebc7124da3dc3e8fc21f6865bd21f163846"
+
+[probe.root_context]
+result = "NOT_RUN"
+summary = "Gemini CLI was unavailable, so no fresh account-backed root probe was run."
+
+[probe.nested_context]
+result = "NOT_RUN"
+summary = "Gemini CLI was unavailable, so no fresh account-backed nested probe was run."
+
+[probe.portable_skill]
+result = "NOT_RUN"
+summary = "Gemini CLI was unavailable, so no fresh account-backed skill probe was run."

@@ -1,0 +1,6 @@
+# Personal Gemini CLI state stays local to each checkout.
+audit/
+oauth_creds.json
+settings.local.json
+sessions/
+tmp/

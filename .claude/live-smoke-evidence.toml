@@ -1,0 +1,17 @@
+schema_version = 1
+adapter = "claude"
+client_version = "UNAVAILABLE"
+recorded_at = "2026-08-24"
+input_digest = "sha256:38812dcbb452801e3bde1d792af20fb89025d0808141f0251ea0958de2b53d8d"
+
+[probe.root_context]
+result = "NOT_RUN"
+summary = "Claude Code was unavailable, so no fresh account-backed root probe was run."
+
+[probe.nested_context]
+result = "NOT_RUN"
+summary = "Claude Code was unavailable, so no fresh account-backed nested probe was run."
+
+[probe.portable_skill]
+result = "NOT_RUN"
+summary = "Claude Code was unavailable, so no fresh account-backed skill probe was run."

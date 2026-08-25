@@ -1,0 +1,17 @@
+schema_version = 1
+adapter = "codex"
+client_version = "codex-cli 0.150.0-alpha.8"
+recorded_at = "2026-08-24"
+input_digest = "sha256:f2666c15c845636629f7b22fa8a20afdede1cd651102f3598c1d4007a2f102e2"
+
+[probe.root_context]
+result = "NOT_RUN"
+summary = "The CLI version was recorded, but no fresh account-backed root probe was run."
+
+[probe.nested_context]
+result = "NOT_RUN"
+summary = "The CLI version was recorded, but no fresh account-backed nested probe was run."
+
+[probe.portable_skill]
+result = "NOT_RUN"
+summary = "The CLI version was recorded, but no fresh account-backed skill probe was run."

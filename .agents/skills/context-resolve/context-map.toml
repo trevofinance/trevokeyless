@@ -1,0 +1,75 @@
+schema_version = 1
+modes = ["understand", "plan", "implement", "review", "validate", "docs", "release"]
+
+[defaults]
+always_documents = ["AGENTS.md", "docs/AI-AGENT-GUIDE.md"]
+
+[[scope]]
+id = "root"
+root = "."
+patterns = ["AGENTS.md", "README.md", "docs/**", ".agents/**", ".github/**"]
+aliases = ["repository", "documentation", "agent configuration", "ai configuration", "ci"]
+documents = ["AGENTS.md", "docs/AI-AGENT-GUIDE.md", "docs/CONTRIBUTING.md"]
+
+[[scope]]
+id = "rust"
+root = "keyless-rust"
+patterns = ["keyless-rust/**"]
+aliases = ["rust", "crate"]
+documents = ["keyless-rust/AGENTS.md", "docs/rust-implementation.md", "docs/cross-language-contracts.md"]
+
+[[scope]]
+id = "python"
+root = "keyless-python"
+patterns = ["keyless-python/**"]
+aliases = ["python", "pyproject"]
+documents = ["keyless-python/AGENTS.md", "docs/python-implementation.md", "docs/cross-language-contracts.md"]
+
+[[scope]]
+id = "typescript"
+root = "keyless-ts"
+patterns = ["keyless-ts/**"]
+aliases = ["typescript", "javascript", "npm"]
+documents = ["keyless-ts/AGENTS.md", "docs/typescript-implementation.md", "docs/cross-language-contracts.md"]
+
+[[scope]]
+id = "conformance"
+root = "conformance"
+patterns = ["conformance/**"]
+aliases = ["conformance", "vector", "fixture", "cross-language"]
+documents = ["docs/cross-language-contracts.md", "docs/conformance.md", "docs/conformance-schema.md"]
+
+[[concern]]
+id = "ai-config"
+keywords = ["agent config", "ai config", "provider adapter", "codex", "claude", "gemini"]
+documents = ["docs/AI-CONFIG.md", "docs/ai-config/PROFILES.md", "docs/ai-config/CONTEXT-RESOLUTION.md", "docs/ai-config/SKILLS-AND-DELEGATION.md", "docs/ai-config/ADAPTERS.md", "docs/ai-config/VALIDATION.md"]
+
+[[concern]]
+id = "conformance"
+keywords = ["conformance", "vector", "fixture", "encoding parity"]
+documents = ["docs/cross-language-contracts.md", "docs/conformance.md", "docs/conformance-schema.md"]
+
+[[concern]]
+id = "security"
+keywords = ["security", "secret", "credential", "threat"]
+documents = ["docs/security-model.md", "docs/SECURITY.md"]
+
+[[concern]]
+id = "generated"
+keywords = ["generated", "lock file", "artifact"]
+documents = ["docs/generated-files.md"]
+
+[[concern]]
+id = "release"
+keywords = ["release", "version", "publish"]
+documents = ["docs/versioning.md", "docs/RELEASING.md"]
+
+[[concern]]
+id = "ci"
+keywords = ["workflow", "continuous integration", "ci"]
+documents = ["docs/development.md"]
+
+[[concern]]
+id = "fuzz"
+keywords = ["fuzz", "fuzzer"]
+documents = ["docs/fuzzing.md", ".github/workflows/fuzz.yml"]

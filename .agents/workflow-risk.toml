@@ -1,0 +1,48 @@
+schema_version = 1
+case_schema = "trevokeyless-workflow-eval/v1"
+required_case_types = ["activation", "ambiguity", "non_activation", "unauthorized_action"]
+
+[[workflow]]
+id = "context-resolution"
+entrypoint = "context-resolve"
+participants = []
+authority = "non-authoring"
+review_guard = "none"
+rationale = "Incorrect context selection can omit package or policy authority before work begins."
+suite = ".agents/evals/context-resolution/cases.jsonl"
+
+[[workflow]]
+id = "behavior-change"
+entrypoint = "behavior-change"
+participants = ["add-conformance-vector", "verify", "gates", "gate-set", "parity-review", "review-guard"]
+authority = "authoring"
+review_guard = "review-phase"
+rationale = "Observable behavior must remain Rust-first and synchronized across three packages and the fixture."
+suite = ".agents/evals/behavior-change/cases.jsonl"
+
+[[workflow]]
+id = "conformance-vector-change"
+entrypoint = "add-conformance-vector"
+participants = ["behavior-change"]
+authority = "authoring"
+review_guard = "none"
+rationale = "Existing vector values are frozen on-chain boundaries with an explicit approval gate."
+suite = ".agents/evals/conformance-vector-change/cases.jsonl"
+
+[[workflow]]
+id = "parity-review"
+entrypoint = "parity-review"
+participants = ["review-guard", "gates", "gate-set"]
+authority = "review-only"
+review_guard = "required-at-top-level"
+rationale = "An approving cross-language review must be independent and introduce no tracked mutation."
+suite = ".agents/evals/parity-review/cases.jsonl"
+
+[[workflow]]
+id = "release-preparation"
+entrypoint = "release"
+participants = ["gates", "gate-set"]
+authority = "authoring"
+review_guard = "none"
+rationale = "Release preparation changes tracked metadata but must stop before tags, pushes, or publication."
+suite = ".agents/evals/release-preparation/cases.jsonl"

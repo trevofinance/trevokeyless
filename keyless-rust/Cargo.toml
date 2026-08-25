@@ -10,10 +10,18 @@ repository = "https://github.com/trevo-finance/trevokeyless/"
 readme = "README.md"
 keywords = ["trevo", "blockchain", "substrate", "no-std", "scale"]
 categories = ["encoding", "wasm"]
-# Repository-internal documentation, the fuzzing harness, and the differential-check driver
-# (the Rust side of .github/scripts/check_cross_language.py, which has no meaning outside this
-# repository); keep them out of the published crate.
-exclude = ["CLAUDE.md", "fuzz", "examples/differential.rs"]
+# Publish only the product and consumer documentation. Repository AI configuration, the
+# fuzzing harness, and the differential-check driver have no meaning outside this repository
+# and remain excluded without a provider-specific filename list.
+include = [
+    "src/**/*",
+    "examples/gen_conformance.rs",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+]
 
 [lints.rust]
 missing_docs = "deny"

@@ -4,8 +4,16 @@ __pycache__/
 .coverage
 coverage.xml
 .venv/
+
+# Local credentials and AI-client session material never enter the repository.
+.env
+.env.*
+!.env.example
+.agents/audit/
+.agents/sessions/
+.agents/transcripts/
 # ruff and mypy caches appear wherever the tools run — keyless-python/ for the package
-# checks, the repo root for the .github/scripts checks (per CONTRIBUTING) — so ignore
+# checks, the repo root for the .github/scripts checks (per docs/development.md) — so ignore
 # them unanchored, covering every location alike.
 .mypy_cache/
 .ruff_cache/
@@ -30,7 +38,3 @@ keyless-ts/dist
 keyless-ts/coverage
 keyless-ts/*.tgz
 node_modules/
-
-# Claude Code: the shared project config in .claude/ is committed; personal
-# per-developer settings stay local.
-.claude/settings.local.json

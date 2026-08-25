@@ -1,0 +1,19 @@
+schema_version = 1
+id = "gemini"
+core_entry = "GEMINI.md"
+skill_source = ".agents/skills"
+static_check = ".gemini/check_adapter.py"
+mutation_test = ".gemini/test_adapter.py"
+live_smoke = ".gemini/SMOKE.md"
+live_evidence = ".gemini/live-smoke-evidence.toml"
+boundary_signature = "adapter-to-core-only/v1"
+external_owned_paths = [
+  ".github/workflows/check-gemini-adapter.yml",
+  "GEMINI.md",
+]
+
+[support]
+root_context = "native"
+nested_context = "fallback"
+portable_skills = "native"
+delegation = "limited"

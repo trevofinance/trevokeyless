@@ -1,10 +1,9 @@
 """Assert that the packaged crate contains exactly the release allowlist.
 
-`cargo publish --dry-run` says nothing about the *contents* of the .crate file: the file
-list comes from the hand-maintained `exclude` key in Cargo.toml, so a new top-level
-directory (or a stray local file) would ship silently. This is the Rust counterpart of
-check_python_artifacts.py and keyless-ts/scripts/check-package.mjs: it compares the exact
-file list `cargo package` would publish against the allowlist below.
+`cargo publish --dry-run` says nothing about the *contents* of the .crate file. This is the
+Rust counterpart of check_python_artifacts.py and keyless-ts/scripts/check-package.mjs: it
+compares the file list selected by Cargo.toml's product allowlist with the exact allowlist
+below.
 
 Run from anywhere in the repository:
 
@@ -24,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CRATE = ROOT / "keyless-rust"
 
 # Everything `cargo package` puts in the .crate file. Cargo synthesizes the first three
-# entries; the rest are tracked sources. Notably absent (and required to stay absent):
-# CLAUDE.md, the fuzz/ crate, and anything under target/.
+# entries; the rest are tracked product sources. Repository configuration, the fuzz/ crate,
+# the differential driver, and anything under target/ must stay absent.
 EXPECTED = {
     ".cargo_vcs_info.json",
     "CHANGELOG.md",

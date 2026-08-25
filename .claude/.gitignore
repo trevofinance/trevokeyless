@@ -1,0 +1,6 @@
+# Personal Claude Code settings stay local to each checkout.
+settings.local.json
+audit/
+credentials.json
+sessions/
+transcripts/

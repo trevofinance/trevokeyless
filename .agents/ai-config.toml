@@ -1,0 +1,17 @@
+schema_version = 1
+policy_bundle = "provider-neutral-ai-config"
+policy_version = "3.0.0"
+
+bootstrap_profile = "canonical-router"
+authority_profile = "review-only-behavioral"
+delegation_profile = "skill-centered"
+command_profile = "executable-owner"
+capability_surface_profile = "conditional-surfaces"
+validation_profile = "core-and-adapter-contracts"
+
+context_resolution_skill = "context-resolve"
+review_guard_skill = "review-guard"
+bootstrap_owner = "AGENTS.md"
+validation_owner = ".github/scripts/check_ai_config.py"
+validation_guidance = "docs/development.md"
+decision_log = "docs/DECISIONS.md"

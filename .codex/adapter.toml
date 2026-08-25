@@ -1,0 +1,18 @@
+schema_version = 1
+id = "codex"
+core_entry = "AGENTS.md"
+skill_source = ".agents/skills"
+static_check = ".codex/check_adapter.py"
+mutation_test = ".codex/test_adapter.py"
+live_smoke = ".codex/SMOKE.md"
+live_evidence = ".codex/live-smoke-evidence.toml"
+boundary_signature = "adapter-to-core-only/v1"
+external_owned_paths = [
+  ".github/workflows/check-codex-adapter.yml",
+]
+
+[support]
+root_context = "native"
+nested_context = "native"
+portable_skills = "native"
+delegation = "native"
