@@ -48,11 +48,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: keyless-ts/package-lock.json
-      - name: Build TypeScript distribution
-        working-directory: keyless-ts
-        run: |
-          npm ci
-          npm run build
       - name: Seeded valid and hostile differential check
         # Pull requests and pushes use the fixed seed so a run is reproducible from the
         # commit alone. The weekly scheduled run instead seeds from the run id: with a
@@ -60,9 +55,9 @@ jobs:
         # cases, which is exactly what the PR gate already did. The chosen seed is printed
         # by the script, so a scheduled failure is reproducible locally with --seed.
         run: >-
-          python3 .github/scripts/check_cross_language.py
-          --seed ${{ github.event_name == 'schedule' && github.run_id || '0x54524556' }}
-          --cases ${{ github.event_name == 'schedule' && 2048 || 256 }}
+          python3 .github/scripts/run_checks.py cross
+          --cross-seed ${{ github.event_name == 'schedule' && github.run_id || '0x54524556' }}
+          --cross-cases ${{ github.event_name == 'schedule' && 2048 || 256 }}
 
       - name: Open an issue for the failure
         # The weekly run explores seeds no PR ever will, and it is the only thing in this

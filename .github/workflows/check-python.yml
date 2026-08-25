@@ -48,37 +48,8 @@ jobs:
           cache: pip
           cache-dependency-path: keyless-python/requirements-dev.txt
 
-      - name: Install deps
-        run: |
-          cd keyless-python
-          python -m pip install --require-hashes -r requirements-dev.txt
-          python -m pip install --no-deps --no-build-isolation .
-
-      - name: Check code formatting with ruff
-        run: |
-          cd keyless-python
-          ruff format --check
-
-      - name: Check code with ruff
-        run: |
-          cd keyless-python
-          ruff check
-
-      - name: Check code with mypy
-        run: |
-          cd keyless-python
-          mypy trevokeyless tests
-
-      - name: Run tests
-        # Discovery picks up every tests/test_*.py module; the previous explicit module
-        # list silently skipped test_adversarial.py.
-        #
-        # This run imports the SOURCE tree: `python -m unittest` puts the current
-        # directory first on sys.path, so `import trevokeyless` resolves to
-        # keyless-python/trevokeyless/, not to the wheel installed above.
-        run: |
-          cd keyless-python
-          python3 -m unittest discover --verbose
+      - name: Run reusable Python checks
+        run: python3 .github/scripts/run_checks.py python
 
       - name: Run tests against the installed package
         # The whole suite again, but discovered from keyless-python/tests with the
@@ -161,11 +132,8 @@ jobs:
             exit 1
           fi
 
-      - name: Check the CI helper scripts with ruff and mypy
-        run: |
-          ruff format --check .github/scripts
-          ruff check .github/scripts
-          mypy --config-file .github/scripts/mypy.ini .github/scripts
+      - name: Check repository helper scripts
+        run: python3 .github/scripts/run_checks.py scripts
 
   windows-package-smoke:
     concurrency:

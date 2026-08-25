@@ -13,13 +13,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # The single source of the fuzz toolchain pin for this workflow. Exporting it as
-  # RUSTUP_TOOLCHAIN (rather than relying on `cargo +nightly-...` per command) also stops the
-  # root rust-toolchain.toml from being resolved by Swatinem/rust-cache, which would otherwise
-  # download an unused stable toolchain and key the cache on it.
-  RUSTUP_TOOLCHAIN: nightly-2026-07-01
-
 jobs:
   fuzz:
     concurrency:
@@ -30,9 +23,6 @@ jobs:
     permissions:
       contents: read
       issues: write
-    defaults:
-      run:
-        working-directory: ./keyless-rust
     strategy:
       # Keep fuzzing the other targets even if one finds a crash: independent findings in
       # one scheduled run should surface as separate failures, not one.
@@ -43,38 +33,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: |
-            keyless-rust
-            keyless-rust/fuzz
-      - name: Install cargo-fuzz
-        uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
-        with:
-          tool: cargo-fuzz@0.13.2
-      - name: Fuzz lockfile is honoured
-        # cargo-fuzz has no --locked flag, so the builds below could silently re-resolve
-        # and rewrite fuzz/Cargo.lock — fuzzing a dependency set nobody audited (cargo
-        # audit reads the committed lock). `cargo metadata --locked` fails if the lock
-        # does not match the manifests; once it passes, the build resolves to exactly the
-        # locked versions and leaves the file untouched.
-        run: cargo metadata --locked --manifest-path fuzz/Cargo.toml > /dev/null
-      # cargo-fuzz defaults --target to the triple it was itself built for; the
-      # install-action ships a musl-static binary, so without an explicit --target it
-      # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
-      # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
-      #
-      # Seed each run from the committed corpus in fuzz/seeds/<target> so every run
-      # starts from known-interesting inputs; new discoveries land in the throwaway
-      # fuzz/corpus/<target> directory.
       - name: Fuzz ${{ matrix.target }}
-        run: |
-          mkdir -p fuzz/corpus/${{ matrix.target }}
-          cargo fuzz run ${{ matrix.target }} fuzz/corpus/${{ matrix.target }} fuzz/seeds/${{ matrix.target }} --target x86_64-unknown-linux-gnu -- -max_total_time=300
+        run: >-
+          python3 .github/scripts/run_fuzz.py
+          --target ${{ matrix.target }} --duration 300 --ensure-tools
 
       - name: Upload crash reproducers
         if: failure()

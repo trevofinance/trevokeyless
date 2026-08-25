@@ -18,18 +18,9 @@ base58 address — or a checksum-valid keyless account id — from scratch, so t
 assertions in the targets (round-trip, re-encode, typed-decoder agreement) would never
 execute.
 
-CI uses `cargo-fuzz` 0.13.2 with the pinned nightly and passes these as a read-only
-input directory. Reproduce the tool version locally with
-`cargo install cargo-fuzz --version 0.13.2 --locked`, then run (from `keyless-rust/`;
-the corpus directory is gitignored and absent in a fresh checkout, and cargo-fuzz
-defaults to its own build triple, so the explicit `--target` matters — the same
-command CONTRIBUTING.md and the workflows use):
-
-```
-mkdir -p fuzz/corpus/<target>
-cargo +nightly-2026-07-01 fuzz run <target> fuzz/corpus/<target> fuzz/seeds/<target> \
-    --target x86_64-unknown-linux-gnu
-```
+CI passes these seeds as a read-only input directory. The canonical local procedure and
+artifact-replay workflow are in [`docs/fuzzing.md`](../../../docs/fuzzing.md); the current
+tool and target pins remain authoritative in `.github/workflows/fuzz.yml`.
 
 New coverage-increasing inputs land in `fuzz/corpus/` (gitignored, local); this
 directory stays a small curated set. If the fixture gains materially new vector

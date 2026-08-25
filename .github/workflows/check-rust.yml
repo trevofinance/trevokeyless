@@ -55,20 +55,9 @@ jobs:
         with:
           workspaces: keyless-rust
 
-      - name: Rustfmt check
-        run: cargo fmt --all -- --check
-
-      # Every cargo invocation below passes --locked: without it a pull request that edits
-      # Cargo.toml dependencies without regenerating Cargo.lock passes green, and the
-      # audit job then audits a lockfile that does not match what was committed.
-      - name: Clippy (all features)
-        run: cargo clippy --locked --all-features --all-targets -- -D warnings
-
-      - name: Run test suite (all features)
-        run: cargo test --locked --all-features
-
-      - name: Run test suite (no default features)
-        run: cargo test --locked --no-default-features
+      - name: Run reusable Rust checks
+        working-directory: .
+        run: python3 .github/scripts/run_checks.py rust
 
       - name: Conformance fixture is up to date
         # `shell: bash` adds `-o pipefail`, so a cargo failure fails the step directly
@@ -87,14 +76,6 @@ jobs:
 
       - name: Publish dry run
         run: cargo publish --locked --dry-run
-
-      - name: Check crate artifact contents
-        # `cargo publish --dry-run` asserts nothing about the file list of the .crate it
-        # builds; that list comes from the hand-maintained `exclude` in Cargo.toml. This
-        # is the Rust counterpart of the Python/TypeScript artifact allowlists, and the
-        # same script runs against the release in publish-rust.yml.
-        working-directory: .
-        run: python3 .github/scripts/check_rust_artifacts.py
 
   rust-features:
     concurrency:
@@ -303,62 +284,25 @@ jobs:
     defaults:
       run:
         working-directory: ./keyless-rust
-    env:
-      # The single source of the fuzz toolchain pin for this workflow. Exporting it as
-      # RUSTUP_TOOLCHAIN (rather than relying on `cargo +nightly-...` per command) also stops
-      # the root rust-toolchain.toml from being resolved by Swatinem/rust-cache below, which
-      # would otherwise download an unused stable toolchain and key the cache on it.
-      RUSTUP_TOOLCHAIN: nightly-2026-07-01
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        with:
-          workspaces: |
-            keyless-rust
-            keyless-rust/fuzz
-      - name: Install cargo-fuzz
-        uses: taiki-e/install-action@16b05812d776ae1dfaabc8277e421fb6d2506419 # v2
-        with:
-          tool: cargo-fuzz@0.13.2
-      - name: Fuzz lockfile is honoured
-        # cargo-fuzz has no --locked flag, so the builds below could silently re-resolve
-        # and rewrite fuzz/Cargo.lock — fuzzing a dependency set nobody audited (cargo
-        # audit reads the committed lock). `cargo metadata --locked` fails if the lock
-        # does not match the manifests; once it passes, the build resolves to exactly the
-        # locked versions and leaves the file untouched.
-        run: cargo metadata --locked --manifest-path fuzz/Cargo.toml > /dev/null
-      # cargo-fuzz defaults --target to the triple it was itself built for; the
-      # install-action ships a musl-static binary, so without an explicit --target it
-      # tries to build the fuzz target for x86_64-unknown-linux-musl (not installed, and
-      # incompatible with the address sanitizer's dynamic libc). Pin the gnu host target.
-      #
-      # Seed each run from the committed corpus in fuzz/seeds/<target> so even a
-      # 30-second smoke run starts from known-interesting inputs; new discoveries land
-      # in the throwaway fuzz/corpus/<target> directory.
       - name: Fuzz the SS58 decoder (smoke run)
         id: fuzz_ss58
         continue-on-error: true
-        run: |
-          mkdir -p fuzz/corpus/ss58_decode
-          cargo fuzz run ss58_decode fuzz/corpus/ss58_decode fuzz/seeds/ss58_decode --target x86_64-unknown-linux-gnu -- -max_total_time=30
+        working-directory: .
+        run: python3 .github/scripts/run_fuzz.py --target ss58_decode --duration 30 --ensure-tools
       - name: Fuzz the AccountId32 hex parser (smoke run)
         id: fuzz_account_id
         continue-on-error: true
-        run: |
-          mkdir -p fuzz/corpus/accountid_from_str
-          cargo fuzz run accountid_from_str fuzz/corpus/accountid_from_str fuzz/seeds/accountid_from_str --target x86_64-unknown-linux-gnu -- -max_total_time=30
+        working-directory: .
+        run: python3 .github/scripts/run_fuzz.py --target accountid_from_str --duration 30 --ensure-tools
       - name: Fuzz the account-id classifier (smoke run)
         id: fuzz_classify
         continue-on-error: true
-        run: |
-          mkdir -p fuzz/corpus/classify
-          cargo fuzz run classify fuzz/corpus/classify fuzz/seeds/classify --target x86_64-unknown-linux-gnu -- -max_total_time=30
+        working-directory: .
+        run: python3 .github/scripts/run_fuzz.py --target classify --duration 30 --ensure-tools
       - name: Upload crash reproducers
         if: steps.fuzz_ss58.outcome == 'failure' || steps.fuzz_account_id.outcome == 'failure' || steps.fuzz_classify.outcome == 'failure'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -43,14 +43,8 @@ jobs:
           node-version: ${{ matrix.node_version }}
           cache: npm
           cache-dependency-path: keyless-ts/package-lock.json
-      - run: |
-          cd keyless-ts
-          npm ci
-          npm run format-check
-          npm run lint-check
-          npm run type-check
-          npm run build
-          npm run test
+      - name: Run reusable TypeScript checks
+        run: python3 .github/scripts/run_checks.py ts
 
       - name: Audit dependencies
         # Covers production and development dependencies at once; a separate
