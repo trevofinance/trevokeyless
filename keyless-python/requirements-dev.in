@@ -5,19 +5,19 @@
 # never be bumped). Regenerate it — on Python 3.12, the version the lock header records —
 # with exactly the command CI reruns to detect drift between this file and the lock:
 #
-#   python -m pip install pip-tools==7.5.3
+#   python -m pip install pip-tools==7.6.1
 #   pip-compile --allow-unsafe --generate-hashes --strip-extras \
 #     --output-file=requirements-dev.txt requirements-dev.in
-build==1.5.1
-mypy==2.3.0
-packaging==26.2
-pip==26.1.2
+build==1.6.0
+mypy==2.3.1
+packaging==26.3
+pip==26.2.1
 pip-audit==2.10.1
-pip-tools==7.5.3
-ruff==0.15.21
-setuptools==83.0.0
-twine==6.2.0
-wheel==0.47.0
+pip-tools==7.6.1
+ruff==0.16.5
+setuptools==84.0.0
+twine==7.0.0
+wheel==0.48.0
 
 # Transitive dependencies of the tools above that pip-compile cannot see, and why they
 # have to be named here.
@@ -35,6 +35,6 @@ wheel==0.47.0
 # costs nothing. Re-check this list whenever a tool above changes its dependencies.
 backports.tarfile==1.2.0  # Python < 3.12; via twine -> keyring -> jaraco.context
 colorama==0.4.6  # Windows; via build
-importlib-metadata==9.0.0  # Python < 3.12; via twine -> keyring
+importlib-metadata==9.0.1  # Python < 3.12; via twine -> keyring
 pywin32-ctypes==0.2.3  # Windows; via twine -> keyring
 zipp==4.1.0  # Python < 3.12; via importlib-metadata
